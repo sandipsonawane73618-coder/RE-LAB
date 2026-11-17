@@ -18,6 +18,13 @@ MANIFEST_FIELDS = (
 )
 
 
+def _validate_capture_timestamp(value: str) -> None:
+    from datetime import datetime
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("retrieved_at must include a UTC offset or Z")
+
+
 def extract_manifest(
     manifest_path: Path,
 ) -> tuple[list[dict[str, str]], list[str], list[str]]:
@@ -32,7 +39,10 @@ def extract_manifest(
             reader = csv.DictReader(handle)
             if reader.fieldnames is None:
                 return [], [], ["manifest is empty or has no CSV header"]
-            missing = [field for field in MANIFEST_FIELDS if field not in reader.fieldnames]
+            headers = [name.strip() for name in reader.fieldnames]
+            if len(headers) != len(set(headers)):
+                return [], [], ["manifest contains duplicate column names"]
+            missing = [field for field in MANIFEST_FIELDS if field not in headers]
             if missing:
                 return [], [], [
                     "manifest is missing required columns: " + ", ".join(missing)
@@ -54,10 +64,11 @@ def extract_manifest(
                     )
                     continue
 
-                html_path = Path(values["html_file"])
-                if not html_path.is_absolute():
-                    html_path = manifest_path.parent / html_path
                 try:
+                    _validate_capture_timestamp(values["retrieved_at"])
+                    html_path = Path(values["html_file"])
+                    if not html_path.is_absolute():
+                        html_path = manifest_path.parent / html_path
                     html = html_path.read_text(encoding="utf-8-sig")
                     rows, snapshot_issues = extract_rows(
                         html,
@@ -88,7 +99,6 @@ def extract_manifest(
         errors.append(f"cannot read manifest {manifest_path}: {error}")
 
     return observations, warnings, errors
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
