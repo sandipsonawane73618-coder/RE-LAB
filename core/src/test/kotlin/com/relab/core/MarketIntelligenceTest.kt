@@ -47,6 +47,19 @@ class MarketIntelligenceTest {
     }
 
     @Test
+    fun duplicateDatesMustBeReconciledBeforeMarketAnalysis() {
+        val date = LocalDate.of(2025, 1, 1)
+        val duplicates = listOf(record(date, "123", "234"), record(date, "678", "789"))
+        var rejected = false
+        try {
+            MarketIntelligence.analyze(duplicates)
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+    }
+
+    @Test
     fun changedRecentDistributionRaisesShiftFlag() {
         val start = LocalDate.of(2025, 1, 1)
         val old = (0 until 15).map { i -> record(start.plusDays(i.toLong()), "123", "234") }
