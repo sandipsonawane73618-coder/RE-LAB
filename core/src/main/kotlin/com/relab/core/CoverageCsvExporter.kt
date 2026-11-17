@@ -37,6 +37,6 @@ object CoverageCsvExporter {
 
     private fun csv(value: String): String {
         val escaped = value.replace("\"", "\"\"")
-        return if (value.any { it == ',' || it == '"' || it == '\\n' || it == '\\r' }) "\"$escaped\"" else escaped
+        return if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"$escaped\"" else escaped
     }
 }
