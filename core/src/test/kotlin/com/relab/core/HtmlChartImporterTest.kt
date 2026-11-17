@@ -135,7 +135,7 @@ class HtmlChartImporterTest {
         val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
         assertEquals(7, report.observations.size)
         assertEquals(ObservationStatus.MISSING_FROM_SOURCE, report.observations[1].status)
-        assertEquals("**", report.observations[1].rawText)
+        assertEquals("* * * | ** | * * *", report.observations[1].rawText)
         assertNull(report.observations[1].normalizedResult)
     }
 
