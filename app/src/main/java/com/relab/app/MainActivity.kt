@@ -88,9 +88,10 @@ class MainActivity : ComponentActivity() {
                 },
                 onClearCsv = {
                     database.clearDataset()
+                    val rangeKeys = preferences.all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }
                     preferences.edit().apply {
                         remove("source_csv")
-                        all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }.forEach(::remove)
+                        rangeKeys.forEach(::remove)
                     }.apply()
                 }
             )
@@ -228,7 +229,7 @@ private fun RelabHome(
                 } else {
                     coverageReports.forEach { coverage ->
                         CoverageReportCard(coverage) { start, end ->
-                                val key = "${coverage.market.name}:${coverage.sessionId}"
+                            val key = "${coverage.market.name}:${coverage.sessionId}"
                             coverageRangeOverrides = coverageRangeOverrides + (key to (start to end))
                             onSaveCoverageRange(key, start, end)
                         }
