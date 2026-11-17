@@ -56,7 +56,6 @@ object MarketIntelligence {
 
         val open = valid.map { it.second.openFamilySequence.joinToString("") }
         val close = valid.map { it.second.closeFamilySequence.joinToString("") }
-        val dates = valid.map { it.first.date }
 
         fun transitions(values: List<String>): List<TransitionEvidence> {
             if (values.size < 2) return emptyList()
