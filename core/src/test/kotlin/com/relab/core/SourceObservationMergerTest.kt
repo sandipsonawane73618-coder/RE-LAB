@@ -53,4 +53,34 @@ class SourceObservationMergerTest {
         assertEquals(1, result.addedCount)
         assertEquals(2, result.observations.size)
     }
+
+    @Test fun repeatedSourceRecordWithSameContentIsAuditedWithoutDeletingSnapshots() {
+        val first = observation("archive", "115-73-229").copy(sourceRecordId = "2026-11-17")
+        val later = first.copy(retrievedAt = Instant.parse("2026-11-17T11:00:00Z"))
+        val audit = SourceObservationMerger.auditRepeatedSourceRecords(listOf(first, later))
+
+        assertEquals(1, audit.size)
+        assertEquals(DuplicateObservationState.REPEATED_SAME_CONTENT, audit.single().state)
+        assertEquals(2, audit.single().observations.size)
+    }
+
+    @Test fun changedValueForSameSourceRecordIsFlaggedAndBothValuesRemain() {
+        val first = observation("archive", "115-73-229").copy(sourceRecordId = "2026-11-17")
+        val later = first.copy(
+            retrievedAt = Instant.parse("2026-11-17T11:00:00Z"),
+            rawText = "577-99-667",
+            normalizedResult = "577-99-667"
+        )
+        val audit = SourceObservationMerger.auditRepeatedSourceRecords(listOf(first, later))
+
+        assertEquals(1, audit.size)
+        assertEquals(DuplicateObservationState.SOURCE_RECORD_CHANGED, audit.single().state)
+        assertEquals(listOf("115-73-229", "577-99-667"), audit.single().observations.mapNotNull { it.normalizedResult })
+    }
+
+    @Test fun observationsWithoutPublisherRecordIdentityAreNotGuessedAsDuplicates() {
+        val first = observation("archive", "115-73-229")
+        val later = first.copy(retrievedAt = Instant.parse("2026-11-17T11:00:00Z"))
+        assertTrue(SourceObservationMerger.auditRepeatedSourceRecords(listOf(first, later)).isEmpty())
+    }
 }
