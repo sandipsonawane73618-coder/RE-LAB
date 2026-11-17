@@ -115,15 +115,17 @@ class HtmlChartImporterTest {
         assertEquals(7, sevenDay.observations.size)
         assertEquals("2021-01-03", sevenDay.observations.last().date.toString())
 
-        val sixDayHtml = """
-            <table><tr><td>16/11/26 to 21/11/26</td>
+        val modernSevenDayHtml = """
+            <table><tr><td>16/11/26 to 22/11/26</td>
               <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
               <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
+              <td>* * *</td><td>**</td><td>* * *</td>
             </tr></table>
         """.trimIndent()
-        val sixDay = HtmlChartImporter.import(sixDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
-        assertEquals(6, sixDay.observations.size)
-        assertEquals("2026-11-21", sixDay.observations.last().date.toString())
+        val modernSevenDay = HtmlChartImporter.import(modernSevenDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
+        assertEquals(7, modernSevenDay.observations.size)
+        assertEquals("2026-11-22", modernSevenDay.observations.last().date.toString())
+        assertEquals(ObservationStatus.MISSING_FROM_SOURCE, modernSevenDay.observations.last().status)
     }
 
     @Test fun starredWeeklyCellIsPreservedAsMissingNotInventedHolidayOrResult() {
