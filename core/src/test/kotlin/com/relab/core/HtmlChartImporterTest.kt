@@ -86,6 +86,59 @@ class HtmlChartImporterTest {
         assertTrue(report.observations.all { it.date.dayOfWeek != java.time.DayOfWeek.SUNDAY })
     }
 
+    @Test fun extractsMainBazarFiveDayRowsWithoutWeekendDates() {
+        val html = """
+            <table>
+              <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th></tr>
+              <tr><td>16/11/26 to 20/11/26</td>
+                <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+                <td>668 07 449</td><td>668 07 449</td>
+              </tr>
+            </table>
+        """.trimIndent()
+        val report = HtmlChartImporter.import(html, url, Market.MAIN_BAZAR, "main", retrieved)
+        assertEquals(5, report.observations.size)
+        assertEquals("2026-11-16", report.observations.first().date.toString())
+        assertEquals("2026-11-20", report.observations.last().date.toString())
+        assertTrue(report.observations.all { it.date.dayOfWeek in Market.MAIN_BAZAR.activeDays })
+    }
+
+    @Test fun timeBazarSupportsHistoricalSevenDayAndLaterSixDayRows() {
+        val sevenDayHtml = """
+            <table><tr><td>28/12/20 to 3/1/21</td>
+              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+            </tr></table>
+        """.trimIndent()
+        val sevenDay = HtmlChartImporter.import(sevenDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
+        assertEquals(7, sevenDay.observations.size)
+        assertEquals("2021-01-03", sevenDay.observations.last().date.toString())
+
+        val sixDayHtml = """
+            <table><tr><td>16/11/26 to 21/11/26</td>
+              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+            </tr></table>
+        """.trimIndent()
+        val sixDay = HtmlChartImporter.import(sixDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
+        assertEquals(6, sixDay.observations.size)
+        assertEquals("2026-11-21", sixDay.observations.last().date.toString())
+    }
+
+    @Test fun starredWeeklyCellIsPreservedAsMissingNotInventedHolidayOrResult() {
+        val html = """
+            <table><tr><td>16/11/26 to 22/11/26</td>
+              <td>668 07 449</td><td>**</td><td>668 07 449</td>
+              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+            </tr></table>
+        """.trimIndent()
+        val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
+        assertEquals(7, report.observations.size)
+        assertEquals(ObservationStatus.MISSING_FROM_SOURCE, report.observations[1].status)
+        assertEquals("**", report.observations[1].rawText)
+        assertNull(report.observations[1].normalizedResult)
+    }
+
     @Test fun rejectsNonHttpSchemes() {
         try {
             HtmlChartImporter.import("<table/>", "file:///tmp/chart.html", Market.SRIDEVI, "main", retrieved)
