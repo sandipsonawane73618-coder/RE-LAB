@@ -77,8 +77,13 @@ def _week_range(value: str) -> tuple[date, date] | None:
 
 def _cell_observation(cell: str) -> tuple[str, str]:
     """Return (status, normalized result); raw cell text is stored separately."""
+    lowered = cell.casefold()
     digits = "".join(re.findall(r"\d", cell))
     if not digits:
+        if any(marker in lowered for marker in ("holiday", "closed", "market off")):
+            return "HOLIDAY_CLOSED", ""
+        if any(marker in lowered for marker in ("pending", "awaiting", "not declared")):
+            return "PENDING", ""
         return "MISSING_FROM_SOURCE", ""
     if len(digits) != 8:
         return "MALFORMED", ""
