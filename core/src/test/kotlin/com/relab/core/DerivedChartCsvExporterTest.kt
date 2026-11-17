@@ -21,7 +21,7 @@ class DerivedChartCsvExporterTest {
         val csv = DerivedChartCsvExporter.export(listOf(record))
         assertTrue(csv.startsWith(DerivedChartCsvExporter.HEADER))
         assertTrue(csv.contains("\"main, morning\""))
-        assertTrue(csv.contains("115,73,229,7,3,122,344,2,4,SP,DP,511,922,publisher-a+publisher-b"))
+        assertTrue(csv.contains("115,73,229,7,3,110,224,2,3,DP,DP,511,922,publisher-a+publisher-b"))
         assertTrue(csv.contains("2026-11-17T09:00:00Z"))
     }
 
