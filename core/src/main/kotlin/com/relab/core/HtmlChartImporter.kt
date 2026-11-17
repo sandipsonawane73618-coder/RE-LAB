@@ -52,7 +52,7 @@ object HtmlChartImporter {
             val allowedDayCounts = when (market) {
                 Market.KALYAN -> setOf(6)
                 Market.MAIN_BAZAR -> setOf(5)
-                Market.TIME_BAZAR -> setOf(6, 7)
+                Market.TIME_BAZAR -> setOf(7)
                 Market.SRIDEVI, Market.SRIDEVI_NIGHT -> setOf(7)
             }
             val rangeDates = rangePattern.findAll(cells.first()).mapNotNull { parseDate(it.value) }.toList()
