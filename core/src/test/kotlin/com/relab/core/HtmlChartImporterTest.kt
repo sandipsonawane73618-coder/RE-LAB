@@ -56,7 +56,7 @@ class HtmlChartImporterTest {
             </table>
         """.trimIndent()
         val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
-        assertEquals(3, report.observations.size)
+        assertEquals(7, report.observations.size)
         assertEquals("2026-11-16", report.observations[0].date.toString())
         assertEquals("577-99-667", report.observations[0].normalizedResult)
         assertEquals("2026-11-17", report.observations[1].date.toString())
