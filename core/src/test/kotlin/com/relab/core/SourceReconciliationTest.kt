@@ -46,6 +46,15 @@ class SourceReconciliationTest {
         assertEquals(2, group.observations.size)
     }
 
+    @Test fun onePublisherIsUnverifiedEvenWhenItHasRepeatedMatchingSnapshots() {
+        val first = observation("source-a", ObservationStatus.PUBLISHED, "115-73-229")
+        val later = first.copy(retrievedAt = Instant.parse("2026-11-17T11:00:00Z"))
+        val group = SourceReconciliation.reconcile(listOf(first, later)).single()
+        assertEquals(ReconciliationState.SINGLE_SOURCE_UNVERIFIED, group.state)
+        assertNull(group.agreedResult)
+        assertEquals(2, group.observations.size)
+    }
+
     @Test fun pendingAndHolidayAreNotTreatedAsNumericResults() {
         val groups = SourceReconciliation.reconcile(
             listOf(
@@ -65,6 +74,6 @@ class SourceReconciliationTest {
             )
         )
         assertEquals(2, groups.size)
-        assertTrue(groups.all { it.state == ReconciliationState.CONSENSUS })
+        assertTrue(groups.all { it.state == ReconciliationState.SINGLE_SOURCE_UNVERIFIED })
     }
 }

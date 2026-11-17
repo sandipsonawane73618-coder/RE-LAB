@@ -176,7 +176,7 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 }
                 Text("Pattern research · consensus records only", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Analysis input: ${chartBuild.records.size} consensus records · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
+                    "Analysis input: ${chartBuild.records.size} multi-source consensus records · Single-source unverified: ${chartBuild.singleSourceUnverifiedGroups.size} · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (patternAnalyses.isEmpty()) {
@@ -285,7 +285,10 @@ private fun PatternResearchCard(analysis: MarketAnalysis) {
 @Composable
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
-        ReconciliationState.CONSENSUS -> "CONSENSUS · ${group.agreedResult}"
+        ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
+        ReconciliationState.SINGLE_SOURCE_UNVERIFIED -> "SINGLE SOURCE · UNVERIFIED · " +
+            group.observations.filter { it.status == ObservationStatus.PUBLISHED }
+                .mapNotNull { it.normalizedResult }.distinct().joinToString()
         ReconciliationState.CONFLICT -> "CONFLICT · " + group.observations
             .filter { it.status == ObservationStatus.PUBLISHED }
             .mapNotNull { it.normalizedResult }.distinct().sorted().joinToString(" / ")

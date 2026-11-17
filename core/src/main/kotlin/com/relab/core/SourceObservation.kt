@@ -35,7 +35,10 @@ data class SourceObservation(
 }
 
 enum class ReconciliationState {
+    /** At least two distinct publishers report the same published result. */
     CONSENSUS,
+    /** One publisher has a result, but no independent publisher confirms it. */
+    SINGLE_SOURCE_UNVERIFIED,
     CONFLICT,
     NO_PUBLISHED_RESULT
 }
@@ -55,14 +58,17 @@ object SourceReconciliation {
         return observations
             .groupBy { Triple(it.market, it.sessionId, it.date) }
             .map { (key, group) ->
-                val publishedValues = group
-                    .filter { it.status == ObservationStatus.PUBLISHED }
+                val published = group.filter { it.status == ObservationStatus.PUBLISHED }
+                val publishedValues = published
                     .mapNotNull { it.normalizedResult }
                     .distinct()
                     .sorted()
+                val independentPublisherCount = published.map { it.sourceId }.distinct().size
                 val state = when {
                     publishedValues.size > 1 -> ReconciliationState.CONFLICT
-                    publishedValues.size == 1 -> ReconciliationState.CONSENSUS
+                    publishedValues.size == 1 && independentPublisherCount >= 2 ->
+                        ReconciliationState.CONSENSUS
+                    publishedValues.size == 1 -> ReconciliationState.SINGLE_SOURCE_UNVERIFIED
                     else -> ReconciliationState.NO_PUBLISHED_RESULT
                 }
                 ReconciliationGroup(

@@ -4,6 +4,7 @@ package com.relab.core
 data class ChartBuildReport(
     val records: List<ChartRecord>,
     val conflictGroups: List<ReconciliationGroup>,
+    val singleSourceUnverifiedGroups: List<ReconciliationGroup>,
     val noPublishedResultGroups: List<ReconciliationGroup>,
     val invalidGroups: List<ReconciliationGroup>
 )
@@ -12,12 +13,14 @@ object ReconciledChartBuilder {
     fun build(observations: List<SourceObservation>): ChartBuildReport {
         val records = mutableListOf<ChartRecord>()
         val conflicts = mutableListOf<ReconciliationGroup>()
+        val unverified = mutableListOf<ReconciliationGroup>()
         val unpublished = mutableListOf<ReconciliationGroup>()
         val invalid = mutableListOf<ReconciliationGroup>()
 
         SourceReconciliation.reconcile(observations).forEach { group ->
             when (group.state) {
                 ReconciliationState.CONFLICT -> conflicts += group
+                ReconciliationState.SINGLE_SOURCE_UNVERIFIED -> unverified += group
                 ReconciliationState.NO_PUBLISHED_RESULT -> unpublished += group
                 ReconciliationState.CONSENSUS -> {
                     val parts = group.agreedResult.orEmpty().split('-')
@@ -42,6 +45,6 @@ object ReconciledChartBuilder {
                 }
             }
         }
-        return ChartBuildReport(records, conflicts, unpublished, invalid)
+        return ChartBuildReport(records, conflicts, unverified, unpublished, invalid)
     }
 }

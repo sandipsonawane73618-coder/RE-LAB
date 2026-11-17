@@ -72,3 +72,7 @@ The app must eventually expose:
 ## 7. Acceptance criteria
 
 A research result is not accepted unless it has: dataset version/hash, source provenance, date range, market/session identity, sample size, method/version, chronological split, baseline comparison, and reproducible test output. No guaranteed prediction or winning-number language is permitted.
+
+## Reconciliation confidence rule
+
+A date/session is labeled `CONSENSUS` only when at least two distinct `source_id` publishers have published observations and every published value agrees. Repeated snapshots from one publisher do not count as independent confirmation. A valid result seen from only one publisher is labeled `SINGLE_SOURCE_UNVERIFIED` and is excluded from pattern-analysis records. Conflicting published values remain `CONFLICT`; pending, holiday, and missing-only groups remain without a published result. A source with a pending or missing observation does not corroborate another publisher's result.

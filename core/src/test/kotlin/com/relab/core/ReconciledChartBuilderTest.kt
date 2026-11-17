@@ -49,10 +49,21 @@ class ReconciledChartBuilderTest {
         assertEquals(1, report.noPublishedResultGroups.size)
     }
 
+    @Test fun singleSourceRowsAreNotAddedToAnalysisRecords() {
+        val report = ReconciledChartBuilder.build(listOf(row("source-a")))
+        assertTrue(report.records.isEmpty())
+        assertEquals(1, report.singleSourceUnverifiedGroups.size)
+        assertTrue(report.invalidGroups.isEmpty())
+    }
+
     @Test fun keepsSessionsSeparateAndRejectsMathematicallyInvalidConsensus() {
-        val invalid = row("source-a", result = "111-11-111")
-        val otherSession = row("source-b", session = "night", result = "668-07-449")
-        val report = ReconciledChartBuilder.build(listOf(invalid, otherSession))
+        val invalidA = row("source-a", result = "111-11-111")
+        val invalidB = row("source-b", result = "111-11-111")
+        val otherSessionA = row("source-c", session = "night", result = "668-07-449")
+        val otherSessionB = row("source-d", session = "night", result = "668-07-449")
+        val report = ReconciledChartBuilder.build(
+            listOf(invalidA, invalidB, otherSessionA, otherSessionB)
+        )
         assertEquals(1, report.records.size)
         assertEquals("night", report.records.single().sessionId)
         assertEquals(1, report.invalidGroups.size)
