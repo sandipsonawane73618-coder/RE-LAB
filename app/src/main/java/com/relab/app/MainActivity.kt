@@ -34,6 +34,7 @@ import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
 import com.relab.core.CoverageState
 import com.relab.core.CoverageCsvExporter
+import com.relab.core.ResearchBundleExporter
 import com.relab.core.DuplicateObservationGroup
 import com.relab.core.DuplicateObservationState
 import com.relab.core.HistoricalCoverageAudit
@@ -251,6 +252,21 @@ private fun RelabHome(
         }
     }
 
+    val bundleExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bundle = ResearchBundleExporter.export(
+                    observations, chartBuild.records, patternAnalyses, coverageReports, java.time.Instant.now()
+                )
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bundle) }
+                    ?: error("Research bundle file could not be written")
+                importMessage = "Exported complete research bundle: ${observations.size} source observations, ${chartBuild.records.size} consensus records and SHA-256 integrity index."
+            } catch (error: Exception) {
+                importMessage = "Research bundle export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -259,6 +275,10 @@ private fun RelabHome(
                 Text("Source-first research. Every imported source observation is stored locally.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import CSV") }
+                    OutlinedButton(
+                        onClick = { bundleExportPicker.launch("relab-complete-research-bundle.zip") },
+                        enabled = observations.isNotEmpty()
+                    ) { Text("Export complete bundle") }
                     OutlinedButton(
                         onClick = { exportPicker.launch("relab-source-backup.csv") },
                         enabled = observations.isNotEmpty()
