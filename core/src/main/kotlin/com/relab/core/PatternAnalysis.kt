@@ -50,9 +50,13 @@ data class MarketAnalysis(
     val closePannaTypeCounts: Map<PannaType, Int>,
     val openDigitPositionCounts: List<Map<Int, Int>>,
     val closeDigitPositionCounts: List<Map<Int, Int>>,
+    /** Pair frequencies for positions 0-1, 0-2 and 1-2, in that order. */
+    val openDigitPairPositionCounts: List<List<PatternCount>>,
+    val closeDigitPairPositionCounts: List<List<PatternCount>>,
     val openReversePannaCounts: List<PatternCount>,
     val closeReversePannaCounts: List<PatternCount>,
     val openRepeatGaps: List<RepeatGap>,
+    val closeRepeatGaps: List<RepeatGap>,
     val walkForwardRows: List<WalkForwardRow>,
     val globalModeBaseline: WalkForwardMetric,
     val weekdayModeBaseline: WalkForwardMetric,
@@ -125,6 +129,13 @@ object PatternAnalysis {
                 (0..9).associateWith { digit -> pannas.count { it[position].digitToInt() == digit } }
             }
 
+        fun digitPairPositionCounts(pannas: List<String>): List<List<PatternCount>> {
+            val positions = listOf(0 to 1, 0 to 2, 1 to 2)
+            return positions.map { (first, second) ->
+                counts(pannas.map { "${it[first]}${it[second]}" })
+            }
+        }
+
         fun repeatGaps(patterns: List<String>): List<RepeatGap> {
             val lastSeen = mutableMapOf<String, java.time.LocalDate>()
             val gaps = mutableMapOf<String, MutableList<Long>>()
@@ -184,9 +195,12 @@ object PatternAnalysis {
             closePannaTypeCounts = typeCounts(features.map { it.closeType }),
             openDigitPositionCounts = positionCounts(openPannas),
             closeDigitPositionCounts = positionCounts(closePannas),
+            openDigitPairPositionCounts = digitPairPositionCounts(openPannas),
+            closeDigitPairPositionCounts = digitPairPositionCounts(closePannas),
             openReversePannaCounts = counts(features.map { it.reverseOpenPanna }),
             closeReversePannaCounts = counts(features.map { it.reverseClosePanna }),
             openRepeatGaps = repeatGaps(openSeq),
+            closeRepeatGaps = repeatGaps(closeSeq),
             walkForwardRows = rows,
             globalModeBaseline = metric { it.globalModePrediction },
             weekdayModeBaseline = metric { it.weekdayModePrediction },
@@ -202,7 +216,8 @@ object PatternAnalysis {
         emptyMap(), emptyMap(), emptyList(), emptyList(), emptyList(), emptyList(),
         PannaType.entries.associateWith { 0 }, PannaType.entries.associateWith { 0 },
         List(3) { (0..9).associateWith { 0 } }, List(3) { (0..9).associateWith { 0 } },
-        emptyList(), emptyList(), emptyList(), emptyList(),
+        List(3) { emptyList() }, List(3) { emptyList() },
+        emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
         WalkForwardMetric(0, 0), WalkForwardMetric(0, 0), WalkForwardMetric(0, 0)
     )
 
