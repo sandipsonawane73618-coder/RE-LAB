@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   verify-and-build:
-    # DroidRunner registers the device as a Linux ARM64 self-hosted runner.
-    runs-on: [self-hosted, linux, ARM64]
+    # GitHub-hosted runner; no DroidRunner or phone runner required.
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - name: Checkout repository
@@ -20,32 +20,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Install unzip prerequisite
-        shell: bash
-        run: |
-          if command -v unzip >/dev/null 2>&1; then
-            unzip -v | head -n 1
-          elif command -v apt-get >/dev/null 2>&1; then
-            if command -v sudo >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y unzip
-            else
-              apt-get update
-              apt-get install -y unzip
-            fi
-          elif command -v apk >/dev/null 2>&1; then
-            if command -v sudo >/dev/null 2>&1; then
-              sudo apk add --no-cache unzip
-            else
-              apk add --no-cache unzip
-            fi
-          else
-            echo "Cannot install unzip: neither apt-get nor apk is available."
-            exit 1
-          fi
-          command -v unzip
-          unzip -v | head -n 1
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
