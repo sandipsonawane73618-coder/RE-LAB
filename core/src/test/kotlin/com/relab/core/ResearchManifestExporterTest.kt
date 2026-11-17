@@ -30,6 +30,11 @@ class ResearchManifestExporterTest {
         assertTrue(first.contains("\"consensus_chart_records_exported\": 0"))
         assertTrue(first.contains("\"start_date\":\"2026-11-16\""))
         assertTrue(first.contains("\"source_ledger_sha256\": \""))
+        assertTrue(first.contains("\"published_observations_with_timestamp\": 1"))
+        assertTrue(first.contains("\"published_observations_missing_timestamp\": 0"))
+        assertTrue(first.contains("\"negative_publication_lag_observations\": 0"))
+        assertTrue(first.contains("\"source_timing_summary\": ["))
+        assertTrue(first.contains("\"median_nonnegative_lag_minutes\":60"))
         assertTrue(first.contains(ResearchManifestExporter.RULESET_VERSION))
     }
 
