@@ -101,7 +101,7 @@ class PatternAnalysisTest {
         assertEquals(2, result.openDigitPairPositionCounts[0].first { it.pattern == "27" }.count)
         assertEquals(2, result.openDigitPairPositionCounts[1].first { it.pattern == "27" }.count)
         assertEquals(2, result.closeDigitPairPositionCounts[2].first { it.pattern == "49" }.count)
-        assertEquals(listOf(2L), result.closeRepeatGaps.single { it.pattern == "249" }.gapsInDays)
+        assertEquals(listOf(2L), result.closeRepeatGaps.single { it.pattern == "244" }.gapsInDays)
     }
 
     @Test fun closeFamilyTransitionsUseClosePannaNotOpenPanna() {
