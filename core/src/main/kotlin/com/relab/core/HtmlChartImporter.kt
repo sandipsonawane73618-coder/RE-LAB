@@ -103,6 +103,13 @@ object HtmlChartImporter {
                 return@forEachIndexed
             }
 
+            // A two-date range is a weekly row. If its columns do not match a
+            // supported layout, never fall through and misread its first result as a daily record.
+            if (rangePattern.findAll(cells.first()).count() == 2) {
+                skipped++
+                return@forEachIndexed
+            }
+
             // Parse the dedicated date cell first. Parsing the entire row can let
             // unrelated result text interfere with locale-specific date detection.
             val date = parseDate(cells.first()) ?: parseDate(raw)
