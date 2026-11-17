@@ -64,6 +64,28 @@ class HtmlChartImporterTest {
         assertEquals("367-69-289", report.observations[2].normalizedResult)
     }
 
+    @Test fun extractsKalyanSixDayWeeklyPanelWithoutTreatingSundayAsTradingDay() {
+        val html = """
+            <table>
+              <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th></tr>
+              <tr>
+                <td>16/11/26 to 21/11/26</td>
+                <td>5 7 7 99 6 6 7</td>
+                <td>1 1 5 73 2 2 9</td>
+                <td>3 6 7 69 2 8 9</td>
+                <td>2 7 7 44 5 8 9</td>
+                <td>1 2 3 66 4 5 7</td>
+                <td>4 4 4 24 1 1 1</td>
+              </tr>
+            </table>
+        """.trimIndent()
+        val report = HtmlChartImporter.import(html, url, Market.KALYAN, "main", retrieved)
+        assertEquals(6, report.observations.size)
+        assertEquals("2026-11-16", report.observations.first().date.toString())
+        assertEquals("2026-11-21", report.observations.last().date.toString())
+        assertTrue(report.observations.all { it.date.dayOfWeek != java.time.DayOfWeek.SUNDAY })
+    }
+
     @Test fun rejectsNonHttpSchemes() {
         try {
             HtmlChartImporter.import("<table/>", "file:///tmp/chart.html", Market.SRIDEVI, "main", retrieved)
