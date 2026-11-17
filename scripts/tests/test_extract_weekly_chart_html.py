@@ -33,6 +33,22 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         self.assertEqual("", rows[5]["result"])
         self.assertEqual("2026-01-04", rows[6]["date"])
 
+    def test_accepts_all_five_supported_market_names(self):
+        weekly = (
+            "<table><tr><td>16/11/2026 to 22/11/2026</td>"
+            + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * 7)
+            + "</tr></table>"
+        )
+        for market in ("SRIDEVI", "SRIDEVI_NIGHT", "TIME_BAZAR", "MAIN_BAZAR"):
+            with self.subTest(market=market):
+                rows, issues = extract_rows(
+                    weekly, market=market, session_id="main", source_id="archive",
+                    retrieved_at="2026-11-17T12:00:00Z"
+                )
+                self.assertEqual([], issues)
+                self.assertEqual(7, len(rows))
+                self.assertTrue(all(row["market"] == market for row in rows))
+
     def test_extracts_kalyan_six_day_week_and_flags_bad_math(self):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
