@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
 import com.relab.core.CoverageState
+import com.relab.core.CoverageCsvExporter
 import com.relab.core.DuplicateObservationGroup
 import com.relab.core.DuplicateObservationState
 import com.relab.core.HistoricalCoverageAudit
@@ -221,6 +222,20 @@ private fun RelabHome(
             .sortedWith(compareBy<CoverageReport> { it.market.name }.thenBy { it.sessionId })
     }
 
+    val coverageExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = CoverageCsvExporter.export(coverageReports)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
+                    ?: error("Coverage audit file could not be written")
+                val rows = coverageReports.sumOf { it.days.size }
+                importMessage = "Exported $rows expected trading-day coverage rows across ${coverageReports.size} market/session reports."
+            } catch (error: Exception) {
+                importMessage = "Coverage export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -257,6 +272,12 @@ private fun RelabHome(
                         onClick = { manifestExportPicker.launch("relab-research-manifest.json") },
                         enabled = observations.isNotEmpty()
                     ) { Text("Export research manifest") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { coverageExportPicker.launch("relab-historical-coverage-audit.csv") },
+                        enabled = coverageReports.isNotEmpty()
+                    ) { Text("Export coverage audit CSV") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
