@@ -29,8 +29,9 @@ class WalkForwardCsvExporterTest {
         assertEquals(WalkForwardCsvExporter.HEADER, lines.first())
         assertEquals(3, lines.size)
         assertTrue(lines[1].startsWith("SRIDEVI,main,2026-11-10,1,023,222,false"))
-        assertTrue(lines[1].contains(",313,244,false,244,false,244,false"))
-        assertTrue(lines[2].startsWith("SRIDEVI,main,2026-11-11,2,222,222,true"))
+        val firstRow = lines[1].split(",")
+        assertEquals(listOf("313", "244", "false", "244", "false", "244", "false"), firstRow.subList(11, 18))
+        assertTrue(lines[2].startsWith("SRIDEVI,main,2026-11-11,2,222,023,false"))
     }
 
     @Test fun escapesSessionIdentityAndEmitsHeaderForNoEvaluatedRows() {
@@ -45,6 +46,6 @@ class WalkForwardCsvExporterTest {
                 row(10, "578", "368", "session, \"A\"")
             )
         )
-        assertTrue(WalkForwardCsvExporter.export(twoRows).lines()[1].startsWith("\"SRIDEVI,session, \"\"A\"\"\","))
+        assertTrue(WalkForwardCsvExporter.export(twoRows).lines()[1].startsWith("SRIDEVI,\"session, \"\"A\"\"\","))
     }
 }
