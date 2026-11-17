@@ -392,6 +392,10 @@ private fun PatternResearchCard(analysis: MarketAnalysis) {
                 "Walk-forward baselines (open family): global ${analysis.globalModeBaseline.correct}/${analysis.globalModeBaseline.evaluated}, weekday ${analysis.weekdayModeBaseline.correct}/${analysis.weekdayModeBaseline.evaluated}, previous-state ${analysis.previousStateBaseline.correct}/${analysis.previousStateBaseline.evaluated}",
                 style = MaterialTheme.typography.bodySmall
             )
+            Text(
+                "Walk-forward baselines (close family): global ${analysis.closeGlobalModeBaseline.correct}/${analysis.closeGlobalModeBaseline.evaluated}, weekday ${analysis.closeWeekdayModeBaseline.correct}/${analysis.closeWeekdayModeBaseline.evaluated}, previous-state ${analysis.closePreviousStateBaseline.correct}/${analysis.closePreviousStateBaseline.evaluated}",
+                style = MaterialTheme.typography.bodySmall
+            )
             Text("Descriptive history only; walk-forward scores are baselines, not predictions.", style = MaterialTheme.typography.labelSmall)
         }
     }
