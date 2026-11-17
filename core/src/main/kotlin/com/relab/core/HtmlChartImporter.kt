@@ -49,13 +49,23 @@ object HtmlChartImporter {
             val raw = cells.joinToString(" | ")
             val weekStart = parseDate(cells.first())
             val marketDays = market.activeDays.sortedBy { it.value }
-            if (weekStart != null && cells.size >= marketDays.size + 1) {
-                if (weekStart.dayOfWeek != java.time.DayOfWeek.MONDAY) {
-                    issues += "Week row ${index + 1}: weekly range must start on Monday"
+            val dayCellCount = cells.size - 1
+            val allowedDayCounts = when (market) {
+                Market.KALYAN -> setOf(6)
+                Market.MAIN_BAZAR -> setOf(5)
+                Market.TIME_BAZAR -> setOf(6, 7)
+                Market.SRIDEVI, Market.SRIDEVI_NIGHT -> setOf(7)
+            }
+            val rangeDates = rangePattern.findAll(cells.first()).mapNotNull { parseDate(it.value) }.toList()
+            if (weekStart != null && dayCellCount in allowedDayCounts) {
+                if (weekStart.dayOfWeek != java.time.DayOfWeek.MONDAY ||
+                    rangeDates.size != 2 ||
+                    java.time.temporal.ChronoUnit.DAYS.between(rangeDates[0], rangeDates[1]).toInt() + 1 != dayCellCount) {
+                    issues += "Week row ${index + 1}: date range and chart day columns do not match"
                     skipped++
                     return@forEachIndexed
                 }
-                cells.drop(1).take(marketDays.size).forEachIndexed { dayOffset, cell ->
+                cells.drop(1).forEachIndexed { dayOffset, cell ->
                     val date = weekStart.plusDays(dayOffset.toLong())
                     val compact = cell.filter { it.isDigit() || it == '*' }
                     if (compact.isEmpty() || compact.all { it == '*' }) {
