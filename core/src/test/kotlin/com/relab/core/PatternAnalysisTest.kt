@@ -71,7 +71,7 @@ class PatternAnalysisTest {
         val result = PatternAnalysis.analyze(
             listOf(row(9, "277", "249"), row(10, "578", "368"))
         ).single()
-        assertEquals(1, result.closePannaFamilyTransitions["244>132"])
+        assertEquals(1, result.closePannaFamilyTransitions["244>313"])
         assertEquals(2, result.openPannaTypeCounts.values.sum())
         assertEquals(2, result.closePannaTypeCounts.values.sum())
         assertEquals(2, result.openDigitPositionCounts[0].values.sum())
@@ -93,8 +93,8 @@ class PatternAnalysisTest {
         val result = PatternAnalysis.analyze(
             listOf(row(9, "277", "249"), row(10, "578", "368"))
         ).single()
-        assertEquals(1, result.closeFamilyDigitTransitions[2][1])
-        assertEquals(1, result.closeFamilyDigitTransitions[2][3])
+        assertEquals(1, result.closeFamilyDigitTransitions[4][1])
+        assertEquals(1, result.closeFamilyDigitTransitions[4][3])
     }
 
 }
