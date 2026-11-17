@@ -75,6 +75,25 @@ class CandidateRankingEngineTest {
         assertEquals(1, jodi.supportingPannaPairs)
     }
 
+    @Test fun exploratoryRankingCanUseSinglePublisherWithoutCallingItConsensus() {
+        val singlePublisher = observations().filter { it.sourceId == "publisher-a" }
+        val strict = CandidateRankingEngine.rank(
+            singlePublisher, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 11, 8), PannaSide.OPEN, minimumHistory = 5
+        )
+        assertTrue(strict.abstained)
+        val exploratory = CandidateRankingEngine.rank(
+            singlePublisher, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 11, 8), PannaSide.OPEN,
+            minimumHistory = 5, allowSingleSourceExploration = true
+        )
+        assertFalse(exploratory.abstained)
+        assertEquals(6, exploratory.trainingRecords)
+        assertEquals(10, exploratory.candidates.size)
+        assertTrue(ReconciledChartBuilder.build(singlePublisher).records.isEmpty())
+        assertEquals(6, ReconciledChartBuilder.buildExploratoryRecords(singlePublisher).size)
+    }
+
     @Test fun futureRecordsDoNotChangeEarlierRanking() {
         val base = observations()
         val target = LocalDate.of(2026, 11, 7)
