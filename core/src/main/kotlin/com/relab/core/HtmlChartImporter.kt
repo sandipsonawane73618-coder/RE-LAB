@@ -60,7 +60,7 @@ object HtmlChartImporter {
                     val compact = cell.filter { it.isDigit() || it == '*' }
                     if (compact.isEmpty() || compact.all { it == '*' }) {
                         if (cell.isNotBlank()) {
-                            observations += observation(market, sessionId, date, host, pageUrl, retrievedAt, cell, null, ObservationStatus.PENDING)
+                            observations += observation(market, sessionId, date, host, pageUrl, retrievedAt, cell, null, ObservationStatus.MISSING_FROM_SOURCE)
                         }
                         return@forEachIndexed
                     }
