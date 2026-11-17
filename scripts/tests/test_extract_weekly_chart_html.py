@@ -33,20 +33,28 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         self.assertEqual("", rows[5]["result"])
         self.assertEqual("2026-01-04", rows[6]["date"])
 
-    def test_accepts_all_five_supported_market_names(self):
-        weekly = (
-            "<table><tr><td>16/11/2026 to 22/11/2026</td>"
-            + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * 7)
-            + "</tr></table>"
+    def test_accepts_market_specific_weekly_chart_widths(self):
+        cases = (
+            ("SRIDEVI", "16/11/2026 to 22/11/2026", 7),
+            ("SRIDEVI_NIGHT", "16/11/2026 to 22/11/2026", 7),
+            ("KALYAN", "16/11/2026 to 21/11/2026", 6),
+            ("TIME_BAZAR", "16/11/2026 to 22/11/2026", 7),
+            ("TIME_BAZAR", "16/11/2026 to 21/11/2026", 6),
+            ("MAIN_BAZAR", "16/11/2026 to 20/11/2026", 5),
         )
-        for market in ("SRIDEVI", "SRIDEVI_NIGHT", "TIME_BAZAR", "MAIN_BAZAR"):
-            with self.subTest(market=market):
+        for market, date_range, day_count in cases:
+            with self.subTest(market=market, day_count=day_count):
+                weekly = (
+                    f"<table><tr><td>{date_range}</td>"
+                    + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * day_count)
+                    + "</tr></table>"
+                )
                 rows, issues = extract_rows(
                     weekly, market=market, session_id="main", source_id="archive",
                     retrieved_at="2026-11-17T12:00:00Z"
                 )
                 self.assertEqual([], issues)
-                self.assertEqual(7, len(rows))
+                self.assertEqual(day_count, len(rows))
                 self.assertTrue(all(row["market"] == market for row in rows))
 
     def test_extracts_kalyan_six_day_week_and_flags_bad_math(self):
