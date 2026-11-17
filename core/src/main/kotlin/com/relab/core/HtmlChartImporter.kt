@@ -48,8 +48,14 @@ object HtmlChartImporter {
             if (cells.isEmpty()) return@forEachIndexed
             val raw = cells.joinToString(" | ")
             val weekStart = parseDate(cells.first())
-            if (weekStart != null && cells.size >= 8) {
-                cells.drop(1).take(7).forEachIndexed { dayOffset, cell ->
+            val marketDays = market.activeDays.sortedBy { it.value }
+            if (weekStart != null && cells.size >= marketDays.size + 1) {
+                if (weekStart.dayOfWeek != java.time.DayOfWeek.MONDAY) {
+                    issues += "Week row ${index + 1}: weekly range must start on Monday"
+                    skipped++
+                    return@forEachIndexed
+                }
+                cells.drop(1).take(marketDays.size).forEachIndexed { dayOffset, cell ->
                     val date = weekStart.plusDays(dayOffset.toLong())
                     val compact = cell.filter { it.isDigit() || it == '*' }
                     if (compact.isEmpty() || compact.all { it == '*' }) {
