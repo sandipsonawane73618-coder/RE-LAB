@@ -71,7 +71,9 @@ object HtmlChartImporter {
                 return@forEachIndexed
             }
 
-            val date = parseDate(raw)
+            // Parse the dedicated date cell first. Parsing the entire row can let
+            // unrelated result text interfere with locale-specific date detection.
+            val date = parseDate(cells.first()) ?: parseDate(raw)
             val match = resultPattern.find(raw)
             if (date == null || match == null) {
                 skipped++
