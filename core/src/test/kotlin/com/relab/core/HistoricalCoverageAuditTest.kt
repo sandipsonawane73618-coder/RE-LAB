@@ -67,7 +67,7 @@ class HistoricalCoverageAuditTest {
         assertEquals(3, day.observationCount)
         assertEquals(1, day.publishedSourceCount)
         assertEquals(1, day.pendingSourceCount)
-        assertEquals(CoverageState.PUBLISHED, day.state)
+        assertEquals(CoverageState.SINGLE_SOURCE_UNVERIFIED, day.state)
     }
 
     @Test fun matchingResultsFromTwoPublishersAreConsensusInCoverage() {
