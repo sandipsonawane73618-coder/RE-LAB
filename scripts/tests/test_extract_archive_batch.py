@@ -99,8 +99,8 @@ class ArchiveBatchExtractorTest(unittest.TestCase):
             (root / "archive.html").write_text(WEEKLY_HTML, encoding="utf-8")
             manifest = root / "manifest.csv"
             manifest.write_text(
-                "html_file,market,session_id,source_id,retrieved_at\\n"
-                "archive.html,KALYAN,main,archive,2026-11-17T12:00:00\\n",
+                "html_file,market,session_id,source_id,retrieved_at\n"
+                "archive.html,KALYAN,main,archive,2026-11-17T12:00:00\n",
                 encoding="utf-8",
             )
             rows, warnings, errors = extract_manifest(manifest)
@@ -113,7 +113,7 @@ class ArchiveBatchExtractorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "manifest.csv"
             manifest.write_text(
-                "html_file,market,market,session_id,source_id,retrieved_at\\n",
+                "html_file,market,market,session_id,source_id,retrieved_at\n",
                 encoding="utf-8",
             )
             rows, warnings, errors = extract_manifest(manifest)
