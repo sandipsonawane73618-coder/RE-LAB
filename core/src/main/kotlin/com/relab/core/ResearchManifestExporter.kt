@@ -26,6 +26,17 @@ object ResearchManifestExporter {
                 """{"market":${quote(key.first)},"session_id":${quote(key.second)},"start_date":${quote(rows.minOf { it.date }.toString())},"end_date":${quote(rows.maxOf { it.date }.toString())},"observations":${rows.size}}"""
             }
         val walkForwardRows = analyses.sumOf { it.walkForwardRows.size }
+        val timingSummaries = SourceTimingAnalytics.summarize(observations).map { row ->
+            """{"market":${quote(row.market.name)},"session_id":${quote(row.sessionId)},"source_id":${quote(row.sourceId)},"observations":${row.observations},"published_observations":${row.publishedObservations},"published_timestamp_count":${row.publishedTimestampCount},"missing_published_timestamp_count":${row.missingPublishedTimestampCount},"negative_lag_count":${row.negativeLagCount},"median_nonnegative_lag_minutes":${row.medianLagMinutes ?: "null"},"minimum_nonnegative_lag_minutes":${row.minimumLagMinutes ?: "null"},"maximum_nonnegative_lag_minutes":${row.maximumLagMinutes ?: "null"}}"""
+        }
+        val publishedCount = observations.count { it.status == ObservationStatus.PUBLISHED }
+        val publishedWithTimestamp = observations.count {
+            it.status == ObservationStatus.PUBLISHED && it.publishedAt != null
+        }
+        val negativeLagCount = observations.count {
+            it.status == ObservationStatus.PUBLISHED && it.publishedAt != null &&
+                it.retrievedAt.isBefore(it.publishedAt)
+        }
         return buildString {
             appendLine("{")
             appendLine("  \"format_version\": ${quote(FORMAT_VERSION)},")
@@ -46,6 +57,12 @@ object ResearchManifestExporter {
             appendLine("  \"conflict_groups\": ${groups.count { it.state == ReconciliationState.CONFLICT }},")
             appendLine("  \"consensus_chart_records_exported\": ${consensusRecords.size},")
             appendLine("  \"walk_forward_out_of_sample_rows\": $walkForwardRows,")
+            appendLine("  \"published_observations_with_timestamp\": $publishedWithTimestamp,")
+            appendLine("  \"published_observations_missing_timestamp\": ${publishedCount - publishedWithTimestamp},")
+            appendLine("  \"negative_publication_lag_observations\": $negativeLagCount,")
+            appendLine("  \"source_timing_summary\": [")
+            appendLine(timingSummaries.joinToString(",\\n") { "    $it" })
+            appendLine("  ],")
             appendLine("  \"sessions\": [")
             appendLine(sessions.joinToString(",\n") { "    $it" })
             appendLine("  ]")
