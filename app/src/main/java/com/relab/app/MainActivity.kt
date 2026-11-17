@@ -256,8 +256,7 @@ private fun RelabHome(
             } catch (error: Exception) {
                 importMessage = "Source timing export error: ${error.message ?: "Unknown error"}"
             }
-        }
-    }
+        }    }
 
     val coverageExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
@@ -334,25 +333,31 @@ private fun RelabHome(
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
                 Text("Source-first research. Every imported source observation is stored locally.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import CSV") }
-                    OutlinedButton(
-                        onClick = { bundleExportPicker.launch("relab-complete-research-bundle.zip") },
-                        enabled = observations.isNotEmpty()
-                    ) { Text("Export complete bundle") }
-                    OutlinedButton(
-                        onClick = { exportPicker.launch("relab-source-backup.csv") },
-                        enabled = observations.isNotEmpty()
-                    ) { Text("Export backup") }
-                    OutlinedButton(
-                        onClick = { bundleValidationPicker.launch(arrayOf("application/zip", "application/octet-stream")) }
-                    ) { Text("Import verified bundle") }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) {
+                            Text("Import CSV")
+                        }
+                        OutlinedButton(
+                            onClick = { bundleValidationPicker.launch(arrayOf("application/zip", "application/octet-stream")) }
+                        ) { Text("Import verified bundle") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { bundleExportPicker.launch("relab-complete-research-bundle.zip") },
+                            enabled = observations.isNotEmpty()
+                        ) { Text("Export complete bundle") }
+                        OutlinedButton(
+                            onClick = { exportPicker.launch("relab-source-backup.csv") },
+                            enabled = observations.isNotEmpty()
+                        ) { Text("Export backup") }
+                    }
                     OutlinedButton(onClick = {
                         rawCsv = null
                         observations = emptyList()
                         onClearCsv()
                         importMessage = "Local database cleared."
-                    }, enabled = observations.isNotEmpty()) { Text("Clear") }
+                    }, enabled = observations.isNotEmpty()) { Text("Clear local dataset") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -392,7 +397,14 @@ private fun RelabHome(
                         Text("Published: $published   Pending: $pending")
                         Text("Malformed rows: $malformed   Conflicting dates: $conflicts")
                         Text("Reconciled date groups: ${groups.size}")
-                        if (report == null) Text("No CSV imported yet. Import a source CSV to begin historical research.")
+                        if (report == null) {
+                            Text("No CSV imported yet. Import a source CSV to begin historical research.")
+                            Text(
+                                "Required columns: market, session_id, date, source_id, retrieved_at, raw_text, status. " +
+                                    "For a published result, include the result column too.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         if (report != null && report.issues.isNotEmpty()) {
                             Text("Import row issues: ${report.issues.size}")
                             report.issues.take(5).forEach { issue ->
