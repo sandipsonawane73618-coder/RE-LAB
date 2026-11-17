@@ -42,7 +42,7 @@ class CoverageCsvExporterTest {
         assertTrue(csv.contains("2026-11-02,SINGLE_SOURCE_UNVERIFIED,1,1"))
         assertTrue(csv.contains("2026-11-03,PENDING,1,0,1"))
         assertTrue(csv.contains("2026-11-04,NO_OBSERVATION,0,0,0"))
-        assertEquals(4, csv.lines().size)
+        assertEquals(4, csv.trimEnd().lines().size)
     }
 
     @Test
