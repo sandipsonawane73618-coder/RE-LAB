@@ -179,7 +179,12 @@ def extract_rows(
             chart_date = start + timedelta(days=offset)
             raw_cell = " | ".join(parts)
             open_value, jodi_value, close_value = parts
+            combined = " | ".join(parts)
             if any("*" in part for part in parts):
+                status, result = "MISSING_FROM_SOURCE", ""
+            elif re.search(r"\\b(?:holiday|closed|market\\s+off|no\\s+market|weekly\\s+off|pending|awaiting|not\\s+declared)\\b", combined, re.IGNORECASE):
+                status, result = _cell_observation(combined)
+            elif not any(part.strip() for part in parts):
                 status, result = "MISSING_FROM_SOURCE", ""
             else:
                 open_digits = re.sub(r"\\D", "", open_value)
@@ -189,8 +194,6 @@ def extract_rows(
                     status, result = _cell_observation(
                         f"{open_digits} {jodi_digits} {close_digits}"
                     )
-                elif not any(part.strip() for part in parts):
-                    status, result = "MISSING_FROM_SOURCE", ""
                 else:
                     status, result = "MALFORMED", ""
             output.append({
