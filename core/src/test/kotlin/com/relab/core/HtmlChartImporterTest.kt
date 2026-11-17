@@ -47,9 +47,9 @@ class HtmlChartImporterTest {
               <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th><th>SUN</th></tr>
               <tr>
                 <td>16/11/26 to 22/11/26</td>
-                <td>5 7 7 99 6 6 7</td>
-                <td>1 1 5 73 2 2 9</td>
-                <td>3 6 7 69 2 8 9</td>
+                <td>577</td><td>99</td><td>667</td>
+                <td>115</td><td>73</td><td>229</td>
+                <td>367</td><td>69</td><td>289</td>
                 <td></td><td></td><td></td><td></td>
               </tr>
             </table>
@@ -70,12 +70,12 @@ class HtmlChartImporterTest {
               <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th></tr>
               <tr>
                 <td>16/11/26 to 21/11/26</td>
-                <td>5 7 7 99 6 6 7</td>
-                <td>1 1 5 73 2 2 9</td>
-                <td>3 6 7 69 2 8 9</td>
-                <td>2 7 7 44 5 8 9</td>
-                <td>1 2 3 66 4 5 7</td>
-                <td>4 4 4 24 1 1 1</td>
+                <td>577</td><td>99</td><td>667</td>
+                <td>115</td><td>73</td><td>229</td>
+                <td>367</td><td>69</td><td>289</td>
+                <td>277</td><td>62</td><td>589</td>
+                <td>123</td><td>66</td><td>457</td>
+                <td>444</td><td>23</td><td>111</td>
               </tr>
             </table>
         """.trimIndent()
@@ -91,8 +91,8 @@ class HtmlChartImporterTest {
             <table>
               <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th></tr>
               <tr><td>16/11/26 to 20/11/26</td>
-                <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
-                <td>668 07 449</td><td>668 07 449</td>
+                <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
+                <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
               </tr>
             </table>
         """.trimIndent()
@@ -106,8 +106,8 @@ class HtmlChartImporterTest {
     @Test fun timeBazarSupportsHistoricalSevenDayAndLaterSixDayRows() {
         val sevenDayHtml = """
             <table><tr><td>28/12/20 to 3/1/21</td>
-              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
-              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+              <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
+              <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
             </tr></table>
         """.trimIndent()
         val sevenDay = HtmlChartImporter.import(sevenDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
@@ -116,8 +116,8 @@ class HtmlChartImporterTest {
 
         val sixDayHtml = """
             <table><tr><td>16/11/26 to 21/11/26</td>
-              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
-              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+              <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
+              <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
             </tr></table>
         """.trimIndent()
         val sixDay = HtmlChartImporter.import(sixDayHtml, url, Market.TIME_BAZAR, "main", retrieved)
@@ -128,8 +128,8 @@ class HtmlChartImporterTest {
     @Test fun starredWeeklyCellIsPreservedAsMissingNotInventedHolidayOrResult() {
         val html = """
             <table><tr><td>16/11/26 to 22/11/26</td>
-              <td>668 07 449</td><td>**</td><td>668 07 449</td>
-              <td>668 07 449</td><td>668 07 449</td><td>668 07 449</td><td>668 07 449</td>
+              <td>668</td><td>07</td><td>449</td><td>* * *</td><td>**</td><td>* * *</td><td>668</td><td>07</td><td>449</td>
+              <td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td><td>668</td><td>07</td><td>449</td>
             </tr></table>
         """.trimIndent()
         val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
