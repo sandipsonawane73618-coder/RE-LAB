@@ -136,6 +136,47 @@ class ArchiveBatchExtractorTest(unittest.TestCase):
             self.assertEqual([], errors)
             self.assertEqual(6, len(rows))
 
+    def test_manifest_trims_header_whitespace_before_mapping_rows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "archive.html").write_text(WEEKLY_HTML, encoding="utf-8")
+            manifest = root / "manifest.csv"
+            manifest.write_text(
+                " html_file , market , session_id , source_id , retrieved_at \n"
+                "archive.html,KALYAN,main,archive,2026-11-17T12:00:00Z\n",
+                encoding="utf-8",
+            )
+            rows, warnings, errors = extract_manifest(manifest)
+            self.assertEqual([], warnings)
+            self.assertEqual([], errors)
+            self.assertEqual(6, len(rows))
+
+    def test_manifest_rejects_headers_that_duplicate_after_whitespace_trim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.csv"
+            manifest.write_text(
+                "html_file,market, market ,session_id,source_id,retrieved_at\n",
+                encoding="utf-8",
+            )
+            rows, warnings, errors = extract_manifest(manifest)
+            self.assertEqual([], rows)
+            self.assertEqual([], warnings)
+            self.assertEqual(1, len(errors))
+            self.assertIn("duplicate", errors[0])
+
+    def test_manifest_rejects_empty_header_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.csv"
+            manifest.write_text(
+                "html_file,market,,session_id,source_id,retrieved_at\n",
+                encoding="utf-8",
+            )
+            rows, warnings, errors = extract_manifest(manifest)
+            self.assertEqual([], rows)
+            self.assertEqual([], warnings)
+            self.assertEqual(1, len(errors))
+            self.assertIn("empty column", errors[0])
+
 
 if __name__ == "__main__":
     unittest.main()
