@@ -66,4 +66,35 @@ class PatternAnalysisTest {
         assertEquals(1, result.acceptedRecords)
         assertEquals(1, result.rejectedRecords)
     }
+
+    @Test fun analyzesOpenAndCloseTransitionsAndDerivedDimensions() {
+        val result = PatternAnalysis.analyze(
+            listOf(row(9, "277", "249"), row(10, "578", "368"))
+        ).single()
+        assertEquals(1, result.closePannaFamilyTransitions["244>132"])
+        assertEquals(2, result.openPannaTypeCounts.values.sum())
+        assertEquals(2, result.closePannaTypeCounts.values.sum())
+        assertEquals(2, result.openDigitPositionCounts[0].values.sum())
+        assertEquals(2, result.closeDigitPositionCounts[2].values.sum())
+        assertEquals(2, result.jodiFamilyCombinations.sumOf { it.count })
+        assertEquals(2, result.openAnkCounts.sumOf { it.count })
+    }
+
+    @Test fun keepsDifferentSessionsSeparateForSameMarketAndDate() {
+        val main = row(9, "277", "249")
+        val day = main.copy(sessionId = "day", openPanna = "578", jodi = "07", closePanna = "368")
+        val results = PatternAnalysis.analyze(listOf(main, day))
+        assertEquals(2, results.size)
+        assertEquals(setOf("main", "day"), results.map { it.sessionId }.toSet())
+        assertTrue(results.all { it.acceptedRecords == 1 })
+    }
+
+    @Test fun closeFamilyTransitionsUseClosePannaNotOpenPanna() {
+        val result = PatternAnalysis.analyze(
+            listOf(row(9, "277", "249"), row(10, "578", "368"))
+        ).single()
+        assertEquals(1, result.closeFamilyDigitTransitions[2][1])
+        assertEquals(1, result.closeFamilyDigitTransitions[2][3])
+    }
+
 }
