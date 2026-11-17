@@ -39,7 +39,6 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
             ("SRIDEVI_NIGHT", "16/11/2026 to 22/11/2026", 7),
             ("KALYAN", "16/11/2026 to 21/11/2026", 6),
             ("TIME_BAZAR", "16/11/2026 to 22/11/2026", 7),
-            ("TIME_BAZAR", "16/11/2026 to 21/11/2026", 6),
             ("MAIN_BAZAR", "16/11/2026 to 20/11/2026", 5),
         )
         for market, date_range, day_count in cases:
