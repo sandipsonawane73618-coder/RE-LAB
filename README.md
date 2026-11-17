@@ -58,6 +58,22 @@ For a record with open Panna digits (a,b,c) and close Panna digits (x,y,z):
 
 Jodi family is mathematically derived from the Panna family sums; it must not be counted as an independent signal.
 
+## Offline archive extraction
+
+The repository includes `scripts/extract_weekly_chart_html.py` for converting a **saved HTML snapshot** of a weekly chart table into the source-observation CSV format. It supports Sridevi (Mon–Sun) and Kalyan (Mon–Sat), retains each visible cell as raw text, and maps blank/marker cells to `MISSING_FROM_SOURCE`. Structurally or mathematically invalid cells become `MALFORMED`; they are never repaired.
+
+Example:
+
+```bash
+python scripts/extract_weekly_chart_html.py saved-chart.html \
+  --market KALYAN --session-id main --source-id fixresult-kalyan \
+  --retrieved-at "2026-11-17T12:00:00+05:30" \
+  --source-url "https://www.fixresult.in/kalyan-matka-chart.html" \
+  > kalyan-source-observations.csv
+```
+
+The script does not fetch websites. Save the page yourself, pass the real retrieval timestamp, inspect its warnings, and import the generated CSV into RE-LAB. The script and its tests run in CI.
+
 ## Development principles
 
 1. Evidence before claims: report only builds, tests, and device checks that actually ran.
