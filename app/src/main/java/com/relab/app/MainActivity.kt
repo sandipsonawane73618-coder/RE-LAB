@@ -44,6 +44,7 @@ import com.relab.core.ReconciledChartBuilder
 import com.relab.core.SourceCsvImporter
 import com.relab.core.SourceCsvExporter
 import com.relab.core.SourceObservationMerger
+import com.relab.core.SourceTimingAnalytics
 import com.relab.core.SourceReconciliation
 import java.time.LocalDate
 
@@ -222,6 +223,20 @@ private fun RelabHome(
             .sortedWith(compareBy<CoverageReport> { it.market.name }.thenBy { it.sessionId })
     }
 
+    val sourceTiming = remember(observations) { SourceTimingAnalytics.summarize(observations) }
+    val timingExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = SourceTimingAnalytics.exportCsv(observations)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
+                    ?: error("Source timing file could not be written")
+                importMessage = "Exported publication-to-capture timing for ${sourceTiming.size} publisher/session groups. Missing publication times remain unestimated."
+            } catch (error: Exception) {
+                importMessage = "Source timing export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     val coverageExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -278,6 +293,12 @@ private fun RelabHome(
                         onClick = { coverageExportPicker.launch("relab-historical-coverage-audit.csv") },
                         enabled = coverageReports.isNotEmpty()
                     ) { Text("Export coverage audit CSV") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { timingExportPicker.launch("relab-source-publication-timing.csv") },
+                        enabled = sourceTiming.isNotEmpty()
+                    ) { Text("Export source timing CSV") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
