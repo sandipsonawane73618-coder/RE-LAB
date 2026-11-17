@@ -18,7 +18,7 @@ class HtmlChartImporterTest {
             </table></html>
         """.trimIndent()
         val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
-        assertEquals(3, report.observations.size)
+        assertEquals("Expected 3 dated rows; got ${report.observations.size}. skipped=${report.skippedRows}, issues=${report.issues}, observations=${report.observations.map { Triple(it.date, it.status, it.rawText) }}", 3, report.observations.size)
         assertEquals("charts.example", report.observations.first().sourceId)
         assertEquals(url, report.observations.first().sourceUrl)
         assertEquals(ObservationStatus.PUBLISHED, report.observations.first().status)
