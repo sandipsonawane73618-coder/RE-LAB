@@ -39,6 +39,29 @@ class ResearchManifestExporterTest {
     }
 
     @Test
+    fun timingSummaryArrayUsesRealJsonWhitespaceBetweenEntries() {
+        val first = SourceObservation(
+            market = Market.SRIDEVI,
+            sessionId = "morning",
+            date = LocalDate.parse("2026-11-16"),
+            sourceId = "archive-A",
+            retrievedAt = Instant.parse("2026-11-16T10:00:00Z"),
+            publishedAt = Instant.parse("2026-11-16T09:00:00Z"),
+            rawText = "577-99-667",
+            normalizedResult = "577-99-667",
+            status = ObservationStatus.PUBLISHED
+        )
+        val second = first.copy(sourceId = "archive-B")
+        val manifest = ResearchManifestExporter.export(
+            listOf(first, second), emptyList(), emptyList(), Instant.parse("2026-11-17T12:00:00Z")
+        )
+
+        assertTrue(manifest.contains("},\n    {"))
+        assertTrue(!manifest.contains("},\\n    {"))
+        assertTrue(manifest.contains("\"source_timing_summary\": ["))
+    }
+
+    @Test
     fun manifestEscapesSessionNamesAsValidJsonStrings() {
         val observation = SourceObservation(
             market = Market.KALYAN,
