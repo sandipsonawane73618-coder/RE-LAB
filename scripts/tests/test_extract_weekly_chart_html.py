@@ -50,6 +50,22 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         self.assertEqual("MALFORMED", rows[5]["status"])
         self.assertEqual("", rows[5]["result"])
 
+    def test_explicit_holiday_and_pending_markers_remain_distinct(self):
+        html = """
+        <table><tr><td>24-08-2026 to 29-08-2026</td>
+        <td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
+        <td>568 92 345</td><td>HOLIDAY</td><td>Pending</td></tr></table>
+        """
+        rows, issues = extract_rows(
+            html, market="KALYAN", session_id="main", source_id="archive",
+            retrieved_at="2026-11-17T12:00:00Z"
+        )
+        self.assertEqual([], issues)
+        self.assertEqual("HOLIDAY_CLOSED", rows[4]["status"])
+        self.assertEqual("PENDING", rows[5]["status"])
+        self.assertEqual("", rows[4]["result"])
+        self.assertEqual("", rows[5]["result"])
+
     def test_csv_output_round_trips_commas_and_quotes_in_raw_text(self):
         rows, _ = extract_rows(
             "<table><tr><td>24-08-2026 to 29-08-2026</td>"
