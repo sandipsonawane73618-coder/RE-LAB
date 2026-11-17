@@ -2,7 +2,26 @@ package com.relab.core
 
 enum class Market(val activeDays: Set<java.time.DayOfWeek>) {
     SRIDEVI(java.time.DayOfWeek.entries.toSet()),
-    KALYAN(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet())
+    SRIDEVI_NIGHT(java.time.DayOfWeek.entries.toSet()),
+    KALYAN(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
+    TIME_BAZAR(java.time.DayOfWeek.entries.toSet()),
+    MAIN_BAZAR(java.time.DayOfWeek.entries.toSet());
+
+    companion object {
+        /** Resolve only the five explicitly supported source chart paths. */
+        fun fromSourceUrl(value: String): Market? {
+            val path = runCatching { java.net.URI(value).path.lowercase(java.util.Locale.ROOT) }
+                .getOrNull() ?: return null
+            return when {
+                path.endsWith("/sridevi-night-satta-penal-chart.php") -> SRIDEVI_NIGHT
+                path.endsWith("/sridevi-satta-penal-chart.php") -> SRIDEVI
+                path.endsWith("/kalyan-penal-chart.php") -> KALYAN
+                path.endsWith("/time-bazar-panel-chart.php") -> TIME_BAZAR
+                path.endsWith("/main-bazar-panel-chart.php") -> MAIN_BAZAR
+                else -> null
+            }
+        }
+    }
 }
 
 enum class PannaType { SP, DP, TP }
