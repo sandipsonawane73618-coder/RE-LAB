@@ -35,6 +35,17 @@ class ResearchBundleValidatorTest {
     }
 
     @Test
+    fun enforcesUncompressedSizeLimitWhileReading() {
+        val bytes = ResearchBundleExporter.export(
+            emptyList(), emptyList(), emptyList(), emptyList(),
+            Instant.parse("2026-11-17T12:00:00Z")
+        )
+        val result = ResearchBundleValidator.validate(bytes, maxTotalBytes = 16)
+        assertFalse(result.valid)
+        assertTrue(result.errors.any { it.contains("uncompressed size limit") })
+    }
+
+    @Test
     fun rejectsMissingAndUnsupportedEntries() {
         val original = ResearchBundleExporter.export(
             emptyList(), emptyList(), emptyList(), emptyList(),
