@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract weekly Sridevi/Kalyan HTML chart tables into RE-LAB source-observation CSV.
+"""Extract weekly supported market HTML chart tables into RE-LAB source-observation CSV.
 
 This parser works on saved HTML snapshots. It never fetches a website and never
 turns blank/marker cells into numeric results. Capture time must be supplied by
@@ -137,8 +137,9 @@ def extract_rows(
     source_url: str = "",
 ) -> tuple[list[dict[str, str]], list[str]]:
     market = market.upper()
-    if market not in {"SRIDEVI", "KALYAN"}:
-        raise ValueError("market must be SRIDEVI or KALYAN")
+    supported_markets = {"SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR"}
+    if market not in supported_markets:
+        raise ValueError("market must be one of: " + ", ".join(sorted(supported_markets)))
     if not session_id.strip() or not source_id.strip():
         raise ValueError("session_id and source_id are required")
     # A capture time is an instant, so a timezone offset is mandatory.
@@ -150,7 +151,7 @@ def extract_rows(
     parser.feed(html)
     output: list[dict[str, str]] = []
     issues: list[str] = []
-    active_days = 7 if market == "SRIDEVI" else 6
+    active_days = 6 if market == "KALYAN" else 7
 
     for row_number, cells in enumerate(parser.rows, start=1):
         if len(cells) < active_days + 1:
@@ -198,7 +199,7 @@ def write_csv(rows: Iterable[dict[str, str]], output) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("html_file", type=Path)
-    parser.add_argument("--market", required=True, choices=("SRIDEVI", "KALYAN"))
+    parser.add_argument("--market", required=True, choices=("SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR"))
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--source-id", required=True)
     parser.add_argument("--retrieved-at", required=True, help="ISO-8601 instant, e.g. 2026-11-17T12:00:00+05:30")
