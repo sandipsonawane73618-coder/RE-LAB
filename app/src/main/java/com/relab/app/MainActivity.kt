@@ -2,6 +2,8 @@ package com.relab.app
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -52,6 +54,8 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 private const val MAX_BUNDLE_ARCHIVE_BYTES = 100_000_000L
 
@@ -110,6 +114,10 @@ class MainActivity : ComponentActivity() {
                     require(observations.isNotEmpty()) { "No valid source observations to save" }
                     database.appendDataset(csv, observations)
                 },
+                onSaveLinkObservations = { imported ->
+                    require(imported.isNotEmpty()) { "No chart rows were extracted from this link" }
+                    database.appendDataset(SourceCsvExporter.export(imported), imported)
+                },
                 onClearCsv = {
                     database.clearDataset()
                     val rangeKeys = preferences.all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }
@@ -134,12 +142,15 @@ private fun RelabHome(
     initialCoverageRanges: Map<String, Pair<LocalDate, LocalDate>>,
     onSaveCoverageRange: (String, LocalDate, LocalDate) -> Unit,
     onSaveCsv: (String, List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
+    onSaveLinkObservations: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     onClearCsv: () -> Unit
 ) {
     val context = LocalContext.current
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var chartUrl by remember { mutableStateOf("") }
+    var linkBusy by remember { mutableStateOf(false) }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -353,6 +364,24 @@ private fun RelabHome(
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
                 Text("Source-first research. Every imported source observation is stored locally.")
+                OutlinedTextField(
+                    value = chartUrl,
+                    onValueChange = { chartUrl = it },
+                    label = { Text("Paste chart website link") },
+                    placeholder = { Text("https://example.com/chart") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = chartUrl.isNotBlank() && !linkBusy,
+                        onClick = { importChartLink(chartUrl, com.relab.core.Market.SRIDEVI, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) }
+                    ) { Text(if (linkBusy) "Fetching..." else "Fetch Sridevi") }
+                    OutlinedButton(
+                        enabled = chartUrl.isNotBlank() && !linkBusy,
+                        onClick = { importChartLink(chartUrl, com.relab.core.Market.KALYAN, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) }
+                    ) { Text("Fetch Kalyan") }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) {
@@ -704,4 +733,73 @@ private fun CandidateResearchCard(
             }
         }
     }
+}
+
+
+private fun importChartLink(
+    rawUrl: String,
+    market: com.relab.core.Market,
+    save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
+    updateObservations: (List<com.relab.core.SourceObservation>) -> Unit,
+    updateMessage: (String) -> Unit,
+    updateBusy: (Boolean) -> Unit
+) {
+    val cleanUrl = rawUrl.trim()
+    val mainHandler = Handler(Looper.getMainLooper())
+    updateBusy(true)
+    updateMessage("Fetching chart page…")
+    Thread {
+        try {
+            val uri = java.net.URI(cleanUrl)
+            require(uri.scheme == "https" || uri.scheme == "http") { "Enter a valid HTTP or HTTPS link." }
+            require(!uri.host.isNullOrBlank()) { "The link must include a website host." }
+            val connection = URL(cleanUrl).openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 20000
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "RE-LAB-Android/0.1")
+            connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
+            try {
+                val code = connection.responseCode
+                require(code in 200..299) { "Website returned HTTP $code." }
+                val type = connection.contentType.orEmpty().lowercase()
+                require(type.contains("text/html") || type.contains("application/xhtml+xml") || type.isBlank()) {
+                    "This link did not return an HTML chart page ($type)."
+                }
+                val bytes = connection.inputStream.use { readBoundedBytes(it, 8_000_000L) }
+                val html = bytes.toString(Charsets.UTF_8)
+                val report = com.relab.core.HtmlChartImporter.import(
+                    html, connection.url.toString(), market, "main", java.time.Instant.now()
+                )
+                mainHandler.post {
+                    try {
+                        if (report.observations.isEmpty()) {
+                            val detail = report.issues.firstOrNull()
+                                ?: "No dated chart-result rows found. This page may be JavaScript-rendered or use an unsupported layout."
+                            updateMessage("No records imported: $detail Skipped rows: ${report.skippedRows}.")
+                        } else {
+                            val merged = save(report.observations)
+                            updateObservations(merged)
+                            updateMessage(
+                                "${market.name}: fetched ${report.observations.size} rows; total saved observations ${merged.size}. " +
+                                    "Malformed rows ${report.issues.size}; skipped rows ${report.skippedRows}. Source: ${uri.host}."
+                            )
+                        }
+                    } catch (error: Exception) {
+                        updateMessage("Save failed: ${error.message ?: "Unknown error"}")
+                    } finally {
+                        updateBusy(false)
+                    }
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (error: Exception) {
+            mainHandler.post {
+                updateMessage("Link import failed: ${error.message ?: "Unknown error"}")
+                updateBusy(false)
+            }
+        }
+    }.start()
 }
