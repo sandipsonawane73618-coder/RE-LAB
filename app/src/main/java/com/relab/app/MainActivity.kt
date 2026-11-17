@@ -267,6 +267,23 @@ private fun RelabHome(
         }
     }
 
+    val bundleValidationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("Selected bundle could not be opened")
+                val validation = com.relab.core.ResearchBundleValidator.validate(bytes)
+                importMessage = if (validation.valid) {
+                    "Bundle verified: ${validation.verifiedFiles} artifact checksums passed. Import/restore has not been performed."
+                } else {
+                    "Bundle rejected: ${validation.errors.joinToString("; ")}"
+                }
+            } catch (error: Exception) {
+                importMessage = "Bundle validation error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -283,6 +300,9 @@ private fun RelabHome(
                         onClick = { exportPicker.launch("relab-source-backup.csv") },
                         enabled = observations.isNotEmpty()
                     ) { Text("Export backup") }
+                    OutlinedButton(
+                        onClick = { bundleValidationPicker.launch(arrayOf("application/zip", "application/octet-stream")) }
+                    ) { Text("Verify bundle") }
                     OutlinedButton(onClick = {
                         rawCsv = null
                         observations = emptyList()
