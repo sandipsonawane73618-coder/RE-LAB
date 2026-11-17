@@ -98,6 +98,18 @@ class HistoricalCoverageAuditTest {
         assertEquals(listOf("678-17-124", "789-46-150"), report.days.single().distinctPublishedResults)
     }
 
+    @Test fun malformedOnlyDateIsNotReportedAsNoObservation() {
+        val report = HistoricalCoverageAudit.analyze(
+            Market.KALYAN, "main",
+            LocalDate.parse("2026-11-06"), LocalDate.parse("2026-11-06"),
+            listOf(observation("2026-11-06", "source-a", ObservationStatus.MALFORMED))
+        )
+        assertEquals(CoverageState.MALFORMED_ONLY, report.days.single().state)
+        assertEquals(1, report.malformedOnlyDays)
+        assertEquals(0, report.noObservationDays)
+        assertEquals(1, report.days.single().malformedSourceCount)
+    }
+
     @Test fun ignoresOtherMarketsAndSessionsAndRejectsInvalidRange() {
         val otherSession = observation("2026-11-02", "a", ObservationStatus.PENDING)
             .copy(sessionId = "day")
