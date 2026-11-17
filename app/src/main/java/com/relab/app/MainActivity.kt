@@ -790,7 +790,7 @@ private fun CandidateResearchCard(
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Exploratory single-source research · not independently verified",
+                "Exploratory ranking may include unverified single-source rows; not consensus-only. No candidate-level walk-forward hit rate is claimed.",
                 style = MaterialTheme.typography.labelSmall
             )
             if (open.abstained || close.abstained) {
