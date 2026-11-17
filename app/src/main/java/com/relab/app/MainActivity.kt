@@ -229,7 +229,7 @@ private fun CoverageReportCard(report: CoverageReport) {
             Text("Expected trading days: ${report.expectedTradingDays}")
             Text("Published: ${report.publishedDays} · Multi-source consensus: ${report.consensusDays} · Single-source unverified: ${report.singleSourceDays} · Conflicts: ${report.conflictDays}")
             Text("Pending: ${report.pendingDays} · Holidays: ${report.holidayDays}")
-            Text("Source missing: ${report.sourceMissingDays} · No observation: ${report.noObservationDays}")
+            Text("Source missing: ${report.sourceMissingDays} · Malformed only: ${report.malformedOnlyDays} · No observation: ${report.noObservationDays}")
             Text("Latest coverage records", style = MaterialTheme.typography.titleSmall)
             report.days.takeLast(10).asReversed().forEach { day ->
                 val stateLabel = when (day.state) {
@@ -237,6 +237,7 @@ private fun CoverageReportCard(report: CoverageReport) {
                     CoverageState.HOLIDAY_REPORTED -> "HOLIDAY REPORTED"
                     CoverageState.PENDING -> "PENDING"
                     CoverageState.SOURCE_MISSING -> "SOURCE MISSING"
+                    CoverageState.MALFORMED_ONLY -> "MALFORMED ONLY"
                     CoverageState.SINGLE_SOURCE_UNVERIFIED -> "SINGLE SOURCE · UNVERIFIED"
                     CoverageState.CONSENSUS -> "MULTI-SOURCE CONSENSUS"
                     CoverageState.CONFLICT -> "CONFLICT"
@@ -249,7 +250,7 @@ private fun CoverageReportCard(report: CoverageReport) {
                 Text("${day.date} · $stateLabel · $resultLabel", style = MaterialTheme.typography.bodySmall)
             }
             Text(
-                "No observation is not assumed to be a holiday. Source conflicts remain unresolved.",
+                "Malformed-only dates are separate from missing observations. No observation is not assumed to be a holiday; source conflicts remain unresolved.",
                 style = MaterialTheme.typography.labelSmall
             )
         }
