@@ -37,12 +37,32 @@ import com.relab.core.SourceReconciliation
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val savedCsv = getSharedPreferences("relab_local", MODE_PRIVATE).getString("source_csv", null)
+        val database = LocalObservationDatabase(this)
+        val preferences = getSharedPreferences("relab_local", MODE_PRIVATE)
+
+        // One-time migration from the first CSV-only build. Keep the old preference
+        // until the database transaction succeeds so a failed migration is recoverable.
+        val legacyCsv = preferences.getString("source_csv", null)
+        if (database.loadOriginalCsv() == null && !legacyCsv.isNullOrBlank()) {
+            val legacyReport = SourceCsvImporter.import(legacyCsv)
+            if (legacyReport.observations.isNotEmpty()) {
+                database.replaceDataset(legacyCsv, legacyReport.observations)
+                preferences.edit().remove("source_csv").apply()
+            }
+        }
+
         setContent {
             RelabHome(
-                initialCsv = savedCsv,
-                onSaveCsv = { csv -> getSharedPreferences("relab_local", MODE_PRIVATE).edit().putString("source_csv", csv).apply() },
-                onClearCsv = { getSharedPreferences("relab_local", MODE_PRIVATE).edit().remove("source_csv").apply() }
+                initialCsv = database.loadOriginalCsv(),
+                onSaveCsv = { csv ->
+                    val parsed = SourceCsvImporter.import(csv)
+                    require(parsed.observations.isNotEmpty()) { "No valid source observations to save" }
+                    database.replaceDataset(csv, parsed.observations)
+                },
+                onClearCsv = {
+                    database.clearDataset()
+                    preferences.edit().remove("source_csv").apply()
+                }
             )
         }
     }
@@ -62,9 +82,9 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
                 if (parsed.observations.isEmpty()) {
                     importMessage = "Import failed: no valid source observations. " + (parsed.issues.firstOrNull()?.message ?: "")
                 } else {
-                    rawCsv = csv
                     onSaveCsv(csv)
-                    importMessage = "Saved locally: ${parsed.observations.size} observations, ${parsed.issues.size} row issues. Original CSV retained."
+                    rawCsv = csv
+                    importMessage = "Saved in offline database: ${parsed.observations.size} observations, ${parsed.issues.size} row issues. Raw source text retained."
                 }
             } catch (error: Exception) {
                 importMessage = "CSV read/import error: ${error.message ?: "Unknown error"}"
@@ -85,13 +105,13 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
             Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
-                Text("Source-first research. Raw source file stays on this device.")
+                Text("Source-first research. Every imported source observation is stored locally.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import source CSV") }
                     OutlinedButton(onClick = {
                         rawCsv = null
                         onClearCsv()
-                        importMessage = "Local imported dataset cleared."
+                        importMessage = "Local database cleared."
                     }, enabled = rawCsv != null) { Text("Clear data") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -132,7 +152,7 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
                         }
                     }
                 }
-                Text("Local-only · Provenance-preserving · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
+                Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
