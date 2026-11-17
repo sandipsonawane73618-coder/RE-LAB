@@ -161,6 +161,18 @@ private fun RelabHome(
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
     val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
     val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
+    val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = com.relab.core.DerivedChartCsvExporter.export(chartBuild.records)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
+                    ?: error("Research export file could not be written")
+                importMessage = "Exported ${chartBuild.records.size} validated consensus chart records with derived features."
+            } catch (error: Exception) {
+                importMessage = "Research export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
     var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     val coverageReports = remember(observations, coverageRangeOverrides) {
         observations.groupBy { it.market to it.sessionId }
@@ -195,6 +207,12 @@ private fun RelabHome(
                         onClearCsv()
                         importMessage = "Local database cleared."
                     }, enabled = observations.isNotEmpty()) { Text("Clear") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { researchExportPicker.launch("relab-derived-consensus-research.csv") },
+                        enabled = chartBuild.records.isNotEmpty()
+                    ) { Text("Export research CSV") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
