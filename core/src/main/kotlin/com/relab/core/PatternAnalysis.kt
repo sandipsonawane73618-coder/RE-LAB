@@ -2,7 +2,7 @@ package com.relab.core
 
 import java.time.temporal.ChronoUnit
 
-/** Deterministic descriptive analysis. Inputs are validated and grouped by market. */
+/** Deterministic descriptive analysis. No predictive claim is implied by frequency. */
 data class PatternCount(
     val pattern: String,
     val count: Int,
@@ -11,10 +11,7 @@ data class PatternCount(
     val meetsMinimumSupport: Boolean
 )
 
-data class RepeatGap(
-    val pattern: String,
-    val gapsInDays: List<Long>
-)
+data class RepeatGap(val pattern: String, val gapsInDays: List<Long>)
 
 data class WalkForwardRow(
     val date: java.time.LocalDate,
@@ -24,16 +21,13 @@ data class WalkForwardRow(
     val previousStatePrediction: String
 )
 
-data class WalkForwardMetric(
-    val correct: Int,
-    val evaluated: Int
-) {
-    val hitRate: Double
-        get() = if (evaluated == 0) 0.0 else correct.toDouble() / evaluated
+data class WalkForwardMetric(val correct: Int, val evaluated: Int) {
+    val hitRate: Double get() = if (evaluated == 0) 0.0 else correct.toDouble() / evaluated
 }
 
 data class MarketAnalysis(
     val market: Market,
+    val sessionId: String,
     val acceptedRecords: Int,
     val rejectedRecords: Int,
     val openExactPanna: List<PatternCount>,
@@ -44,10 +38,20 @@ data class MarketAnalysis(
     val closeWeekdayCounts: Map<java.time.DayOfWeek, Int>,
     /** Matrix rows are previous family, columns are next family. */
     val openFamilyDigitTransitions: List<List<Int>>,
-    /** Sparse 125-state transition map: "previousSequence>nextSequence" -> count. */
+    val closeFamilyDigitTransitions: List<List<Int>>,
+    /** Sparse 125-state transition map: previous sequence > next sequence. */
     val openPannaFamilyTransitions: Map<String, Int>,
-    /** Key is "openFamilySequence>closeFamilySequence". */
+    val closePannaFamilyTransitions: Map<String, Int>,
     val openToCloseFamilyRelations: List<PatternCount>,
+    val jodiFamilyCombinations: List<PatternCount>,
+    val openAnkCounts: List<PatternCount>,
+    val closeAnkCounts: List<PatternCount>,
+    val openPannaTypeCounts: Map<PannaType, Int>,
+    val closePannaTypeCounts: Map<PannaType, Int>,
+    val openDigitPositionCounts: List<Map<Int, Int>>,
+    val closeDigitPositionCounts: List<Map<Int, Int>>,
+    val openReversePannaCounts: List<PatternCount>,
+    val closeReversePannaCounts: List<PatternCount>,
     val openRepeatGaps: List<RepeatGap>,
     val walkForwardRows: List<WalkForwardRow>,
     val globalModeBaseline: WalkForwardMetric,
@@ -58,106 +62,149 @@ data class MarketAnalysis(
 object PatternAnalysis {
     fun analyze(records: List<ChartRecord>, minimumSupport: Int = 1): List<MarketAnalysis> {
         require(minimumSupport >= 1) { "minimumSupport must be at least 1" }
-        return Market.entries.mapNotNull { market ->
-            val marketRecords = records.filter { it.market == market }
-            if (marketRecords.isEmpty()) return@mapNotNull null
-            analyzeMarket(market, marketRecords, minimumSupport)
-        }
+        return records.groupBy { it.market to it.sessionId }
+            .entries
+            .sortedWith(compareBy({ it.key.first.name }, { it.key.second }))
+            .mapNotNull { (identity, rows) ->
+                analyzeSession(identity.first, identity.second, rows, minimumSupport)
+            }
     }
 
-    private fun analyzeMarket(
+    private fun analyzeSession(
         market: Market,
+        sessionId: String,
         records: List<ChartRecord>,
         minimumSupport: Int
     ): MarketAnalysis {
+        require(sessionId.isNotBlank()) { "Session ID cannot be blank" }
         val validated = records.mapNotNull { record ->
             (ChartMath.validate(record) as? ValidationResult.Valid)?.let { record to it.features }
         }.sortedBy { it.first.date }
 
-        // A single resolved record per market/date is required before chronological analysis.
         require(validated.map { it.first.date }.distinct().size == validated.size) {
-            "Duplicate dates for $market: reconcile source observations before analysis"
+            "Duplicate dates for $market/$sessionId: reconcile source observations before analysis"
         }
 
         val accepted = validated.map { it.first }
         val features = validated.map { it.second }
+        if (accepted.isEmpty()) return emptyAnalysis(market, sessionId, records.size)
+
         val openSeq = features.map { it.openFamilySequence.joinToString("") }
         val closeSeq = features.map { it.closeFamilySequence.joinToString("") }
 
         fun counts(values: List<String>): List<PatternCount> {
+            if (values.isEmpty()) return emptyList()
             val grouped = values.groupingBy { it }.eachCount()
             return grouped.map { (pattern, count) ->
                 PatternCount(pattern, count, values.size, count * 100.0 / values.size, count >= minimumSupport)
             }.sortedWith(compareByDescending<PatternCount> { it.count }.thenBy { it.pattern })
         }
 
-        val digitTransitions = Array(5) { IntArray(5) }
-        for (i in 1 until features.size) {
-            for (position in 0..2) {
-                digitTransitions[features[i - 1].openFamilySequence[position]][features[i].openFamilySequence[position]]++
+        fun digitTransitions(sequences: List<List<Int>>): List<List<Int>> {
+            val matrix = Array(5) { IntArray(5) }
+            for (i in 1 until sequences.size) {
+                for (position in 0..2) matrix[sequences[i - 1][position]][sequences[i][position]]++
             }
+            return matrix.map { it.toList() }
         }
 
-        val sequenceTransitions = linkedMapOf<String, Int>()
-        for (i in 1 until openSeq.size) {
-            val key = "${openSeq[i - 1]}>${openSeq[i]}"
-            sequenceTransitions[key] = (sequenceTransitions[key] ?: 0) + 1
+        fun sequenceTransitions(sequences: List<String>): Map<String, Int> {
+            val result = mutableMapOf<String, Int>()
+            for (i in 1 until sequences.size) {
+                val key = "${sequences[i - 1]}>${sequences[i]}"
+                result[key] = (result[key] ?: 0) + 1
+            }
+            return result.toSortedMap()
         }
 
-        val relations = openSeq.indices.map { "${openSeq[it]}>${closeSeq[it]}" }
-        val lastSeen = mutableMapOf<String, java.time.LocalDate>()
-        val gaps = mutableMapOf<String, MutableList<Long>>()
-        accepted.indices.forEach { index ->
-            val pattern = openSeq[index]
-            lastSeen[pattern]?.let { previous ->
-                gaps.getOrPut(pattern) { mutableListOf() }.add(ChronoUnit.DAYS.between(previous, accepted[index].date))
+        fun typeCounts(values: List<PannaType>): Map<PannaType, Int> =
+            PannaType.entries.associateWith { type -> values.count { it == type } }
+
+        fun positionCounts(pannas: List<String>): List<Map<Int, Int>> =
+            (0..2).map { position ->
+                (0..9).associateWith { digit -> pannas.count { it[position].digitToInt() == digit } }
             }
-            lastSeen[pattern] = accepted[index].date
+
+        fun repeatGaps(patterns: List<String>): List<RepeatGap> {
+            val lastSeen = mutableMapOf<String, java.time.LocalDate>()
+            val gaps = mutableMapOf<String, MutableList<Long>>()
+            accepted.indices.forEach { index ->
+                val pattern = patterns[index]
+                lastSeen[pattern]?.let { previous ->
+                    gaps.getOrPut(pattern) { mutableListOf() }
+                        .add(ChronoUnit.DAYS.between(previous, accepted[index].date))
+                }
+                lastSeen[pattern] = accepted[index].date
+            }
+            return gaps.toSortedMap().map { (pattern, values) -> RepeatGap(pattern, values.toList()) }
         }
 
         val weekdayOpen = accepted.groupingBy { it.date.dayOfWeek }.eachCount()
-        val weekdayClose = weekdayOpen.toMap()
-
+        val weekdayClose = accepted.groupingBy { it.date.dayOfWeek }.eachCount()
         val rows = mutableListOf<WalkForwardRow>()
         for (i in 1 until accepted.size) {
             val history = openSeq.take(i)
-            val historyWeekday = openSeq.indices.take(i)
+            val historyWeekday = (0 until i)
                 .filter { accepted[it].date.dayOfWeek == accepted[i].date.dayOfWeek }
                 .map { openSeq[it] }
             val globalMode = mode(history)
-            val weekdayMode = if (historyWeekday.isEmpty()) globalMode else mode(historyWeekday)
             rows += WalkForwardRow(
                 date = accepted[i].date,
                 actualOpenFamilySequence = openSeq[i],
                 globalModePrediction = globalMode,
-                weekdayModePrediction = weekdayMode,
+                weekdayModePrediction = if (historyWeekday.isEmpty()) globalMode else mode(historyWeekday),
                 previousStatePrediction = openSeq[i - 1]
             )
         }
-
         fun metric(selector: (WalkForwardRow) -> String) =
             WalkForwardMetric(rows.count { selector(it) == it.actualOpenFamilySequence }, rows.size)
 
+        val openPannas = accepted.map { it.openPanna }
+        val closePannas = accepted.map { it.closePanna }
         return MarketAnalysis(
             market = market,
+            sessionId = sessionId,
             acceptedRecords = accepted.size,
             rejectedRecords = records.size - accepted.size,
-            openExactPanna = counts(accepted.map { it.openPanna }),
-            closeExactPanna = counts(accepted.map { it.closePanna }),
-            openFamilySequences = counts(openSeq).map { it.copy(meetsMinimumSupport = it.count >= minimumSupport) },
-            closeFamilySequences = counts(closeSeq).map { it.copy(meetsMinimumSupport = it.count >= minimumSupport) },
+            openExactPanna = counts(openPannas),
+            closeExactPanna = counts(closePannas),
+            openFamilySequences = counts(openSeq),
+            closeFamilySequences = counts(closeSeq),
             openWeekdayCounts = weekdayOpen,
             closeWeekdayCounts = weekdayClose,
-            openFamilyDigitTransitions = digitTransitions.map { it.toList() },
-            openPannaFamilyTransitions = sequenceTransitions.toSortedMap(),
-            openToCloseFamilyRelations = counts(relations),
-            openRepeatGaps = gaps.toSortedMap().map { (pattern, values) -> RepeatGap(pattern, values.toList()) },
+            openFamilyDigitTransitions = digitTransitions(features.map { it.openFamilySequence }),
+            closeFamilyDigitTransitions = digitTransitions(features.map { it.closeFamilySequence }),
+            openPannaFamilyTransitions = sequenceTransitions(openSeq),
+            closePannaFamilyTransitions = sequenceTransitions(closeSeq),
+            openToCloseFamilyRelations = counts(openSeq.indices.map { "${openSeq[it]}>${closeSeq[it]}" }),
+            jodiFamilyCombinations = counts(features.map { "${it.openJodiFamily}${it.closeJodiFamily}" }),
+            openAnkCounts = counts(features.map { it.openAnk.toString() }),
+            closeAnkCounts = counts(features.map { it.closeAnk.toString() }),
+            openPannaTypeCounts = typeCounts(features.map { it.openType }),
+            closePannaTypeCounts = typeCounts(features.map { it.closeType }),
+            openDigitPositionCounts = positionCounts(openPannas),
+            closeDigitPositionCounts = positionCounts(closePannas),
+            openReversePannaCounts = counts(features.map { it.reverseOpenPanna }),
+            closeReversePannaCounts = counts(features.map { it.reverseClosePanna }),
+            openRepeatGaps = repeatGaps(openSeq),
             walkForwardRows = rows,
             globalModeBaseline = metric { it.globalModePrediction },
             weekdayModeBaseline = metric { it.weekdayModePrediction },
             previousStateBaseline = metric { it.previousStatePrediction }
         )
     }
+
+    private fun emptyAnalysis(market: Market, sessionId: String, rejected: Int) = MarketAnalysis(
+        market, sessionId, 0, rejected,
+        emptyList(), emptyList(), emptyList(), emptyList(),
+        emptyMap(), emptyMap(),
+        List(5) { List(5) { 0 } }, List(5) { List(5) { 0 } },
+        emptyMap(), emptyMap(), emptyList(), emptyList(), emptyList(), emptyList(),
+        PannaType.entries.associateWith { 0 }, PannaType.entries.associateWith { 0 },
+        List(3) { (0..9).associateWith { 0 } }, List(3) { (0..9).associateWith { 0 } },
+        emptyList(), emptyList(), emptyList(), emptyList(),
+        WalkForwardMetric(0, 0), WalkForwardMetric(0, 0), WalkForwardMetric(0, 0)
+    )
 
     private fun mode(values: List<String>): String =
         values.groupingBy { it }.eachCount().entries
