@@ -1,6 +1,7 @@
 package com.relab.core
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
@@ -47,13 +48,22 @@ object ResearchBundleValidator {
                         zip.closeEntry()
                         continue
                     }
-                    val bytes = zip.readBytes()
-                    totalBytes += bytes.size
-                    if (totalBytes > maxTotalBytes) {
-                        errors += "Bundle exceeds the uncompressed size limit"
-                        break
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    var entryTooLarge = false
+                    while (true) {
+                        val count = zip.read(buffer)
+                        if (count < 0) break
+                        totalBytes += count
+                        if (totalBytes > maxTotalBytes) {
+                            errors += "Bundle exceeds the uncompressed size limit"
+                            entryTooLarge = true
+                            break
+                        }
+                        output.write(buffer, 0, count)
                     }
-                    entries[name] = bytes
+                    if (entryTooLarge) break
+                    entries[name] = output.toByteArray()
                     zip.closeEntry()
                 }
             }
