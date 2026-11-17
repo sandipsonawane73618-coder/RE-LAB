@@ -188,6 +188,26 @@ private fun RelabHome(
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
     val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
     val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
+    val candidateSets = remember(observations) {
+        chartBuild.records.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
+            val target = LocalDate.now()
+            val open = com.relab.core.CandidateRankingEngine.rank(
+                observations, market, sessionId, target, com.relab.core.PannaSide.OPEN,
+                limit = 10, minimumHistory = 5
+            )
+            val close = com.relab.core.CandidateRankingEngine.rank(
+                observations, market, sessionId, target, com.relab.core.PannaSide.CLOSE,
+                limit = 10, minimumHistory = 5
+            )
+            Triple(
+                open,
+                close,
+                com.relab.core.CandidateRankingEngine.deriveJodiCandidates(
+                    open.candidates, close.candidates, limit = 10
+                )
+            )
+        }
+    }
     val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -423,6 +443,14 @@ private fun RelabHome(
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
+                Text("Next draw candidate research", style = MaterialTheme.typography.titleLarge)
+                if (candidateSets.isEmpty()) {
+                    Text("Verified multi-source history is required before candidate ranking can run.")
+                } else {
+                    candidateSets.forEach { (open, close, jodi) ->
+                        CandidateResearchCard(open, close, jodi)
+                    }
+                }
                 Text("Historical coverage audit", style = MaterialTheme.typography.titleLarge)
                 if (coverageReports.isEmpty()) {
                     Text("Coverage audit will appear after source data is imported.")
@@ -623,6 +651,57 @@ private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
             Text("${group.market} · ${group.sessionId} · ${group.date}", style = MaterialTheme.typography.titleSmall)
             Text(resultText, style = MaterialTheme.typography.bodyMedium)
             Text(group.observations.joinToString { "${it.sourceId}: ${it.status}" }, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun CandidateResearchCard(
+    open: com.relab.core.CandidateRanking,
+    close: com.relab.core.CandidateRanking,
+    jodi: List<com.relab.core.JodiCandidate>
+) {
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("${open.market} · ${open.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Target date: ${open.targetDate} · Training: ${open.trainingRecords} consensus records")
+            if (open.abstained || close.abstained) {
+                Text(open.note)
+                Text(close.note)
+            } else {
+                Text("Open Panna candidates", style = MaterialTheme.typography.titleSmall)
+                open.candidates.forEachIndexed { index, candidate ->
+                    Text(
+                        "${index + 1}. ${candidate.panna} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}" +
+                            " · exact ${candidate.exactHistoricalCount}, family ${candidate.familyHistoricalCount}," +
+                            " weekday ${candidate.weekdayFamilyCount}, transition ${candidate.previousFamilyTransitionCount}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text("Close Panna candidates", style = MaterialTheme.typography.titleSmall)
+                close.candidates.forEachIndexed { index, candidate ->
+                    Text(
+                        "${index + 1}. ${candidate.panna} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}" +
+                            " · exact ${candidate.exactHistoricalCount}, family ${candidate.familyHistoricalCount}," +
+                            " weekday ${candidate.weekdayFamilyCount}, transition ${candidate.previousFamilyTransitionCount}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text("Derived Jodi candidates", style = MaterialTheme.typography.titleSmall)
+                jodi.forEachIndexed { index, candidate ->
+                    Text(
+                        "${index + 1}. ${candidate.jodi} · relative score ${"%.1f".format(candidate.score)} · Panna pairs ${candidate.supportingPannaPairs}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text(
+                    "Evidence ranking only—not probability, certainty, or a guaranteed result. Jodi is derived from Panna digit sums.",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }
