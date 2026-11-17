@@ -23,6 +23,12 @@ A published result is accepted only if its three-digit Pannas and two-digit Jodi
 
 Rows that cannot be parsed (for example, invalid dates or timestamps) are reported as row-numbered import issues. Valid rows in the same file are still returned.
 
+## Source publication timing analysis
+
+The Android app can export `relab-source-publication-timing.csv` grouped by market, session, and canonical publisher. It reports observation counts, published rows with/without an explicit `published_at`, negative timestamp-order anomalies, and median/minimum/maximum non-negative capture lag in minutes.
+
+Capture lag is calculated only as `retrieved_at - published_at` when both timestamps are explicitly present on a published observation. Rows without `published_at` are counted as missing; the app does not substitute the chart date, scheduled session time, or retrieval time. Negative lags are counted separately and excluded from non-negative lag statistics because they may indicate a bad timestamp, timezone, or source display convention. Median is the midpoint average for an even sample count. These are observed capture delays, not proof of the exact moment a publisher first made a result public.
+
 ## Example
 
 ```csv
