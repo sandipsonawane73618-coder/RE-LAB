@@ -2,9 +2,9 @@ package com.relab.core
 
 import java.time.Instant
 import java.time.LocalDate
-import kotlin.test.Test
-import kotlin.test.assertContains
-import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class ResearchManifestExporterTest {
     @Test
@@ -25,7 +25,7 @@ class ResearchManifestExporterTest {
         val second = ResearchManifestExporter.export(listOf(observation), emptyList(), emptyList(), generated)
 
         assertEquals(first, second)
-        assertContains(first, "\"source_observation_count\": 1")
+        assertTrue(first.contains("\"source_observation_count\": 1"))
         assertContains(first, "\"SINGLE_SOURCE_UNVERIFIED\": 1")
         assertContains(first, "\"consensus_chart_records_exported\": 0")
         assertContains(first, "\"start_date\":\"2026-11-16\"")
@@ -47,7 +47,7 @@ class ResearchManifestExporterTest {
         val manifest = ResearchManifestExporter.export(
             listOf(observation), emptyList(), emptyList(), Instant.parse("2026-11-17T12:00:00Z")
         )
-        assertContains(manifest, "evening \\\"special\\\"")
+        assertTrue(manifest.contains("evening \\\"special\\\""))
         assertContains(manifest, "\"PENDING\": 1")
     }
 }
