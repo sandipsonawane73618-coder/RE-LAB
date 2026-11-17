@@ -7,6 +7,7 @@ enum class CoverageState {
     HOLIDAY_REPORTED,
     PENDING,
     SOURCE_MISSING,
+    MALFORMED_ONLY,
     SINGLE_SOURCE_UNVERIFIED,
     CONSENSUS,
     CONFLICT
@@ -41,6 +42,7 @@ data class CoverageReport(
     val holidayDays: Int get() = days.count { it.state == CoverageState.HOLIDAY_REPORTED }
     val pendingDays: Int get() = days.count { it.state == CoverageState.PENDING }
     val sourceMissingDays: Int get() = days.count { it.state == CoverageState.SOURCE_MISSING }
+    val malformedOnlyDays: Int get() = days.count { it.state == CoverageState.MALFORMED_ONLY }
     val noObservationDays: Int get() = days.count { it.state == CoverageState.NO_OBSERVATION }
 }
 
@@ -86,6 +88,7 @@ object HistoricalCoverageAudit {
                 holidays > 0 -> CoverageState.HOLIDAY_REPORTED
                 pending > 0 -> CoverageState.PENDING
                 missing > 0 -> CoverageState.SOURCE_MISSING
+                malformed > 0 -> CoverageState.MALFORMED_ONLY
                 else -> CoverageState.NO_OBSERVATION
             }
             fun distinctPublisherCount(status: ObservationStatus): Int =
