@@ -156,6 +156,9 @@ private fun RelabHome(
     val repeatedSourceRecords = remember(observations) {
         SourceObservationMerger.auditRepeatedSourceRecords(observations)
     }
+    val repeatedPublishedResults = remember(observations) {
+        SourceObservationMerger.auditRepeatedPublishedResultsAcrossDates(observations)
+    }
     val published = observations.count { it.status == ObservationStatus.PUBLISHED }
     val pending = observations.count { it.status == ObservationStatus.PENDING }
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
@@ -259,6 +262,12 @@ private fun RelabHome(
                 } else {
                     DuplicateObservationAuditCard(repeatedSourceRecords)
                 }
+                Text("Repeated result across dates · stale archive review", style = MaterialTheme.typography.titleLarge)
+                if (repeatedPublishedResults.isEmpty()) {
+                    Text("No identical published result repeated across 3 or more distinct dates by the same source.")
+                } else {
+                    RepeatedPublishedResultAuditCard(repeatedPublishedResults)
+                }
                 Text("Recent source observations", style = MaterialTheme.typography.titleLarge)
                 if (groups.isEmpty()) {
                     Text("No source records loaded.")
@@ -359,6 +368,22 @@ private fun DuplicateObservationAuditCard(groups: List<DuplicateObservationGroup
     }
 }
 
+
+@Composable
+private fun RepeatedPublishedResultAuditCard(groups: List<com.relab.core.RepeatedPublishedResultGroup>) {
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Review flags: ${groups.size}")
+            groups.take(20).forEach { group ->
+                val dates = group.observations.map { it.date }.distinct().joinToString()
+                Text("${group.market} · ${group.sessionId} · ${group.sourceId}", style = MaterialTheme.typography.titleSmall)
+                Text("${group.result} repeated on ${group.distinctDates} dates", style = MaterialTheme.typography.bodySmall)
+                Text("Dates: $dates", style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Review signal only—not proof of stale data. Original observations remain preserved.", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
 
 @Composable
 private fun PatternResearchCard(analysis: MarketAnalysis) {

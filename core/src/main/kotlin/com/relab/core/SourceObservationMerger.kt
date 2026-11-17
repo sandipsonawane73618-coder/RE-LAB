@@ -31,6 +31,20 @@ data class DuplicateObservationGroup(
     val state: DuplicateObservationState
 )
 
+/**
+ * Identical published results repeated by one publisher on multiple distinct dates.
+ * This is a review flag only; legitimate repeats can occur and no rows are removed.
+ */
+data class RepeatedPublishedResultGroup(
+    val market: Market,
+    val sessionId: String,
+    val sourceId: String,
+    val result: String,
+    val observations: List<SourceObservation>
+) {
+    val distinctDates: Int get() = observations.map { it.date }.distinct().size
+}
+
 object SourceObservationMerger {
     fun append(
         existing: List<SourceObservation>,
@@ -92,6 +106,38 @@ object SourceObservationMerger {
                     .thenBy { it.date }
                     .thenBy { it.sourceId }
                     .thenBy { it.sourceRecordId }
+            )
+    }
+
+    /**
+     * Flags identical published values from the same publisher across distinct dates.
+     * Multiple snapshots on one date count once. This is not proof of stale data.
+     */
+    fun auditRepeatedPublishedResultsAcrossDates(
+        observations: List<SourceObservation>,
+        minimumDistinctDates: Int = 3
+    ): List<RepeatedPublishedResultGroup> {
+        require(minimumDistinctDates >= 2) { "minimumDistinctDates must be at least 2" }
+        return observations
+            .filter { it.status == ObservationStatus.PUBLISHED && !it.normalizedResult.isNullOrBlank() }
+            .groupBy {
+                listOf(it.market.name, it.sessionId, it.sourceId, it.normalizedResult!!)
+            }
+            .values
+            .mapNotNull { group ->
+                val ordered = group.sortedWith(compareBy<SourceObservation> { it.date }.thenBy { it.retrievedAt })
+                if (ordered.map { it.date }.distinct().size < minimumDistinctDates) null
+                else {
+                    val first = ordered.first()
+                    RepeatedPublishedResultGroup(
+                        first.market, first.sessionId, first.sourceId,
+                        first.normalizedResult!!, ordered
+                    )
+                }
+            }
+            .sortedWith(
+                compareBy<RepeatedPublishedResultGroup> { it.market.name }
+                    .thenBy { it.sessionId }.thenBy { it.sourceId }.thenBy { it.result }
             )
     }
 }
