@@ -46,13 +46,19 @@ object CandidateRankingEngine {
         targetDate: LocalDate,
         side: PannaSide,
         limit: Int = 10,
-        minimumHistory: Int = 5
+        minimumHistory: Int = 5,
+        allowSingleSourceExploration: Boolean = false
     ): CandidateRanking {
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
         require(minimumHistory >= 1) { "Minimum history must be at least 1" }
 
-        val reconciled = ReconciledChartBuilder.build(observations).records
+        val sourceRecords = if (allowSingleSourceExploration) {
+            ReconciledChartBuilder.buildExploratoryRecords(observations)
+        } else {
+            ReconciledChartBuilder.build(observations).records
+        }
+        val reconciled = sourceRecords
             .filter { it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate) }
             .sortedBy { it.date }
         require(reconciled.map { it.date }.distinct().size == reconciled.size) {
