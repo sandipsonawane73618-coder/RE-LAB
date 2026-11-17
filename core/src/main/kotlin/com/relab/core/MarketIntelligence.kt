@@ -57,8 +57,6 @@ object MarketIntelligence {
         val open = valid.map { it.second.openFamilySequence.joinToString("") }
         val close = valid.map { it.second.closeFamilySequence.joinToString("") }
         val dates = valid.map { it.first.date }
-        val openWeekdays = valid.groupingBy { it.first.date.dayOfWeek }.eachCount().toSortedMap(compareBy { it.value })
-        val closeWeekdays = openWeekdays.toMap()
 
         fun transitions(values: List<String>): List<TransitionEvidence> {
             if (values.size < 2) return emptyList()
