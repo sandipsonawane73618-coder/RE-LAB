@@ -13,10 +13,10 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         html = """
         <table><tr><th>Date</th><th>Mon</th><th>Tue</th><th>Wed</th>
         <th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr>
-        <tr><td>29/12/25TO04/01/26</td><td>4 6 0 09 2 8 9</td>
-        <td>4 5 0 92 2 4 6</td><td>1 8 9 83 6 8 9</td>
-        <td>1 5 5 14 6 8 0</td><td>2 9 9 00 4 7 9</td>
-        <td>**</td><td>1 3 4 89 4 5 0</td></tr></table>
+        <tr><td>29/12/25TO04/01/26</td><td>460</td><td>09</td><td>289</td>
+        <td>450</td><td>92</td><td>246</td><td>189</td><td>83</td><td>689</td>
+        <td>155</td><td>14</td><td>680</td><td>299</td><td>00</td><td>479</td>
+        <td>* * *</td><td>**</td><td>* * *</td><td>134</td><td>89</td><td>450</td></tr></table>
         """
         rows, issues = extract_rows(
             html, market="SRIDEVI", session_id="main", source_id="hira",
@@ -46,7 +46,7 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
             with self.subTest(market=market, day_count=day_count):
                 weekly = (
                     f"<table><tr><td>{date_range}</td>"
-                    + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * day_count)
+                    + "".join(f"<td>{cell[:3]}</td><td>{cell[3:5]}</td><td>{cell[5:]}</td>" for cell in ["66807449"] * day_count)
                     + "</tr></table>"
                 )
                 rows, issues = extract_rows(
@@ -60,8 +60,8 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
     def test_extracts_kalyan_six_day_week_and_flags_bad_math(self):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
-        <td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
-        <td>568 92 345</td><td>247 32 480</td><td>123 45 678</td>
+        <td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
+        <td>568</td><td>92</td><td>345</td><td>247</td><td>32</td><td>480</td><td>123</td><td>45</td><td>678</td>
         </tr></table>
         """
         rows, issues = extract_rows(
@@ -77,8 +77,8 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
     def test_explicit_holiday_and_pending_markers_remain_distinct(self):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
-        <td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
-        <td>568 92 345</td><td>HOLIDAY</td><td>Pending</td></tr></table>
+        <td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
+        <td>568</td><td>92</td><td>345</td><td>HOLIDAY</td><td>Pending</td></tr></table>
         """
         rows, issues = extract_rows(
             html, market="KALYAN", session_id="main", source_id="archive",
@@ -93,8 +93,8 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
     def test_year_and_date_digits_do_not_turn_markers_into_results(self):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
-        <td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
-        <td>568 92 345</td><td>Holiday 2026</td>
+        <td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
+        <td>568</td><td>92</td><td>345</td><td>Holiday 2026</td>
         <td>Market closed 24-08-2026</td></tr></table>
         """
         rows, issues = extract_rows(
@@ -115,7 +115,7 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
     def test_source_record_ids_are_date_stable_when_irrelevant_rows_are_inserted(self):
         weekly_row = (
             "<tr><td>24-08-2026 to 29-08-2026</td>"
-            + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * 6)
+            + "".join(f"<td>{cell[:3]}</td><td>{cell[3:5]}</td><td>{cell[5:]}</td>" for cell in ["66807449"] * 6)
             + "</tr>"
         )
         common = dict(
