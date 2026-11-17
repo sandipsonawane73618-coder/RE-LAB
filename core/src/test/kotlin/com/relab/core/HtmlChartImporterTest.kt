@@ -41,6 +41,29 @@ class HtmlChartImporterTest {
         assertEquals(2, report.skippedRows)
     }
 
+    @Test fun extractsWeeklyPanelChartCellsAndTwoDigitYears() {
+        val html = """
+            <table>
+              <tr><th>Date</th><th>MON</th><th>TUE</th><th>WED</th><th>THU</th><th>FRI</th><th>SAT</th><th>SUN</th></tr>
+              <tr>
+                <td>16/11/26 to 22/11/26</td>
+                <td>5 7 7 99 6 6 7</td>
+                <td>1 1 5 73 2 2 9</td>
+                <td>3 6 7 69 2 8 9</td>
+                <td></td><td></td><td></td><td></td>
+              </tr>
+            </table>
+        """.trimIndent()
+        val report = HtmlChartImporter.import(html, url, Market.SRIDEVI, "main", retrieved)
+        assertEquals(3, report.observations.size)
+        assertEquals("2026-11-16", report.observations[0].date.toString())
+        assertEquals("577-99-667", report.observations[0].normalizedResult)
+        assertEquals("2026-11-17", report.observations[1].date.toString())
+        assertEquals("115-73-229", report.observations[1].normalizedResult)
+        assertEquals("2026-11-18", report.observations[2].date.toString())
+        assertEquals("367-69-289", report.observations[2].normalizedResult)
+    }
+
     @Test fun rejectsNonHttpSchemes() {
         try {
             HtmlChartImporter.import("<table/>", "file:///tmp/chart.html", Market.SRIDEVI, "main", retrieved)
