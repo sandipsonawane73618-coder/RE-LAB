@@ -167,13 +167,32 @@ def extract_rows(
         if start.weekday() != 0 or day_count not in allowed_day_counts:
             issues.append(f"row {row_number}: week range does not match {market} chart layout: {cells[0]}")
             continue
-        if len(cells) != day_count + 1:
-            issues.append(f"row {row_number}: date range has {day_count} days but row contains {len(cells) - 1} day cells")
+        if len(cells) != (day_count * 3) + 1:
+            issues.append(
+                f"row {row_number}: date range has {day_count} days but row contains "
+                f"{len(cells) - 1} cells; expected three cells per day"
+            )
             continue
 
-        for offset, raw_cell in enumerate(cells[1:]):
+        daily_groups = [cells[index:index + 3] for index in range(1, len(cells), 3)]
+        for offset, parts in enumerate(daily_groups):
             chart_date = start + timedelta(days=offset)
-            status, result = _cell_observation(raw_cell)
+            raw_cell = " | ".join(parts)
+            open_value, jodi_value, close_value = parts
+            if any("*" in part for part in parts):
+                status, result = "MISSING_FROM_SOURCE", ""
+            else:
+                open_digits = re.sub(r"\\D", "", open_value)
+                jodi_digits = re.sub(r"\\D", "", jodi_value)
+                close_digits = re.sub(r"\\D", "", close_value)
+                if len(open_digits) == 3 and len(jodi_digits) == 2 and len(close_digits) == 3:
+                    status, result = _cell_observation(
+                        f"{open_digits} {jodi_digits} {close_digits}"
+                    )
+                elif not any(part.strip() for part in parts):
+                    status, result = "MISSING_FROM_SOURCE", ""
+                else:
+                    status, result = "MALFORMED", ""
             output.append({
                 "market": market,
                 "session_id": session_id,
