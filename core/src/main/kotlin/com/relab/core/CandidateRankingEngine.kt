@@ -69,7 +69,7 @@ object CandidateRankingEngine {
             return CandidateRanking(
                 market, sessionId, side, targetDate, reconciled.size, minimumHistory,
                 true, emptyList(),
-                "Insufficient verified history: need $minimumHistory multi-source consensus records; found ${reconciled.size}."
+                if (allowSingleSourceExploration) "Insufficient history: need $minimumHistory earlier valid published records; found ${reconciled.size}." else "Insufficient verified history: need $minimumHistory multi-source consensus records; found ${reconciled.size}."
             )
         }
 
