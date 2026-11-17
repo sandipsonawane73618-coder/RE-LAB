@@ -50,7 +50,8 @@ class HtmlChartImporterTest {
                 <td>577</td><td>99</td><td>667</td>
                 <td>115</td><td>73</td><td>229</td>
                 <td>367</td><td>69</td><td>289</td>
-                <td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
               </tr>
             </table>
         """.trimIndent()
