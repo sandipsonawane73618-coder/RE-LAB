@@ -12,8 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -25,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -140,7 +140,7 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
                 Text("Source-first research. Every imported source observation is stored locally.")
@@ -194,21 +194,8 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 if (groups.isEmpty()) {
                     Text("No source records loaded.")
                 } else {
-                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(groups.asReversed().take(100), key = { "${it.market}-${it.sessionId}-${it.date}" }) { group ->
-                            Card {
-                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("${group.market} · ${group.sessionId} · ${group.date}", style = MaterialTheme.typography.titleSmall)
-                                    val resultText = when (group.state) {
-                                        ReconciliationState.CONSENSUS -> "CONSENSUS · ${group.agreedResult}"
-                                        ReconciliationState.CONFLICT -> "CONFLICT · " + group.observations.filter { it.status == ObservationStatus.PUBLISHED }.mapNotNull { it.normalizedResult }.distinct().sorted().joinToString(" / ")
-                                        ReconciliationState.NO_PUBLISHED_RESULT -> "NO PUBLISHED RESULT · ${group.observations.size} source observations"
-                                    }
-                                    Text(resultText, style = MaterialTheme.typography.bodyMedium)
-                                    Text(group.observations.joinToString { "${it.sourceId}: ${it.status}" }, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        groups.asReversed().take(30).forEach { group -> SourceGroupCard(group) }
                     }
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
@@ -290,6 +277,25 @@ private fun PatternResearchCard(analysis: MarketAnalysis) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text("Descriptive history only; walk-forward scores are baselines, not predictions.", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+
+@Composable
+private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
+    val resultText = when (group.state) {
+        ReconciliationState.CONSENSUS -> "CONSENSUS · ${group.agreedResult}"
+        ReconciliationState.CONFLICT -> "CONFLICT · " + group.observations
+            .filter { it.status == ObservationStatus.PUBLISHED }
+            .mapNotNull { it.normalizedResult }.distinct().sorted().joinToString(" / ")
+        ReconciliationState.NO_PUBLISHED_RESULT -> "NO PUBLISHED RESULT · ${group.observations.size} source observations"
+    }
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("${group.market} · ${group.sessionId} · ${group.date}", style = MaterialTheme.typography.titleSmall)
+            Text(resultText, style = MaterialTheme.typography.bodyMedium)
+            Text(group.observations.joinToString { "${it.sourceId}: ${it.status}" }, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
