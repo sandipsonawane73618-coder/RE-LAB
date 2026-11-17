@@ -26,11 +26,11 @@ class ResearchManifestExporterTest {
 
         assertEquals(first, second)
         assertTrue(first.contains("\"source_observation_count\": 1"))
-        assertContains(first, "\"SINGLE_SOURCE_UNVERIFIED\": 1")
-        assertContains(first, "\"consensus_chart_records_exported\": 0")
-        assertContains(first, "\"start_date\":\"2026-11-16\"")
-        assertContains(first, "\"source_ledger_sha256\": \"")
-        assertContains(first, ResearchManifestExporter.RULESET_VERSION)
+        assertTrue(first.contains("\"SINGLE_SOURCE_UNVERIFIED\": 1"))
+        assertTrue(first.contains("\"consensus_chart_records_exported\": 0"))
+        assertTrue(first.contains("\"start_date\":\"2026-11-16\""))
+        assertTrue(first.contains("\"source_ledger_sha256\": \""))
+        assertTrue(first.contains(ResearchManifestExporter.RULESET_VERSION))
     }
 
     @Test
@@ -48,6 +48,6 @@ class ResearchManifestExporterTest {
             listOf(observation), emptyList(), emptyList(), Instant.parse("2026-11-17T12:00:00Z")
         )
         assertTrue(manifest.contains("evening \\\"special\\\""))
-        assertContains(manifest, "\"PENDING\": 1")
+        assertTrue(manifest.contains("\"PENDING\": 1"))
     }
 }
