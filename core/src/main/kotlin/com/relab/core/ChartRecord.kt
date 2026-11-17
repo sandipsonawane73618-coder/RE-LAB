@@ -16,7 +16,9 @@ data class ChartRecord(
     val sourceId: String,
     val sourceRecordId: String? = null,
     val publishedAt: java.time.Instant? = null,
-    val observedAt: java.time.Instant? = null
+    val observedAt: java.time.Instant? = null,
+    /** Distinguishes separate chart sessions under the same market name. */
+    val sessionId: String = "main"
 )
 
 data class DerivedFeatures(
