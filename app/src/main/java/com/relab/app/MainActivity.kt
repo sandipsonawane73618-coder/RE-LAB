@@ -48,6 +48,8 @@ import com.relab.core.SourceObservationMerger
 import com.relab.core.SourceTimingAnalytics
 import com.relab.core.SourceReconciliation
 import java.time.LocalDate
+import java.io.ByteArrayInputStream
+import java.util.zip.ZipInputStream
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -273,10 +275,32 @@ private fun RelabHome(
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: error("Selected bundle could not be opened")
                 val validation = com.relab.core.ResearchBundleValidator.validate(bytes)
-                importMessage = if (validation.valid) {
-                    "Bundle verified: ${validation.verifiedFiles} artifact checksums passed. Import/restore has not been performed."
+                if (!validation.valid) {
+                    importMessage = "Bundle rejected: ${validation.errors.joinToString("; ")}"
                 } else {
-                    "Bundle rejected: ${validation.errors.joinToString("; ")}"
+                    val sourceCsv = ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+                        var content: String? = null
+                        while (true) {
+                            val entry = zip.nextEntry ?: break
+                            if (entry.name == "source-observations.csv") {
+                                content = zip.readBytes().toString(Charsets.UTF_8)
+                                break
+                            }
+                            zip.closeEntry()
+                        }
+                        content
+                    } ?: error("Verified bundle has no source-observations.csv")
+                    val parsed = SourceCsvImporter.import(sourceCsv)
+                    if (parsed.observations.isEmpty()) {
+                        importMessage = "Bundle verified, but no valid source observations were available to import."
+                    } else {
+                        val previousCount = observations.size
+                        val merged = onSaveCsv(sourceCsv, parsed.observations)
+                        val addedCount = (merged.size - previousCount).coerceAtLeast(0)
+                        observations = merged
+                        rawCsv = sourceCsv
+                        importMessage = "Verified bundle imported: ${validation.verifiedFiles} artifact checksums passed; added ${addedCount} observations. Total: ${merged.size}. Existing records and conflicts were retained. Row issues: ${parsed.issues.size}."
+                    }
                 }
             } catch (error: Exception) {
                 importMessage = "Bundle validation error: ${error.message ?: "Unknown error"}"
@@ -302,7 +326,7 @@ private fun RelabHome(
                     ) { Text("Export backup") }
                     OutlinedButton(
                         onClick = { bundleValidationPicker.launch(arrayOf("application/zip", "application/octet-stream")) }
-                    ) { Text("Verify bundle") }
+                    ) { Text("Import verified bundle") }
                     OutlinedButton(onClick = {
                         rawCsv = null
                         observations = emptyList()
