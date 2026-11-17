@@ -153,7 +153,7 @@ def extract_rows(
     issues: list[str] = []
     allowed_day_counts = {
         "SRIDEVI": {7}, "SRIDEVI_NIGHT": {7}, "KALYAN": {6},
-        "TIME_BAZAR": {6, 7}, "MAIN_BAZAR": {5},
+        "TIME_BAZAR": {7}, "MAIN_BAZAR": {5},
     }[market]
 
     for row_number, cells in enumerate(parser.rows, start=1):
