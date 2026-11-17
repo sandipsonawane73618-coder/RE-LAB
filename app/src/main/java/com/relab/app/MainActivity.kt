@@ -49,7 +49,26 @@ import com.relab.core.SourceTimingAnalytics
 import com.relab.core.SourceReconciliation
 import java.time.LocalDate
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.zip.ZipInputStream
+
+private const val MAX_BUNDLE_ARCHIVE_BYTES = 100_000_000L
+
+private fun readBoundedBytes(input: InputStream, maxBytes: Long): ByteArray {
+    require(maxBytes >= 0) { "Maximum byte count must not be negative" }
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0L
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        total += count
+        require(total <= maxBytes) { "Selected file exceeds size limit: " + maxBytes + " bytes" }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -272,8 +291,9 @@ private fun RelabHome(
     val bundleValidationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("Selected bundle could not be opened")
+                val bytes = context.contentResolver.openInputStream(uri)?.use {
+                    readBoundedBytes(it, MAX_BUNDLE_ARCHIVE_BYTES)
+                } ?: error("Selected bundle could not be opened")
                 val validation = com.relab.core.ResearchBundleValidator.validate(bytes)
                 if (!validation.valid) {
                     importMessage = "Bundle rejected: ${validation.errors.joinToString("; ")}"
@@ -283,7 +303,7 @@ private fun RelabHome(
                         while (true) {
                             val entry = zip.nextEntry ?: break
                             if (entry.name == "source-observations.csv") {
-                                content = zip.readBytes().toString(Charsets.UTF_8)
+                                content = readBoundedBytes(zip, MAX_BUNDLE_ARCHIVE_BYTES).toString(Charsets.UTF_8)
                                 break
                             }
                             zip.closeEntry()
