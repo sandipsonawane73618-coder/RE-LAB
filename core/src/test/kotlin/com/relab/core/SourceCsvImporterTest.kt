@@ -15,7 +15,7 @@ class SourceCsvImporterTest {
         ).joinToString("\n")
 
         val report = SourceCsvImporter.import(csv)
-        assertTrue(report.issues.isEmpty())
+        assertTrue(report.issues.toString(), report.issues.isEmpty())
         assertEquals(3, report.observations.size)
         assertEquals("277-65-249, morning chart", report.observations[0].rawText)
         assertEquals(ObservationStatus.PUBLISHED, report.observations[0].status)
