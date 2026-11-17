@@ -151,20 +151,24 @@ def extract_rows(
     parser.feed(html)
     output: list[dict[str, str]] = []
     issues: list[str] = []
-    active_days = 6 if market == "KALYAN" else 7
+    allowed_day_counts = {
+        "SRIDEVI": {7}, "SRIDEVI_NIGHT": {7}, "KALYAN": {6},
+        "TIME_BAZAR": {6, 7}, "MAIN_BAZAR": {5},
+    }[market]
 
     for row_number, cells in enumerate(parser.rows, start=1):
-        if len(cells) < active_days + 1:
+        if len(cells) < 2:
             continue
         week = _week_range(cells[0])
         if week is None:
             continue
         start, end = week
-        if start.weekday() != 0 or (end - start).days != active_days - 1:
-            issues.append(f"row {row_number}: week range does not match {market} trading days: {cells[0]}")
+        day_count = (end - start).days + 1
+        if start.weekday() != 0 or day_count not in allowed_day_counts:
+            issues.append(f"row {row_number}: week range does not match {market} chart layout: {cells[0]}")
             continue
-        if len(cells) != active_days + 1:
-            issues.append(f"row {row_number}: expected {active_days} day cells, found {len(cells) - 1}")
+        if len(cells) != day_count + 1:
+            issues.append(f"row {row_number}: date range has {day_count} days but row contains {len(cells) - 1} day cells")
             continue
 
         for offset, raw_cell in enumerate(cells[1:]):
