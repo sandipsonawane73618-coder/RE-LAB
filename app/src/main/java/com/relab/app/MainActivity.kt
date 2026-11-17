@@ -362,26 +362,28 @@ private fun RelabHome(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
-                Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
-                Text("Source-first research. Every imported source observation is stored locally.")
+                Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
+                Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
                 OutlinedTextField(
                     value = chartUrl,
                     onValueChange = { chartUrl = it },
                     label = { Text("Paste chart website link") },
-                    placeholder = { Text("https://example.com/chart") },
+                    placeholder = { Text("https://sattamatkajodi.com/record/kalyan-penal-chart.php") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = chartUrl.isNotBlank() && !linkBusy,
-                        onClick = { importChartLink(chartUrl, com.relab.core.Market.SRIDEVI, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) }
-                    ) { Text(if (linkBusy) "Fetching..." else "Fetch Sridevi") }
-                    OutlinedButton(
-                        enabled = chartUrl.isNotBlank() && !linkBusy,
-                        onClick = { importChartLink(chartUrl, com.relab.core.Market.KALYAN, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) }
-                    ) { Text("Fetch Kalyan") }
-                }
+                Button(
+                    enabled = chartUrl.isNotBlank() && !linkBusy,
+                    onClick = {
+                        val detected = com.relab.core.Market.fromSourceUrl(chartUrl.trim())
+                        if (detected == null) {
+                            importMessage = "Unsupported chart URL. Supported markets: Sridevi, Sridevi Night, Kalyan, Time Bazar, Main Bazar."
+                        } else {
+                            importChartLink(chartUrl, detected, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (linkBusy) "Fetching..." else "Auto-detect market & fetch") }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) {
