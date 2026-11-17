@@ -176,6 +176,20 @@ private fun RelabHome(
             }
         }
     }
+    val walkForwardExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = com.relab.core.WalkForwardCsvExporter.export(patternAnalyses)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
+                    ?: error("Walk-forward file could not be written")
+                val exportedRows = patternAnalyses.sumOf { it.walkForwardRows.size }
+                importMessage = "Exported $exportedRows chronological walk-forward rows across ${patternAnalyses.size} market/session analyses."
+            } catch (error: Exception) {
+                importMessage = "Walk-forward export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     val coverageReports = remember(observations, coverageRangeOverrides) {
         observations.groupBy { it.market to it.sessionId }
@@ -216,6 +230,12 @@ private fun RelabHome(
                         onClick = { researchExportPicker.launch("relab-derived-consensus-research.csv") },
                         enabled = chartBuild.records.isNotEmpty()
                     ) { Text("Export research CSV") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { walkForwardExportPicker.launch("relab-walk-forward-audit.csv") },
+                        enabled = patternAnalyses.any { it.walkForwardRows.isNotEmpty() }
+                    ) { Text("Export walk-forward CSV") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
