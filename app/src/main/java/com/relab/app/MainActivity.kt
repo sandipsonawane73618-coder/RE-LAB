@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
 import com.relab.core.CoverageState
+import com.relab.core.DuplicateObservationGroup
+import com.relab.core.DuplicateObservationState
 import com.relab.core.HistoricalCoverageAudit
 import com.relab.core.ReconciliationState
 import com.relab.core.MarketAnalysis
@@ -39,6 +41,7 @@ import com.relab.core.PatternAnalysis
 import com.relab.core.ReconciledChartBuilder
 import com.relab.core.SourceCsvImporter
 import com.relab.core.SourceCsvExporter
+import com.relab.core.SourceObservationMerger
 import com.relab.core.SourceReconciliation
 
 class MainActivity : ComponentActivity() {
@@ -118,6 +121,9 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     val report = remember(rawCsv) { rawCsv?.let { SourceCsvImporter.import(it) } }
     val groups = remember(observations) { SourceReconciliation.reconcile(observations) }
     val conflicts = groups.count { it.state == ReconciliationState.CONFLICT }
+    val repeatedSourceRecords = remember(observations) {
+        SourceObservationMerger.auditRepeatedSourceRecords(observations)
+    }
     val published = observations.count { it.status == ObservationStatus.PUBLISHED }
     val pending = observations.count { it.status == ObservationStatus.PENDING }
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
@@ -190,6 +196,12 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 } else {
                     coverageReports.forEach { coverage -> CoverageReportCard(coverage) }
                 }
+                Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
+                if (repeatedSourceRecords.isEmpty()) {
+                    Text("No repeated source-record IDs found. Records without a source record ID are not guessed or grouped.")
+                } else {
+                    DuplicateObservationAuditCard(repeatedSourceRecords)
+                }
                 Text("Recent source observations", style = MaterialTheme.typography.titleLarge)
                 if (groups.isEmpty()) {
                     Text("No source records loaded.")
@@ -240,6 +252,31 @@ private fun CoverageReportCard(report: CoverageReport) {
                 "No observation is not assumed to be a holiday. Source conflicts remain unresolved.",
                 style = MaterialTheme.typography.labelSmall
             )
+        }
+    }
+}
+
+
+@Composable
+private fun DuplicateObservationAuditCard(groups: List<DuplicateObservationGroup>) {
+    val changed = groups.count { it.state == DuplicateObservationState.SOURCE_RECORD_CHANGED }
+    val unchanged = groups.size - changed
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Groups: ${groups.size} · Same content: $unchanged · Content changed: $changed")
+            groups.asReversed().take(20).forEach { group ->
+                val stateLabel = when (group.state) {
+                    DuplicateObservationState.REPEATED_SAME_CONTENT -> "REPEATED · SAME CONTENT"
+                    DuplicateObservationState.SOURCE_RECORD_CHANGED -> "SOURCE RECORD CHANGED"
+                }
+                val snapshots = group.observations.joinToString(" → ") { observation ->
+                    "${observation.retrievedAt} [${observation.status}: ${observation.normalizedResult ?: observation.rawText}]"
+                }
+                Text("${group.market} · ${group.sessionId} · ${group.date} · ${group.sourceId} · ${group.sourceRecordId}", style = MaterialTheme.typography.titleSmall)
+                Text("$stateLabel · ${group.observations.size} snapshots", style = MaterialTheme.typography.bodySmall)
+                Text(snapshots, style = MaterialTheme.typography.bodySmall)
+            }
+            Text("Audit only: no source rows are deleted, merged, or silently corrected.", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
