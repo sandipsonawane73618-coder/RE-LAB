@@ -656,12 +656,14 @@ private fun PatternResearchCard(analysis: MarketAnalysis) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text("Repeat-gap samples · open: ${analysis.openRepeatGaps.sumOf { it.gapsInDays.size }} · close: ${analysis.closeRepeatGaps.sumOf { it.gapsInDays.size }}")
+            Text("Walk-forward hit rate · Open family", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Walk-forward baselines (open family): global ${analysis.globalModeBaseline.correct}/${analysis.globalModeBaseline.evaluated}, weekday ${analysis.weekdayModeBaseline.correct}/${analysis.weekdayModeBaseline.evaluated}, previous-state ${analysis.previousStateBaseline.correct}/${analysis.previousStateBaseline.evaluated}",
+                "Global ${"%.1f".format(analysis.globalModeBaseline.hitRate * 100)}% · Weekday ${"%.1f".format(analysis.weekdayModeBaseline.hitRate * 100)}% · Previous ${"%.1f".format(analysis.previousStateBaseline.hitRate * 100)}%  (n=${analysis.globalModeBaseline.evaluated})",
                 style = MaterialTheme.typography.bodySmall
             )
+            Text("Walk-forward hit rate · Close family", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Walk-forward baselines (close family): global ${analysis.closeGlobalModeBaseline.correct}/${analysis.closeGlobalModeBaseline.evaluated}, weekday ${analysis.closeWeekdayModeBaseline.correct}/${analysis.closeWeekdayModeBaseline.evaluated}, previous-state ${analysis.closePreviousStateBaseline.correct}/${analysis.closePreviousStateBaseline.evaluated}",
+                "Global ${"%.1f".format(analysis.closeGlobalModeBaseline.hitRate * 100)}% · Weekday ${"%.1f".format(analysis.closeWeekdayModeBaseline.hitRate * 100)}% · Previous ${"%.1f".format(analysis.closePreviousStateBaseline.hitRate * 100)}%  (n=${analysis.closeGlobalModeBaseline.evaluated})",
                 style = MaterialTheme.typography.bodySmall
             )
             Text("Descriptive history only; walk-forward scores are baselines, not predictions.", style = MaterialTheme.typography.labelSmall)
@@ -697,51 +699,62 @@ private fun CandidateResearchCard(
     close: com.relab.core.CandidateRanking,
     jodi: List<com.relab.core.JodiCandidate>
 ) {
+    fun pct(count: Int, total: Int): String =
+        if (total <= 0) "—" else "${"%.1f".format(count * 100.0 / total)}%"
+
+    @Composable
+    fun candidateRows(title: String, ranking: com.relab.core.CandidateRanking) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        ranking.candidates.take(5).forEachIndexed { index, candidate ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("${index + 1}. ${candidate.panna} · ${candidate.pannaType}", style = MaterialTheme.typography.bodyMedium)
+                Text("Exact ${pct(candidate.exactHistoricalCount, ranking.trainingRecords)}", style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                "Family ${pct(candidate.familyHistoricalCount, ranking.trainingRecords)} · weekday ${candidate.weekdayFamilyCount} · transition ${candidate.previousFamilyTransitionCount}",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+
     Card {
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text("${open.market} · ${open.sessionId}", style = MaterialTheme.typography.titleMedium)
-            Text("Target date: ${open.targetDate} · Training: ${open.trainingRecords} earlier historical records · single-source data is exploratory, not independently verified")
+            Text(
+                "Earlier records: ${open.trainingRecords} · Target: ${open.targetDate}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Exploratory single-source research · not independently verified",
+                style = MaterialTheme.typography.labelSmall
+            )
             if (open.abstained || close.abstained) {
                 Text(open.note)
                 Text(close.note)
             } else {
-                Text("Open Panna candidates", style = MaterialTheme.typography.titleSmall)
-                open.candidates.forEachIndexed { index, candidate ->
-                    Text(
-                        "${index + 1}. ${candidate.panna} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}" +
-                            " · exact ${candidate.exactHistoricalCount}, family ${candidate.familyHistoricalCount}," +
-                            " weekday ${candidate.weekdayFamilyCount}, transition ${candidate.previousFamilyTransitionCount}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Text("Close Panna candidates", style = MaterialTheme.typography.titleSmall)
-                close.candidates.forEachIndexed { index, candidate ->
-                    Text(
-                        "${index + 1}. ${candidate.panna} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}" +
-                            " · exact ${candidate.exactHistoricalCount}, family ${candidate.familyHistoricalCount}," +
-                            " weekday ${candidate.weekdayFamilyCount}, transition ${candidate.previousFamilyTransitionCount}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Text("Derived Jodi candidates", style = MaterialTheme.typography.titleSmall)
-                jodi.forEachIndexed { index, candidate ->
-                    Text(
-                        "${index + 1}. ${candidate.jodi} · relative score ${"%.1f".format(candidate.score)} · Panna pairs ${candidate.supportingPannaPairs}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                candidateRows("Open Panna · historical frequency", open)
+                candidateRows("Close Panna · historical frequency", close)
+                Text("Derived Jodi · relative evidence rank", style = MaterialTheme.typography.titleSmall)
+                jodi.take(5).forEachIndexed { index, candidate ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${index + 1}. ${candidate.jodi}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Index ${"%.1f".format(candidate.score)}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 Text(
-                    "Exploratory evidence ranking only—not probability, certainty, or a guaranteed result. Jodi is derived from Panna digit sums.",
+                    "Exact % = exact panna count ÷ earlier records. Family % uses digit-family matches. Jodi index is not a probability.",
                     style = MaterialTheme.typography.labelSmall
                 )
             }
         }
     }
 }
-
 
 private fun importChartLink(
     rawUrl: String,
