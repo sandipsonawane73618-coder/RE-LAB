@@ -190,6 +190,21 @@ private fun RelabHome(
         }
     }
 
+    val manifestExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val manifest = com.relab.core.ResearchManifestExporter.export(
+                    observations, chartBuild.records, patternAnalyses, java.time.Instant.now()
+                )
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(manifest) }
+                    ?: error("Research manifest file could not be written")
+                importMessage = "Exported reproducibility manifest with SHA-256 source-ledger checksum and dataset coverage metadata."
+            } catch (error: Exception) {
+                importMessage = "Manifest export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
+
     var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     val coverageReports = remember(observations, coverageRangeOverrides) {
         observations.groupBy { it.market to it.sessionId }
@@ -236,6 +251,12 @@ private fun RelabHome(
                         onClick = { walkForwardExportPicker.launch("relab-walk-forward-audit.csv") },
                         enabled = patternAnalyses.any { it.walkForwardRows.isNotEmpty() }
                     ) { Text("Export walk-forward CSV") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { manifestExportPicker.launch("relab-research-manifest.json") },
+                        enabled = observations.isNotEmpty()
+                    ) { Text("Export research manifest") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
