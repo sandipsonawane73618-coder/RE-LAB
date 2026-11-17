@@ -63,8 +63,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val initialCoverageRanges = preferences.all.mapNotNull { (key, value) ->
+            if (!key.startsWith(COVERAGE_RANGE_PREFIX) || value !is String) return@mapNotNull null
+            val parts = value.split('|')
+            if (parts.size != 2) return@mapNotNull null
+            try {
+                key.removePrefix(COVERAGE_RANGE_PREFIX) to (LocalDate.parse(parts[0]) to LocalDate.parse(parts[1]))
+            } catch (_: Exception) {
+                null
+            }
+        }.toMap()
+
         setContent {
             RelabHome(
+                initialCoverageRanges = initialCoverageRanges,
+                onSaveCoverageRange = { key, start, end ->
+                    preferences.edit().putString(COVERAGE_RANGE_PREFIX + key, "$start|$end").apply()
+                },
                 initialCsv = database.loadOriginalCsv(),
                 initialObservations = database.loadObservations(),
                 onSaveCsv = { csv, observations ->
@@ -73,15 +88,29 @@ class MainActivity : ComponentActivity() {
                 },
                 onClearCsv = {
                     database.clearDataset()
-                    preferences.edit().remove("source_csv").apply()
+                    preferences.edit().apply {
+                        remove("source_csv")
+                        all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }.forEach(::remove)
+                    }.apply()
                 }
             )
         }
     }
+
+    companion object {
+        private const val COVERAGE_RANGE_PREFIX = "coverage_range:"
+    }
 }
 
 @Composable
-private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.core.SourceObservation>, onSaveCsv: (String, List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>, onClearCsv: () -> Unit) {
+private fun RelabHome(
+    initialCsv: String?,
+    initialObservations: List<com.relab.core.SourceObservation>,
+    initialCoverageRanges: Map<String, Pair<LocalDate, LocalDate>>,
+    onSaveCoverageRange: (String, LocalDate, LocalDate) -> Unit,
+    onSaveCsv: (String, List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
+    onClearCsv: () -> Unit
+) {
     val context = LocalContext.current
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
@@ -131,7 +160,7 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
     val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
     val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
-    var coverageRangeOverrides by remember { mutableStateOf<Map<String, Pair<LocalDate, LocalDate>>>(emptyMap()) }
+    var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     val coverageReports = remember(observations, coverageRangeOverrides) {
         observations.groupBy { it.market to it.sessionId }
             .mapNotNull { (key, rows) ->
@@ -199,7 +228,9 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 } else {
                     coverageReports.forEach { coverage ->
                         CoverageReportCard(coverage) { start, end ->
-                            coverageRangeOverrides = coverageRangeOverrides + ("${coverage.market.name}:${coverage.sessionId}" to (start to end))
+                                val key = "${coverage.market.name}:${coverage.sessionId}"
+                            coverageRangeOverrides = coverageRangeOverrides + (key to (start to end))
+                            onSaveCoverageRange(key, start, end)
                         }
                     }
                 }
