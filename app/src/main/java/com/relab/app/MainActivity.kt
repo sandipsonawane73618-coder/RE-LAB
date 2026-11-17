@@ -55,10 +55,9 @@ class MainActivity : ComponentActivity() {
             RelabHome(
                 initialCsv = database.loadOriginalCsv(),
                 initialObservations = database.loadObservations(),
-                onSaveCsv = { csv ->
-                    val parsed = SourceCsvImporter.import(csv)
-                    require(parsed.observations.isNotEmpty()) { "No valid source observations to save" }
-                    database.replaceDataset(csv, parsed.observations)
+                onSaveCsv = { csv, observations ->
+                    require(observations.isNotEmpty()) { "No valid source observations to save" }
+                    database.appendDataset(csv, observations)
                 },
                 onClearCsv = {
                     database.clearDataset()
@@ -70,7 +69,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.core.SourceObservation>, onSaveCsv: (String) -> Unit, onClearCsv: () -> Unit) {
+private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.core.SourceObservation>, onSaveCsv: (String, List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>, onClearCsv: () -> Unit) {
     val context = LocalContext.current
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
@@ -84,10 +83,12 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 if (parsed.observations.isEmpty()) {
                     importMessage = "Import failed: no valid source observations. " + (parsed.issues.firstOrNull()?.message ?: "")
                 } else {
-                    onSaveCsv(csv)
-                    observations = parsed.observations
+                    val previousCount = observations.size
+                    val merged = onSaveCsv(csv, parsed.observations)
+                    val addedCount = (merged.size - previousCount).coerceAtLeast(0)
+                    observations = merged
                     rawCsv = csv
-                    importMessage = "Saved in offline database: ${parsed.observations.size} observations, ${parsed.issues.size} row issues. Raw source text retained."
+                    importMessage = "Added ${addedCount} new observations. Total: ${merged.size}. Exact re-imports are skipped; source conflicts are retained. Row issues: ${parsed.issues.size}."
                 }
             } catch (error: Exception) {
                 importMessage = "CSV read/import error: ${error.message ?: "Unknown error"}"
