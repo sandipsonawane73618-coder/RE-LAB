@@ -55,6 +55,19 @@ class SourceReconciliationTest {
         assertEquals(2, group.observations.size)
     }
 
+    @Test fun differentPagesFromTheSamePublisherDoNotCreateFalseConsensus() {
+        val panel = observation("hpofficial", ObservationStatus.PUBLISHED, "115-73-229")
+            .copy(sourceRecordId = "panel-view", sourceUrl = "https://example.test/panel")
+        val jodiPage = panel.copy(
+            sourceRecordId = "jodi-view",
+            sourceUrl = "https://example.test/jodi"
+        )
+        val group = SourceReconciliation.reconcile(listOf(panel, jodiPage)).single()
+        assertEquals(ReconciliationState.SINGLE_SOURCE_UNVERIFIED, group.state)
+        assertNull(group.agreedResult)
+        assertEquals(2, group.observations.size)
+    }
+
     @Test fun pendingAndHolidayAreNotTreatedAsNumericResults() {
         val groups = SourceReconciliation.reconcile(
             listOf(
