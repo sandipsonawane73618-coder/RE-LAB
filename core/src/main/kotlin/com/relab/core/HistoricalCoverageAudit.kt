@@ -77,10 +77,17 @@ object HistoricalCoverageAudit {
                 missing > 0 -> CoverageState.SOURCE_MISSING
                 else -> CoverageState.NO_OBSERVATION
             }
+            fun distinctPublisherCount(status: ObservationStatus): Int =
+                rows.filter { it.status == status }.map { it.sourceId }.distinct().size
+
             DailyCoverage(
                 date, state, rows.size,
-                rows.count { it.status == ObservationStatus.PUBLISHED },
-                pending, holidays, missing, malformed, published
+                distinctPublisherCount(ObservationStatus.PUBLISHED),
+                distinctPublisherCount(ObservationStatus.PENDING),
+                distinctPublisherCount(ObservationStatus.HOLIDAY_CLOSED),
+                distinctPublisherCount(ObservationStatus.MISSING_FROM_SOURCE),
+                distinctPublisherCount(ObservationStatus.MALFORMED),
+                published
             )
         }.toList()
 

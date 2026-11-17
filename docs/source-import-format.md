@@ -43,7 +43,7 @@ Paths in `html_file` are resolved relative to the manifest file. Each row repres
 
 ```csv
 html_file,market,session_id,source_id,retrieved_at,source_url
-snapshots/hira-sridevi.html,SRIDEVI,main,hpofficial-sridevi-panel,2026-11-17T12:00:00+05:30,https://hpofficial.in/sridevi-panel-chart/
+snapshots/hira-sridevi.html,SRIDEVI,main,hpofficial,2026-11-17T12:00:00+05:30,https://hpofficial.in/sridevi-panel-chart/
 snapshots/fix-kalyan.html,KALYAN,main,fixresult-kalyan,2026-11-17T12:05:00+05:30,https://www.fixresult.in/kalyan-matka-chart.html
 ```
 
@@ -53,4 +53,4 @@ Run the offline batch extractor:
 python scripts/extract_archive_batch.py data/source-snapshots.csv --output build/source-observations.csv
 ```
 
-The command does not access the network. It preserves every source snapshot as separate observations. If any manifest entry is invalid or a snapshot is missing, it exits with code 2 and does not write a combined CSV; fix the manifest and rerun it.
+The command does not access the network. Use canonical publisher IDs in `source_id` (for example, `hpofficial`, not a page-specific suffix). It preserves every source snapshot as separate observations. If any manifest entry is invalid or a snapshot is missing, it exits with code 2 and does not write a combined CSV; fix the manifest and rerun it.

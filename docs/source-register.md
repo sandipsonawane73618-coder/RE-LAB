@@ -8,16 +8,16 @@ This register lists candidate public archives for source-observation collection.
 |---|---|---|---|
 | `hpofficial` | https://hpofficial.in/sridevi-panel-chart/ | Weekly Open Panna / Jodi / Close Panna table. The current-year page and cached page text can show different end dates; record the exact retrieved snapshot. | Preserve the full panel row and source capture time. Do not infer blank cells as holidays. |
 | `hpofficial` | https://hpofficial.in/sridevi-jodi-chart/ | Weekly Jodi table; a second view of the same publisher's archive, not an independent publisher. | Reuse source ID `hpofficial`; compare Jodi against the panel's Panna digit sums. |
-| `livesattamatka-sridevi-panel` | https://livesattamatka.org/panel-record/sridevi | Full panel chart, Monday–Sunday; recent rows are visible in the page text. | Keep as an independent source observation; reconcile against other publishers. |
-| `matkaflash-sridevi` | https://matkaflash.com/sridevi?tab=history | Archive states 2,123 dated records from 4 Jan 2021. Its 17 Nov 2026 board snapshot displayed 577-99-667 while another current-year source displayed 115-73-229. | Preserve the dated board value and capture timestamp as an observation; do not choose a winner from page recency alone. |
+| `livesattamatka` | https://livesattamatka.org/panel-record/sridevi | Full panel chart, Monday–Sunday; recent rows are visible in the page text. | Keep as an independent source observation; reconcile against other publishers. |
+| `matkaflash` | https://matkaflash.com/sridevi?tab=history | Archive states 2,123 dated records from 4 Jan 2021. Its 17 Nov 2026 board snapshot displayed 577-99-667 while another current-year source displayed 115-73-229. | Preserve the dated board value and capture timestamp as an observation; do not choose a winner from page recency alone. |
 
 ## Kalyan — main evening session
 
 | Source ID | URL | Coverage / notes | Collection rule |
 |---|---|---|---|
-| `fixresult-kalyan` | https://www.fixresult.in/kalyan-matka-chart.html | Weekly Mon–Sat table; archive overview states 1,221 records from 31 Oct 2022 through 24 Sep 2026. | Useful historical baseline; preserve missing cells and anomalous rows. |
-| `matkaflash-kalyan` | https://matkaflash.com/kalyan | Archive states 1,240 dated records from 17 Oct 2022. A 16 Nov 2026 board snapshot displayed 390-24-257, which conflicts with other recent chart observations. | Keep the 16 Nov value as source-specific evidence; do not merge it into another date or session without reconciliation. |
-| `kalyanchart-history` | https://kalyanchart.cyou/history/ | Separate history pages for Kalyan and other day/night sessions. Some archive views have shown stale repeated values. | Verify date and session identity row-by-row; repeated rows are not automatically daily results. |
+| `fixresult` | https://www.fixresult.in/kalyan-matka-chart.html | Weekly Mon–Sat table; archive overview states 1,221 records from 31 Oct 2022 through 24 Sep 2026. | Useful historical baseline; preserve missing cells and anomalous rows. |
+| `matkaflash` | https://matkaflash.com/kalyan | Archive states 1,240 dated records from 17 Oct 2022. A 16 Nov 2026 board snapshot displayed 390-24-257, which conflicts with other recent chart observations. | Keep the 16 Nov value as source-specific evidence; do not merge it into another date or session without reconciliation. |
+| `kalyanchart` | https://kalyanchart.cyou/history/ | Separate history pages for Kalyan and other day/night sessions. Some archive views have shown stale repeated values. | Verify date and session identity row-by-row; repeated rows are not automatically daily results. |
 
 ## Session identity rules
 
@@ -26,6 +26,8 @@ This register lists candidate public archives for source-observation collection.
 - A publisher's weekly table, Jodi table, and panel table are different views from the same publisher, not three independent sources.
 - `source_id` is the canonical publisher identity, not a page identity. Reuse one `source_id` for every page/view owned by the same publisher; distinguish the exact page with `source_url`. Independent-source consensus counts distinct publisher IDs only.
 - In particular, Hira Panna Official's Sridevi panel and Jodi pages both use `source_id=hpofficial`; they must never count as two independent publishers.
+- MatkaFlash Sridevi and Kalyan pages both use `source_id=matkaflash`; market/session fields keep their records separate.
+- The same canonical rule applies to `livesattamatka`, `fixresult`, and `kalyanchart`; do not add market or page suffixes to a publisher ID.
 - Preserve original page URL, capture/retrieval time, published time when displayed, exact raw row text, and parsed result separately.
 - A missing cell, `—`, `*`, or `**` is not a numeric result. Do not convert it to 00 or a holiday without an explicit source statement.
 

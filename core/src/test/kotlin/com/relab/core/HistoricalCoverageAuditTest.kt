@@ -44,6 +44,29 @@ class HistoricalCoverageAuditTest {
         assertEquals(1, report.days.first().publishedSourceCount)
     }
 
+    @Test fun coverageCountsDistinctPublishersNotRepeatedSnapshots() {
+        val first = observation(
+            "2026-11-02", "publisher-a", ObservationStatus.PUBLISHED, "789-46-150"
+        )
+        val laterSnapshot = first.copy(
+            retrievedAt = Instant.parse("2026-11-17T13:00:00Z"),
+            sourceRecordId = "second-page-capture"
+        )
+        val otherPublisherPending = observation(
+            "2026-11-02", "publisher-b", ObservationStatus.PENDING
+        )
+        val report = HistoricalCoverageAudit.analyze(
+            Market.KALYAN, "main",
+            LocalDate.parse("2026-11-02"), LocalDate.parse("2026-11-02"),
+            listOf(first, laterSnapshot, otherPublisherPending)
+        )
+        val day = report.days.single()
+        assertEquals(3, day.observationCount)
+        assertEquals(1, day.publishedSourceCount)
+        assertEquals(1, day.pendingSourceCount)
+        assertEquals(CoverageState.PUBLISHED, day.state)
+    }
+
     @Test fun conflictingPublishedSourcesRemainAConflict() {
         val rows = listOf(
             observation("2026-11-02", "a", ObservationStatus.PUBLISHED, "789-46-150"),
