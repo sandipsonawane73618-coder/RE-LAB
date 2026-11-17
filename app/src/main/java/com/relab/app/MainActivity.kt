@@ -198,17 +198,22 @@ private fun RelabHome(
     val pending = observations.count { it.status == ObservationStatus.PENDING }
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
     val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
-    val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
+    // Exploratory records include valid single-publisher rows, but remain visibly
+    // unverified; the consensus ledger and reconciliation counts stay unchanged.
+    val researchRecords = remember(observations) {
+        ReconciledChartBuilder.buildExploratoryRecords(observations)
+    }
+    val patternAnalyses = remember(researchRecords) { PatternAnalysis.analyze(researchRecords) }
     val candidateSets = remember(observations) {
-        chartBuild.records.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
+        researchRecords.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
             val target = LocalDate.now()
             val open = com.relab.core.CandidateRankingEngine.rank(
                 observations, market, sessionId, target, com.relab.core.PannaSide.OPEN,
-                limit = 10, minimumHistory = 5
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true
             )
             val close = com.relab.core.CandidateRankingEngine.rank(
                 observations, market, sessionId, target, com.relab.core.PannaSide.CLOSE,
-                limit = 10, minimumHistory = 5
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true
             )
             Triple(
                 open,
@@ -464,19 +469,19 @@ private fun RelabHome(
                         }
                     }
                 }
-                Text("Pattern research · consensus records only", style = MaterialTheme.typography.titleLarge)
+                Text("Pattern research · exploratory + verified", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Analysis input: ${chartBuild.records.size} multi-source consensus records · Single-source unverified: ${chartBuild.singleSourceUnverifiedGroups.size} · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
+                    "Analysis input: ${researchRecords.size} valid historical rows (${chartBuild.records.size} consensus + ${chartBuild.singleSourceUnverifiedGroups.size} single-source groups) · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (patternAnalyses.isEmpty()) {
-                    Text("Import and reconcile published source records to enable pattern analysis.")
+                    Text("No valid published rows available for pattern analysis yet. Check the imported chart rows and source format.")
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
                 Text("Next draw candidate research", style = MaterialTheme.typography.titleLarge)
                 if (candidateSets.isEmpty()) {
-                    Text("Verified multi-source history is required before candidate ranking can run.")
+                    Text("No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
                 } else {
                     candidateSets.forEach { (open, close, jodi) ->
                         CandidateResearchCard(open, close, jodi)
@@ -698,7 +703,7 @@ private fun CandidateResearchCard(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("${open.market} · ${open.sessionId}", style = MaterialTheme.typography.titleMedium)
-            Text("Target date: ${open.targetDate} · Training: ${open.trainingRecords} consensus records")
+            Text("Target date: ${open.targetDate} · Training: ${open.trainingRecords} earlier historical records · single-source data is exploratory, not independently verified")
             if (open.abstained || close.abstained) {
                 Text(open.note)
                 Text(close.note)
@@ -729,7 +734,7 @@ private fun CandidateResearchCard(
                     )
                 }
                 Text(
-                    "Evidence ranking only—not probability, certainty, or a guaranteed result. Jodi is derived from Panna digit sums.",
+                    "Exploratory evidence ranking only—not probability, certainty, or a guaranteed result. Jodi is derived from Panna digit sums.",
                     style = MaterialTheme.typography.labelSmall
                 )
             }
