@@ -3,7 +3,6 @@ package com.relab.core
 import org.jsoup.Jsoup
 import java.time.Instant
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 data class HtmlChartImportReport(
@@ -14,11 +13,11 @@ data class HtmlChartImportReport(
 
 /** Extracts dated result rows from ordinary HTML tables; it never guesses missing values. */
 object HtmlChartImporter {
-    private val resultPattern = Regex("""(?<!\\d)(\\d{3})\\s*[-–/]\\s*(\\d{2})\\s*[-–/]\\s*(\\d{3})(?!\\d)""")
+    private val resultPattern = Regex("""(?<!\d)(\d{3})\s*[-–/]\s*(\d{2})\s*[-–/]\s*(\d{3})(?!\d)""")
     private val datePatterns = listOf(
-        Regex("""(?<!\\d)(\\d{4})-(\\d{1,2})-(\\d{1,2})(?!\\d)"""),
-        Regex("""(?<!\\d)(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})(?!\\d)"""),
-        Regex("""(?i)\\b(\\d{1,2})\\s+([A-Z]{3,9})\\s+(\\d{4})\\b""")
+        Regex("""(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)"""),
+        Regex("""(?<!\d)(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?!\d)"""),
+        Regex("""(?i)\b(\d{1,2})\s+([A-Z]{3,9})\s+(\d{4})\b""")
     )
     private val months = mapOf(
         "JAN" to 1, "FEB" to 2, "MAR" to 3, "APR" to 4, "MAY" to 5, "JUN" to 6,
