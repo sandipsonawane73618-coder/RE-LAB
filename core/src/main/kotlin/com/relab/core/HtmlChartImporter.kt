@@ -62,8 +62,7 @@ object HtmlChartImporter {
             val record = ChartRecord(
                 market = market, date = date,
                 openPanna = parts[0], jodi = parts[1], closePanna = parts[2],
-                sourceId = host, sourceUrl = nullSafeSourceId(host)
-                    .let { host }, observedAt = retrievedAt, sessionId = sessionId
+                sourceId = host, observedAt = retrievedAt, sessionId = sessionId
             )
             val valid = ChartMath.validate(record) is ValidationResult.Valid
             observations += SourceObservation(
@@ -86,7 +85,6 @@ object HtmlChartImporter {
         )
     }
 
-    private fun nullSafeSourceId(host: String) = host
 
     private fun parseDate(text: String): LocalDate? {
         datePatterns[0].find(text)?.let {
