@@ -60,14 +60,14 @@ object SourceCsvImporter {
                 var result = value(row, "result").trim().takeIf { it.isNotEmpty() }
 
                 if (status == ObservationStatus.PUBLISHED) {
-                    val parts = result?.split('-')
-                    val structurallyValid = parts?.size == 3 &&
+                    val parts = result?.split('-') ?: emptyList()
+                    val structurallyValid = parts.size == 3 &&
                         parts[0].length == 3 && parts[1].length == 2 && parts[2].length == 3 &&
                         parts.all { part -> part.all(Char::isDigit) }
                     val chartRecord = if (structurallyValid) ChartRecord(
                         market = market,
                         date = date,
-                        openPanna = parts!![0],
+                        openPanna = parts[0],
                         jodi = parts[1],
                         closePanna = parts[2],
                         sourceId = sourceId,
