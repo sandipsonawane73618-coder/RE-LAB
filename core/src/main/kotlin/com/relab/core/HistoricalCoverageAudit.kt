@@ -7,7 +7,8 @@ enum class CoverageState {
     HOLIDAY_REPORTED,
     PENDING,
     SOURCE_MISSING,
-    PUBLISHED,
+    SINGLE_SOURCE_UNVERIFIED,
+    CONSENSUS,
     CONFLICT
 }
 
@@ -31,7 +32,11 @@ data class CoverageReport(
     val expectedTradingDays: Int,
     val days: List<DailyCoverage>
 ) {
-    val publishedDays: Int get() = days.count { it.state == CoverageState.PUBLISHED }
+    val publishedDays: Int get() = days.count {
+        it.state == CoverageState.SINGLE_SOURCE_UNVERIFIED || it.state == CoverageState.CONSENSUS
+    }
+    val singleSourceDays: Int get() = days.count { it.state == CoverageState.SINGLE_SOURCE_UNVERIFIED }
+    val consensusDays: Int get() = days.count { it.state == CoverageState.CONSENSUS }
     val conflictDays: Int get() = days.count { it.state == CoverageState.CONFLICT }
     val holidayDays: Int get() = days.count { it.state == CoverageState.HOLIDAY_REPORTED }
     val pendingDays: Int get() = days.count { it.state == CoverageState.PENDING }
@@ -69,9 +74,15 @@ object HistoricalCoverageAudit {
             val holidays = rows.count { it.status == ObservationStatus.HOLIDAY_CLOSED }
             val missing = rows.count { it.status == ObservationStatus.MISSING_FROM_SOURCE }
             val malformed = rows.count { it.status == ObservationStatus.MALFORMED }
+            val publishedPublisherCount = rows
+                .filter { it.status == ObservationStatus.PUBLISHED }
+                .map { it.sourceId }
+                .distinct()
+                .size
             val state = when {
                 published.size > 1 -> CoverageState.CONFLICT
-                published.size == 1 -> CoverageState.PUBLISHED
+                published.size == 1 && publishedPublisherCount >= 2 -> CoverageState.CONSENSUS
+                published.size == 1 -> CoverageState.SINGLE_SOURCE_UNVERIFIED
                 holidays > 0 -> CoverageState.HOLIDAY_REPORTED
                 pending > 0 -> CoverageState.PENDING
                 missing > 0 -> CoverageState.SOURCE_MISSING

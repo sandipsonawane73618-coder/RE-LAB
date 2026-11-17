@@ -36,11 +36,14 @@ class HistoricalCoverageAuditTest {
         )
         assertEquals(6, report.expectedTradingDays)
         assertEquals(1, report.publishedDays)
+        assertEquals(1, report.singleSourceDays)
+        assertEquals(0, report.consensusDays)
         assertEquals(1, report.pendingDays)
         assertEquals(1, report.holidayDays)
         assertEquals(1, report.sourceMissingDays)
         assertEquals(2, report.noObservationDays)
         assertEquals(CoverageState.NO_OBSERVATION, report.days.last().state)
+        assertEquals(CoverageState.SINGLE_SOURCE_UNVERIFIED, report.days.first().state)
         assertEquals(1, report.days.first().publishedSourceCount)
     }
 
@@ -65,6 +68,21 @@ class HistoricalCoverageAuditTest {
         assertEquals(1, day.publishedSourceCount)
         assertEquals(1, day.pendingSourceCount)
         assertEquals(CoverageState.PUBLISHED, day.state)
+    }
+
+    @Test fun matchingResultsFromTwoPublishersAreConsensusInCoverage() {
+        val rows = listOf(
+            observation("2026-11-02", "publisher-a", ObservationStatus.PUBLISHED, "789-46-150"),
+            observation("2026-11-02", "publisher-b", ObservationStatus.PUBLISHED, "789-46-150")
+        )
+        val report = HistoricalCoverageAudit.analyze(
+            Market.KALYAN, "main",
+            LocalDate.parse("2026-11-02"), LocalDate.parse("2026-11-02"), rows
+        )
+        assertEquals(CoverageState.CONSENSUS, report.days.single().state)
+        assertEquals(1, report.consensusDays)
+        assertEquals(0, report.singleSourceDays)
+        assertEquals(2, report.days.single().publishedSourceCount)
     }
 
     @Test fun conflictingPublishedSourcesRemainAConflict() {
