@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RelabHome(
                 initialCsv = database.loadOriginalCsv(),
+                initialObservations = database.loadObservations(),
                 onSaveCsv = { csv ->
                     val parsed = SourceCsvImporter.import(csv)
                     require(parsed.observations.isNotEmpty()) { "No valid source observations to save" }
@@ -69,9 +70,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearCsv: () -> Unit) {
+private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.core.SourceObservation>, onSaveCsv: (String) -> Unit, onClearCsv: () -> Unit) {
     val context = LocalContext.current
     var rawCsv by remember { mutableStateOf(initialCsv) }
+    var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -83,6 +85,7 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
                     importMessage = "Import failed: no valid source observations. " + (parsed.issues.firstOrNull()?.message ?: "")
                 } else {
                     onSaveCsv(csv)
+                    observations = parsed.observations
                     rawCsv = csv
                     importMessage = "Saved in offline database: ${parsed.observations.size} observations, ${parsed.issues.size} row issues. Raw source text retained."
                 }
@@ -93,7 +96,6 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
     }
 
     val report = remember(rawCsv) { rawCsv?.let { SourceCsvImporter.import(it) } }
-    val observations = report?.observations.orEmpty()
     val groups = remember(observations) { SourceReconciliation.reconcile(observations) }
     val conflicts = groups.count { it.state == ReconciliationState.CONFLICT }
     val published = observations.count { it.status == ObservationStatus.PUBLISHED }
@@ -110,6 +112,7 @@ private fun RelabHome(initialCsv: String?, onSaveCsv: (String) -> Unit, onClearC
                     Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import source CSV") }
                     OutlinedButton(onClick = {
                         rawCsv = null
+                        observations = emptyList()
                         onClearCsv()
                         importMessage = "Local database cleared."
                     }, enabled = rawCsv != null) { Text("Clear data") }
