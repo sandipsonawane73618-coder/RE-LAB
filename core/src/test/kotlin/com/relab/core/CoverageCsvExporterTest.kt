@@ -3,6 +3,7 @@ package com.relab.core
 import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
