@@ -13,12 +13,12 @@ data class HtmlChartImportReport(
 
 /** Extracts dated daily rows and Monday-Sunday weekly chart cells without inventing results. */
 object HtmlChartImporter {
-    private val resultPattern = Regex("""(?<!\\d)(\\d{3})\\s*[-–/]\\s*(\\d{2})\\s*[-–/]\\s*(\\d{3})(?!\\d)""")
-    private val rangePattern = Regex("""(\\d{1,2})[/-](\\d{1,2})[/-](\\d{2,4})""")
+    private val resultPattern = Regex("""(?<!\d)(\d{3})\s*[-–/]\s*(\d{2})\s*[-–/]\s*(\d{3})(?!\d)""")
+    private val rangePattern = Regex("""(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})""")
     private val datePatterns = listOf(
-        Regex("""(?<!\\d)(\\d{4})-(\\d{1,2})-(\\d{1,2})(?!\\d)"""),
-        Regex("""(?<!\\d)(\\d{1,2})[/-](\\d{1,2})[/-](\\d{2,4})(?!\\d)"""),
-        Regex("""(?i)\\b(\\d{1,2})\\s+([A-Z]{3,9})\\s+(\\d{4})\\b""")
+        Regex("""(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)"""),
+        Regex("""(?<!\d)(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?!\d)"""),
+        Regex("""(?i)\b(\d{1,2})\s+([A-Z]{3,9})\s+(\d{4})\b""")
     )
     private val months = mapOf(
         "JAN" to 1, "FEB" to 2, "MAR" to 3, "APR" to 4, "MAY" to 5, "JUN" to 6,
@@ -100,11 +100,12 @@ object HtmlChartImporter {
     }
 
     private fun parseDate(text: String): LocalDate? {
-        rangePattern.find(text)?.let { m ->
-            return runCatching { LocalDate.of(year(m.groupValues[3]), m.groupValues[2].toInt(), m.groupValues[1].toInt()) }.getOrNull()
-        }
+        // Prefer ISO dates before the generic day/month/year range matcher.
         datePatterns[0].find(text)?.let {
             return runCatching { LocalDate.of(it.groupValues[1].toInt(), it.groupValues[2].toInt(), it.groupValues[3].toInt()) }.getOrNull()
+        }
+        rangePattern.find(text)?.let { m ->
+            return runCatching { LocalDate.of(year(m.groupValues[3]), m.groupValues[2].toInt(), m.groupValues[1].toInt()) }.getOrNull()
         }
         datePatterns[1].find(text)?.let {
             return runCatching { LocalDate.of(year(it.groupValues[3]), it.groupValues[2].toInt(), it.groupValues[1].toInt()) }.getOrNull()
