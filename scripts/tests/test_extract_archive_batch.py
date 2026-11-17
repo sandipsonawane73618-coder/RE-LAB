@@ -10,8 +10,8 @@ from extract_archive_batch import extract_manifest
 
 WEEKLY_HTML = """
 <table><tr><td>24-08-2026 to 29-08-2026</td>
-<td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
-<td>568 92 345</td><td>247 32 480</td><td>168 50 145</td></tr></table>
+<td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
+<td>568</td><td>92</td><td>345</td><td>247</td><td>32</td><td>480</td><td>168</td><td>50</td><td>145</td></tr></table>
 """
 
 
