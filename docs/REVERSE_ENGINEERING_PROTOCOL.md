@@ -80,3 +80,7 @@ A date/session is labeled `CONSENSUS` only when at least two distinct `source_id
 ## Publisher identity and independent corroboration
 
 `source_id` is a canonical publisher ID, not a page URL or a page-specific label. Every archive page and table view from the same publisher must reuse that ID; `source_url` records the exact page. The app counts distinct publisher IDs, not distinct URLs or retrieval snapshots, when deciding whether a result has independent multi-source consensus. For example, the Hira Panna Official Sridevi panel and Jodi pages both use `hpofficial` and cannot corroborate one another as separate publishers.
+
+## Coverage labels
+
+The historical coverage audit distinguishes a result seen from one publisher (`SINGLE_SOURCE_UNVERIFIED`) from a matching result independently published by at least two canonical publisher IDs (`CONSENSUS`). Both count as dates with published observations, but only the latter is corroborated. Multiple snapshots or pages with the same publisher ID count once. Different published values remain `CONFLICT`.

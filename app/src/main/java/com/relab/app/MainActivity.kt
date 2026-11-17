@@ -215,7 +215,7 @@ private fun CoverageReportCard(report: CoverageReport) {
             Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleMedium)
             Text("Range: ${report.startDate} → ${report.endDate}")
             Text("Expected trading days: ${report.expectedTradingDays}")
-            Text("Published: ${report.publishedDays} · Conflicts: ${report.conflictDays}")
+            Text("Published: ${report.publishedDays} · Multi-source consensus: ${report.consensusDays} · Single-source unverified: ${report.singleSourceDays} · Conflicts: ${report.conflictDays}")
             Text("Pending: ${report.pendingDays} · Holidays: ${report.holidayDays}")
             Text("Source missing: ${report.sourceMissingDays} · No observation: ${report.noObservationDays}")
             Text("Latest coverage records", style = MaterialTheme.typography.titleSmall)
@@ -225,7 +225,8 @@ private fun CoverageReportCard(report: CoverageReport) {
                     CoverageState.HOLIDAY_REPORTED -> "HOLIDAY REPORTED"
                     CoverageState.PENDING -> "PENDING"
                     CoverageState.SOURCE_MISSING -> "SOURCE MISSING"
-                    CoverageState.PUBLISHED -> "PUBLISHED"
+                    CoverageState.SINGLE_SOURCE_UNVERIFIED -> "SINGLE SOURCE · UNVERIFIED"
+                    CoverageState.CONSENSUS -> "MULTI-SOURCE CONSENSUS"
                     CoverageState.CONFLICT -> "CONFLICT"
                 }
                 val resultLabel = when {
