@@ -35,6 +35,7 @@ import com.relab.core.CoverageState
 import com.relab.core.HistoricalCoverageAudit
 import com.relab.core.ReconciliationState
 import com.relab.core.SourceCsvImporter
+import com.relab.core.SourceCsvExporter
 import com.relab.core.SourceReconciliation
 
 class MainActivity : ComponentActivity() {
@@ -77,6 +78,18 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = SourceCsvExporter.export(observations)
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
+                    ?: error("Backup file could not be written")
+                importMessage = "Exported ${observations.size} source observations with provenance and raw text."
+            } catch (error: Exception) {
+                importMessage = "Export error: ${error.message ?: "Unknown error"}"
+            }
+        }
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -127,13 +140,17 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 Text("Sridevi + Kalyan · Offline chart research", style = MaterialTheme.typography.titleMedium)
                 Text("Source-first research. Every imported source observation is stored locally.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import source CSV") }
+                    Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv")) }) { Text("Import CSV") }
+                    OutlinedButton(
+                        onClick = { exportPicker.launch("relab-source-backup.csv") },
+                        enabled = observations.isNotEmpty()
+                    ) { Text("Export backup") }
                     OutlinedButton(onClick = {
                         rawCsv = null
                         observations = emptyList()
                         onClearCsv()
                         importMessage = "Local database cleared."
-                    }, enabled = rawCsv != null) { Text("Clear data") }
+                    }, enabled = observations.isNotEmpty()) { Text("Clear") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Card(colors = CardDefaults.cardColors()) {
