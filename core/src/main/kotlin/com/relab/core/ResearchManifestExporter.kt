@@ -61,7 +61,7 @@ object ResearchManifestExporter {
             appendLine("  \"published_observations_missing_timestamp\": ${publishedCount - publishedWithTimestamp},")
             appendLine("  \"negative_publication_lag_observations\": $negativeLagCount,")
             appendLine("  \"source_timing_summary\": [")
-            appendLine(timingSummaries.joinToString(",\\n") { "    $it" })
+            appendLine(timingSummaries.joinToString(",\n") { "    $it" })
             appendLine("  ],")
             appendLine("  \"sessions\": [")
             appendLine(sessions.joinToString(",\n") { "    $it" })
