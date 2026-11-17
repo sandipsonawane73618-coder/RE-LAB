@@ -204,6 +204,7 @@ private fun RelabHome(
         ReconciledChartBuilder.buildExploratoryRecords(observations)
     }
     val patternAnalyses = remember(researchRecords) { PatternAnalysis.analyze(researchRecords) }
+    val intelligenceReports = remember(researchRecords) { com.relab.core.MarketIntelligence.analyze(researchRecords) }
     val candidateSets = remember(observations) {
         researchRecords.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
             val target = LocalDate.now()
@@ -479,6 +480,16 @@ private fun RelabHome(
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
+                Text("Market Intelligence · market-specific behaviour", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Each market is analysed independently. Recent-vs-older distribution changes are descriptive alerts, not future-result predictions.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (intelligenceReports.isEmpty()) {
+                    Text("Market intelligence will appear after valid published chart rows are available.")
+                } else {
+                    intelligenceReports.forEach { MarketIntelligenceCard(it) }
+                }
                 Text("Next draw candidate research", style = MaterialTheme.typography.titleLarge)
                 if (candidateSets.isEmpty()) {
                     Text("No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
@@ -673,6 +684,54 @@ private fun PatternResearchCard(analysis: MarketAnalysis) {
 
 
 @Composable
+private fun MarketIntelligenceCard(report: com.relab.core.MarketIntelligenceReport) {
+    val regimeLabel = when (report.regime) {
+        com.relab.core.MarketRegime.INSUFFICIENT_HISTORY -> "GREY · INSUFFICIENT HISTORY"
+        com.relab.core.MarketRegime.STABLE -> "GREEN · BROADLY STABLE"
+        com.relab.core.MarketRegime.WATCH -> "AMBER · WATCH FOR CHANGE"
+        com.relab.core.MarketRegime.SHIFT_DETECTED -> "RED · DISTRIBUTION SHIFT"
+    }
+    val regimeColor = when (report.regime) {
+        com.relab.core.MarketRegime.INSUFFICIENT_HISTORY -> MaterialTheme.colorScheme.onSurfaceVariant
+        com.relab.core.MarketRegime.STABLE -> MaterialTheme.colorScheme.primary
+        com.relab.core.MarketRegime.WATCH -> MaterialTheme.colorScheme.tertiary
+        com.relab.core.MarketRegime.SHIFT_DETECTED -> MaterialTheme.colorScheme.error
+    }
+    fun transitionText(items: List<com.relab.core.TransitionEvidence>): String =
+        items.take(3).joinToString(" · ") { "${it.transition} (${it.count}, ${"%.1f".format(it.percentage)}%)" }
+            .ifBlank { "Not enough transitions" }
+    fun weekdayText(items: Map<java.time.DayOfWeek, Int>): String =
+        items.entries.sortedByDescending { it.value }.take(3)
+            .joinToString(" · ") { "${it.key.name.lowercase().replaceFirstChar(Char::uppercase)}: ${it.value}" }
+            .ifBlank { "No weekday evidence" }
+
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Records: ${report.validRecords} · ${regimeLabel}", color = regimeColor, style = MaterialTheme.typography.titleSmall)
+            Text(report.explanation, style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Recent-vs-prior distribution difference: ${report.distributionShift?.let { "${"%.1f".format(it * 100)}%" } ?: "Not evaluated"}" +
+                    if (report.comparisonWindowSize > 0) " · Window: ${report.comparisonWindowSize} rows" else "",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text("Open transitions: ${transitionText(report.topOpenTransitions)}", style = MaterialTheme.typography.bodySmall)
+            Text("Close transitions: ${transitionText(report.topCloseTransitions)}", style = MaterialTheme.typography.bodySmall)
+            Text("Open weekday counts: ${weekdayText(report.openWeekdayCounts)}", style = MaterialTheme.typography.bodySmall)
+            Text("Close weekday counts: ${weekdayText(report.closeWeekdayCounts)}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Family-sequence entropy · Open ${"%.2f".format(report.openFamilyEntropyBits)} bits · Close ${"%.2f".format(report.closeFamilyEntropyBits)} bits",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Shift flag compares two equal recent/older windows; it is a descriptive distribution test, not a prediction or proof of a market mechanism.",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
         ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
@@ -731,7 +790,7 @@ private fun CandidateResearchCard(
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Exploratory single-source research · not independently verified",
+                "Exploratory ranking may include unverified single-source rows; not consensus-only. No candidate-level walk-forward hit rate is claimed.",
                 style = MaterialTheme.typography.labelSmall
             )
             if (open.abstained || close.abstained) {
