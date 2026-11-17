@@ -18,6 +18,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +44,7 @@ import com.relab.core.SourceCsvImporter
 import com.relab.core.SourceCsvExporter
 import com.relab.core.SourceObservationMerger
 import com.relab.core.SourceReconciliation
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,15 +131,16 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
     val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
     val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
-    val coverageReports = remember(observations) {
+    var coverageRangeOverrides by remember { mutableStateOf<Map<String, Pair<LocalDate, LocalDate>>>(emptyMap()) }
+    val coverageReports = remember(observations, coverageRangeOverrides) {
         observations.groupBy { it.market to it.sessionId }
             .mapNotNull { (key, rows) ->
                 val dates = rows.map { it.date }
                 if (dates.isEmpty()) null else HistoricalCoverageAudit.analyze(
                     market = key.first,
                     sessionId = key.second,
-                    startDate = dates.minOrNull()!!,
-                    endDate = dates.maxOrNull()!!,
+                    startDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
+                    endDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
                     observations = rows
                 )
             }
@@ -194,7 +197,11 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 if (coverageReports.isEmpty()) {
                     Text("Coverage audit will appear after source data is imported.")
                 } else {
-                    coverageReports.forEach { coverage -> CoverageReportCard(coverage) }
+                    coverageReports.forEach { coverage ->
+                        CoverageReportCard(coverage) { start, end ->
+                            coverageRangeOverrides = coverageRangeOverrides + ("${coverage.market.name}:${coverage.sessionId}" to (start to end))
+                        }
+                    }
                 }
                 Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
                 if (repeatedSourceRecords.isEmpty()) {
@@ -218,13 +225,33 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
 
 
 @Composable
-private fun CoverageReportCard(report: CoverageReport) {
+private fun CoverageReportCard(report: CoverageReport, onRangeApply: (LocalDate, LocalDate) -> Unit) {
+    var startText by remember(report.market, report.sessionId, report.startDate) { mutableStateOf(report.startDate.toString()) }
+    var endText by remember(report.market, report.sessionId, report.endDate) { mutableStateOf(report.endDate.toString()) }
+    var rangeError by remember(report.market, report.sessionId) { mutableStateOf<String?>(null) }
     Card {
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Coverage date range (YYYY-MM-DD)", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = startText, onValueChange = { startText = it }, label = { Text("Start date") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = endText, onValueChange = { endText = it }, label = { Text("End date") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
+            Button(onClick = {
+                try {
+                    val start = LocalDate.parse(startText.trim())
+                    val end = LocalDate.parse(endText.trim())
+                    require(!end.isBefore(start)) { "End date must be on or after start date" }
+                    onRangeApply(start, end)
+                    rangeError = null
+                } catch (_: Exception) {
+                    rangeError = "Enter valid dates in YYYY-MM-DD format; end date must not be earlier."
+                }
+            }) { Text("Apply date range") }
+            rangeError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Text("Range: ${report.startDate} → ${report.endDate}")
             Text("Expected trading days: ${report.expectedTradingDays}")
             Text("Published: ${report.publishedDays} · Multi-source consensus: ${report.consensusDays} · Single-source unverified: ${report.singleSourceDays} · Conflicts: ${report.conflictDays}")
