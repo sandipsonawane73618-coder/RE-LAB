@@ -142,6 +142,60 @@ class HtmlChartImporterTest {
         assertNull(report.observations[1].normalizedResult)
     }
 
+    @Test fun importsVerifiedFirstRowsFromAllFiveLiveChartLayouts() {
+        data class Fixture(
+            val market: Market,
+            val range: String,
+            val cells: List<String>,
+            val expectedFirst: String,
+            val expectedCount: Int
+        )
+        val fixtures = listOf(
+            Fixture(
+                Market.SRIDEVI, "26/2/18 to 4/3/18",
+                listOf("200","22","660", "139","39","568", "380","19","450",
+                    "779","33","256", "* * *","**","* * *", "180","95","122", "345","20","226"),
+                "200-22-660", 7
+            ),
+            Fixture(
+                Market.SRIDEVI_NIGHT, "28/1/19 to 3/2/19",
+                listOf("130","45","230", "126","97","223", "380","18","170",
+                    "379","90","118", "114","65","799", "138","29","199", "224","80","280"),
+                "130-45-230", 7
+            ),
+            Fixture(
+                Market.KALYAN, "31/12/12 to 5/1/13",
+                listOf("799","51","155", "345","29","360", "339","50","569",
+                    "137","18","468", "369","84","680", "335","17","359"),
+                "799-51-155", 6
+            ),
+            Fixture(
+                Market.TIME_BAZAR, "30/10/17 to 5/11/17",
+                listOf("579","12","147", "467","78","170", "269","79","360",
+                    "469","90","145", "235","02","147", "478","96","169", "778","27","133"),
+                "579-12-147", 7
+            ),
+            Fixture(
+                Market.MAIN_BAZAR, "15/7/19 to 19/7/19",
+                listOf("469","97","377", "570","23","670", "237","22","589",
+                    "136","05","177", "127","02","138"),
+                "469-97-377", 5
+            )
+        )
+        fixtures.forEach { fixture ->
+            val cells = fixture.cells.joinToString("") { "<td>$it</td>" }
+            val html = "<table><tr><td>${fixture.range}</td>$cells</tr></table>"
+            val report = HtmlChartImporter.import(html, url, fixture.market, "main", retrieved)
+            assertEquals("${fixture.market} row count", fixture.expectedCount, report.observations.size)
+            assertEquals("${fixture.market} first result", fixture.expectedFirst, report.observations.first().normalizedResult)
+            assertTrue("${fixture.market} should retain source URL", report.observations.all { it.sourceUrl == url })
+            if (fixture.market == Market.SRIDEVI) {
+                assertEquals(ObservationStatus.MISSING_FROM_SOURCE, report.observations[4].status)
+                assertEquals("* * * | ** | * * *", report.observations[4].rawText)
+            }
+        }
+    }
+
     @Test fun rejectsNonHttpSchemes() {
         try {
             HtmlChartImporter.import("<table/>", "file:///tmp/chart.html", Market.SRIDEVI, "main", retrieved)
