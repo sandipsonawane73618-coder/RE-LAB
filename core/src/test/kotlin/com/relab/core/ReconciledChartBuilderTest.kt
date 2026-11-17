@@ -41,7 +41,7 @@ class ReconciledChartBuilderTest {
             listOf(
                 row("source-a", result = "668-07-449"),
                 row("source-b", result = "449-07-668"),
-                row("source-c", result = "", status = ObservationStatus.PENDING)
+                row("source-c", result = "", status = ObservationStatus.PENDING).copy(date = LocalDate.parse("2026-08-25"))
             )
         )
         assertTrue(report.records.isEmpty())
