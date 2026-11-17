@@ -18,7 +18,11 @@ data class WalkForwardRow(
     val actualOpenFamilySequence: String,
     val globalModePrediction: String,
     val weekdayModePrediction: String,
-    val previousStatePrediction: String
+    val previousStatePrediction: String,
+    val actualCloseFamilySequence: String,
+    val closeGlobalModePrediction: String,
+    val closeWeekdayModePrediction: String,
+    val closePreviousStatePrediction: String
 )
 
 data class WalkForwardMetric(val correct: Int, val evaluated: Int) {
@@ -60,7 +64,10 @@ data class MarketAnalysis(
     val walkForwardRows: List<WalkForwardRow>,
     val globalModeBaseline: WalkForwardMetric,
     val weekdayModeBaseline: WalkForwardMetric,
-    val previousStateBaseline: WalkForwardMetric
+    val previousStateBaseline: WalkForwardMetric,
+    val closeGlobalModeBaseline: WalkForwardMetric,
+    val closeWeekdayModeBaseline: WalkForwardMetric,
+    val closePreviousStateBaseline: WalkForwardMetric
 )
 
 object PatternAnalysis {
@@ -154,21 +161,32 @@ object PatternAnalysis {
         val weekdayClose = accepted.groupingBy { it.date.dayOfWeek }.eachCount()
         val rows = mutableListOf<WalkForwardRow>()
         for (i in 1 until accepted.size) {
-            val history = openSeq.take(i)
-            val historyWeekday = (0 until i)
+            val openHistory = openSeq.take(i)
+            val openWeekdayHistory = (0 until i)
                 .filter { accepted[it].date.dayOfWeek == accepted[i].date.dayOfWeek }
                 .map { openSeq[it] }
-            val globalMode = mode(history)
+            val closeHistory = closeSeq.take(i)
+            val closeWeekdayHistory = (0 until i)
+                .filter { accepted[it].date.dayOfWeek == accepted[i].date.dayOfWeek }
+                .map { closeSeq[it] }
+            val openGlobalMode = mode(openHistory)
+            val closeGlobalMode = mode(closeHistory)
             rows += WalkForwardRow(
                 date = accepted[i].date,
                 actualOpenFamilySequence = openSeq[i],
-                globalModePrediction = globalMode,
-                weekdayModePrediction = if (historyWeekday.isEmpty()) globalMode else mode(historyWeekday),
-                previousStatePrediction = openSeq[i - 1]
+                globalModePrediction = openGlobalMode,
+                weekdayModePrediction = if (openWeekdayHistory.isEmpty()) openGlobalMode else mode(openWeekdayHistory),
+                previousStatePrediction = openSeq[i - 1],
+                actualCloseFamilySequence = closeSeq[i],
+                closeGlobalModePrediction = closeGlobalMode,
+                closeWeekdayModePrediction = if (closeWeekdayHistory.isEmpty()) closeGlobalMode else mode(closeWeekdayHistory),
+                closePreviousStatePrediction = closeSeq[i - 1]
             )
         }
-        fun metric(selector: (WalkForwardRow) -> String) =
+        fun openMetric(selector: (WalkForwardRow) -> String) =
             WalkForwardMetric(rows.count { selector(it) == it.actualOpenFamilySequence }, rows.size)
+        fun closeMetric(selector: (WalkForwardRow) -> String) =
+            WalkForwardMetric(rows.count { selector(it) == it.actualCloseFamilySequence }, rows.size)
 
         val openPannas = accepted.map { it.openPanna }
         val closePannas = accepted.map { it.closePanna }
@@ -204,7 +222,10 @@ object PatternAnalysis {
             walkForwardRows = rows,
             globalModeBaseline = metric { it.globalModePrediction },
             weekdayModeBaseline = metric { it.weekdayModePrediction },
-            previousStateBaseline = metric { it.previousStatePrediction }
+            previousStateBaseline = openMetric { it.previousStatePrediction },
+            closeGlobalModeBaseline = closeMetric { it.closeGlobalModePrediction },
+            closeWeekdayModeBaseline = closeMetric { it.closeWeekdayModePrediction },
+            closePreviousStateBaseline = closeMetric { it.closePreviousStatePrediction }
         )
     }
 
@@ -218,6 +239,7 @@ object PatternAnalysis {
         List(3) { (0..9).associateWith { 0 } }, List(3) { (0..9).associateWith { 0 } },
         List(3) { emptyList() }, List(3) { emptyList() },
         emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+        WalkForwardMetric(0, 0), WalkForwardMetric(0, 0), WalkForwardMetric(0, 0),
         WalkForwardMetric(0, 0), WalkForwardMetric(0, 0), WalkForwardMetric(0, 0)
     )
 
