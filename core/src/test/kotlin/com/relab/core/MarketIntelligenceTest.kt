@@ -11,7 +11,7 @@ class MarketIntelligenceTest {
         val openAnk = open.sumOf { it.digitToInt() } % 10
         val closeAnk = close.sumOf { it.digitToInt() } % 10
         return ChartRecord(
-            market = Market.KALYAN,
+            market = Market.SRIDEVI,
             date = date,
             openPanna = open,
             jodi = "$openAnk$closeAnk",
@@ -26,11 +26,11 @@ class MarketIntelligenceTest {
         val kalyan = (0 until 12).map { i ->
             record(start.plusDays(i.toLong()), if (i % 2 == 0) "123" else "678", if (i % 2 == 0) "234" else "789")
         }
-        val other = kalyan.map { it.copy(market = Market.SRIDEVI) }
+        val other = kalyan.map { it.copy(market = Market.SRIDEVI_NIGHT) }
         val reports = MarketIntelligence.analyze(kalyan + other)
         assertEquals(2, reports.size)
-        assertEquals(Market.KALYAN, reports[0].market)
-        assertEquals(Market.SRIDEVI, reports[1].market)
+        assertEquals(Market.SRIDEVI, reports[0].market)
+        assertEquals(Market.SRIDEVI_NIGHT, reports[1].market)
         assertEquals(12, reports[0].validRecords)
         assertTrue(reports[0].topOpenTransitions.isNotEmpty())
     }
