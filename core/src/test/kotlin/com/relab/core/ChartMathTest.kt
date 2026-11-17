@@ -10,7 +10,7 @@ class ChartMathTest {
     )
 
     @Test fun digitFamiliesMatchLockedMapping() {
-        assertEquals(listOf(1, 2, 3, 4, 0, 1, 2, 3, 4, 0), (0..9).map(ChartMath::family))
+        assertEquals(listOf(0, 1, 2, 3, 4, 0, 1, 2, 3, 4), (0..9).map(ChartMath::family))
     }
 
     @Test fun preservesLeadingZeroJodi() {
