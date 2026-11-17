@@ -93,6 +93,35 @@ class ArchiveBatchExtractorTest(unittest.TestCase):
             self.assertIn("session_id", errors[0])
             self.assertIn("retrieved_at", errors[0])
 
+    def test_manifest_rejects_timezone_free_capture_timestamp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "archive.html").write_text(WEEKLY_HTML, encoding="utf-8")
+            manifest = root / "manifest.csv"
+            manifest.write_text(
+                "html_file,market,session_id,source_id,retrieved_at\\n"
+                "archive.html,KALYAN,main,archive,2026-11-17T12:00:00\\n",
+                encoding="utf-8",
+            )
+            rows, warnings, errors = extract_manifest(manifest)
+            self.assertEqual([], rows)
+            self.assertEqual([], warnings)
+            self.assertEqual(1, len(errors))
+            self.assertIn("UTC offset", errors[0])
+
+    def test_manifest_rejects_duplicate_headers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.csv"
+            manifest.write_text(
+                "html_file,market,market,session_id,source_id,retrieved_at\\n",
+                encoding="utf-8",
+            )
+            rows, warnings, errors = extract_manifest(manifest)
+            self.assertEqual([], rows)
+            self.assertEqual([], warnings)
+            self.assertEqual(1, len(errors))
+            self.assertIn("duplicate", errors[0])
+
     def test_manifest_with_bom_and_relative_paths_is_supported(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
