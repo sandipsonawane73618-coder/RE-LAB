@@ -28,7 +28,7 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         self.assertEqual("2025-12-29", rows[0]["date"])
         self.assertEqual("460-09-289", rows[0]["result"])
         self.assertEqual("PUBLISHED", rows[0]["status"])
-        self.assertEqual("**", rows[5]["raw_text"])
+        self.assertEqual("* * * | ** | * * *", rows[5]["raw_text"])
         self.assertEqual("MISSING_FROM_SOURCE", rows[5]["status"])
         self.assertEqual("", rows[5]["result"])
         self.assertEqual("2026-01-04", rows[6]["date"])
