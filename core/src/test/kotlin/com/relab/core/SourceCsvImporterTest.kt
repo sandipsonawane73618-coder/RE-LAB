@@ -10,7 +10,7 @@ class SourceCsvImporterTest {
         val csv = listOf(
             header,
             "SRIDEVI,main,2026-11-09,archive-a,2026-11-09T08:00:00Z,\"277-65-249, morning chart\",PUBLISHED,row-1,https://example.test/a,2026-11-09T08:01:00Z,277-65-249",
-            "SRIDEVI,main,2026-11-10,archive-a,2026-11-10T08:00:00Z,pending,PENDING,row-2,,,,",
+            "SRIDEVI,main,2026-11-10,archive-a,2026-11-10T08:00:00Z,pending,PENDING,row-2,,,",
             "SRIDEVI,main,2026-11-11,archive-a,2026-11-11T08:00:00Z,wrong jodi,PUBLISHED,row-3,,,277-99-249"
         ).joinToString("\n")
 
