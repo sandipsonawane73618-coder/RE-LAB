@@ -34,6 +34,9 @@ import com.relab.core.CoverageReport
 import com.relab.core.CoverageState
 import com.relab.core.HistoricalCoverageAudit
 import com.relab.core.ReconciliationState
+import com.relab.core.MarketAnalysis
+import com.relab.core.PatternAnalysis
+import com.relab.core.ReconciledChartBuilder
 import com.relab.core.SourceCsvImporter
 import com.relab.core.SourceCsvExporter
 import com.relab.core.SourceReconciliation
@@ -118,6 +121,8 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     val published = observations.count { it.status == ObservationStatus.PUBLISHED }
     val pending = observations.count { it.status == ObservationStatus.PENDING }
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
+    val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
+    val patternAnalyses = remember(chartBuild.records) { PatternAnalysis.analyze(chartBuild.records) }
     val coverageReports = remember(observations) {
         observations.groupBy { it.market to it.sessionId }
             .mapNotNull { (key, rows) ->
@@ -168,6 +173,16 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                             }
                         }
                     }
+                }
+                Text("Pattern research · consensus records only", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Analysis input: ${chartBuild.records.size} consensus records · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (patternAnalyses.isEmpty()) {
+                    Text("Import and reconcile published source records to enable pattern analysis.")
+                } else {
+                    patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
                 Text("Historical coverage audit", style = MaterialTheme.typography.titleLarge)
                 if (coverageReports.isEmpty()) {
@@ -237,6 +252,44 @@ private fun CoverageReportCard(report: CoverageReport) {
                 "No observation is not assumed to be a holiday. Source conflicts remain unresolved.",
                 style = MaterialTheme.typography.labelSmall
             )
+        }
+    }
+}
+
+
+@Composable
+private fun PatternResearchCard(analysis: MarketAnalysis) {
+    val openTop = analysis.openFamilySequences.take(3).joinToString { "${it.pattern} (${it.count})" }.ifBlank { "Not enough records" }
+    val closeTop = analysis.closeFamilySequences.take(3).joinToString { "${it.pattern} (${it.count})" }.ifBlank { "Not enough records" }
+    val openPairs = analysis.openDigitPairPositionCounts.mapIndexed { index, counts ->
+        val top = counts.take(2).joinToString { "${it.pattern} (${it.count})" }
+        "P${index + 1}: ${top.ifBlank { "—" }}"
+    }.joinToString(" · ")
+    val closePairs = analysis.closeDigitPairPositionCounts.mapIndexed { index, counts ->
+        val top = counts.take(2).joinToString { "${it.pattern} (${it.count})" }
+        "P${index + 1}: ${top.ifBlank { "—" }}"
+    }.joinToString(" · ")
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text("${analysis.market} · ${analysis.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Accepted: ${analysis.acceptedRecords} · Rejected by chart maths: ${analysis.rejectedRecords}")
+            Text("Top open family sequences: $openTop", style = MaterialTheme.typography.bodySmall)
+            Text("Top close family sequences: $closeTop", style = MaterialTheme.typography.bodySmall)
+            Text("Open digit pairs: $openPairs", style = MaterialTheme.typography.bodySmall)
+            Text("Close digit pairs: $closePairs", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "SP/DP/TP open: ${analysis.openPannaTypeCounts} · close: ${analysis.closePannaTypeCounts}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text("Repeat-gap samples · open: ${analysis.openRepeatGaps.sumOf { it.gapsInDays.size }} · close: ${analysis.closeRepeatGaps.sumOf { it.gapsInDays.size }}")
+            Text(
+                "Walk-forward baselines (open family): global ${analysis.globalModeBaseline.correct}/${analysis.globalModeBaseline.evaluated}, weekday ${analysis.weekdayModeBaseline.correct}/${analysis.weekdayModeBaseline.evaluated}, previous-state ${analysis.previousStateBaseline.correct}/${analysis.previousStateBaseline.evaluated}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text("Descriptive history only; walk-forward scores are baselines, not predictions.", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
