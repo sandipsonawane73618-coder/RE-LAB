@@ -26,7 +26,7 @@ class ResearchManifestExporterTest {
 
         assertEquals(first, second)
         assertTrue(first.contains("\"source_observation_count\": 1"))
-        assertTrue(first.contains("\"SINGLE_SOURCE_UNVERIFIED\": 1"))
+        assertTrue(first.contains("\"single_source_unverified_groups\": 1"))
         assertTrue(first.contains("\"consensus_chart_records_exported\": 0"))
         assertTrue(first.contains("\"start_date\":\"2026-11-16\""))
         assertTrue(first.contains("\"source_ledger_sha256\": \""))
