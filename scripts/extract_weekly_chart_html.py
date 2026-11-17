@@ -75,19 +75,52 @@ def _week_range(value: str) -> tuple[date, date] | None:
     return start, end
 
 
+def _result_digits(cell: str) -> str | None:
+    """Recognize supported result layouts without harvesting unrelated date/year digits."""
+    grouped = re.search(r"(?<!\d)(\d{3})[\s./-]+(\d{2})[\s./-]+(\d{3})(?!\d)", cell)
+    if grouped:
+        return "".join(grouped.groups())
+
+    compact = re.search(r"(?<!\d)(\d{8})(?!\d)", cell)
+    if compact:
+        return compact.group(1)
+
+    # Some weekly boards render the three Panna digits individually, then
+    # the two Jodi digits, then the three closing Panna digits.
+    numeric_tokens = re.findall(r"\d+", cell)
+    if [len(token) for token in numeric_tokens] == [1, 1, 1, 2, 1, 1, 1]:
+        return "".join(numeric_tokens)
+    if [len(token) for token in numeric_tokens] == [1] * 8:
+        return "".join(numeric_tokens)
+    return None
+
+
 def _cell_observation(cell: str) -> tuple[str, str]:
     """Return (status, normalized result); raw cell text is stored separately."""
     lowered = cell.casefold()
-    digits = "".join(re.findall(r"\d", cell))
-    if not digits:
-        if any(marker in lowered for marker in ("holiday", "closed", "market off")):
-            return "HOLIDAY_CLOSED", ""
-        if any(marker in lowered for marker in ("pending", "awaiting", "not declared")):
-            return "PENDING", ""
-        return "MISSING_FROM_SOURCE", ""
-    if len(digits) != 8:
+    holiday = re.search(
+        r"\b(?:holiday|closed|market\s+off|no\s+market|weekly\s+off)\b", lowered
+    ) is not None
+    pending = re.search(
+        r"\b(?:pending|awaiting|not\s+declared)\b", lowered
+    ) is not None
+    result_digits = _result_digits(cell)
+
+    # A marker accompanied by a result-shaped value is contradictory source
+    # content; retain it as MALFORMED rather than silently choosing either.
+    if holiday or pending:
+        if holiday and pending or result_digits is not None:
+            return "MALFORMED", ""
+        return ("HOLIDAY_CLOSED" if holiday else "PENDING"), ""
+
+    if result_digits is None:
+        if not re.search(r"\d", cell):
+            return "MISSING_FROM_SOURCE", ""
         return "MALFORMED", ""
-    open_panna, jodi, close_panna = digits[:3], digits[3:5], digits[5:]
+
+    open_panna, jodi, close_panna = (
+        result_digits[:3], result_digits[3:5], result_digits[5:]
+    )
     expected = f"{sum(map(int, open_panna)) % 10}{sum(map(int, close_panna)) % 10}"
     if jodi != expected:
         return "MALFORMED", ""
@@ -108,8 +141,10 @@ def extract_rows(
         raise ValueError("market must be SRIDEVI or KALYAN")
     if not session_id.strip() or not source_id.strip():
         raise ValueError("session_id and source_id are required")
-    # Validate the caller-provided capture instant; preserve its exact text in CSV.
-    datetime.fromisoformat(retrieved_at.replace("Z", "+00:00"))
+    # A capture time is an instant, so a timezone offset is mandatory.
+    captured_at = datetime.fromisoformat(retrieved_at.replace("Z", "+00:00"))
+    if captured_at.tzinfo is None or captured_at.utcoffset() is None:
+        raise ValueError("retrieved_at must include a UTC offset or Z")
 
     parser = TableRows()
     parser.feed(html)
@@ -142,7 +177,8 @@ def extract_rows(
                 "retrieved_at": retrieved_at,
                 "raw_text": raw_cell,
                 "status": status,
-                "source_record_id": f"table-row-{row_number}-day-{offset + 1}",
+                # Stable across snapshots even if unrelated table rows are inserted.
+                "source_record_id": chart_date.isoformat(),
                 "source_url": source_url,
                 "published_at": "",
                 "result": result,

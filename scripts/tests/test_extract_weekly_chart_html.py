@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from extract_weekly_chart_html import extract_rows, write_csv
+from extract_weekly_chart_html import _cell_observation, extract_rows, write_csv
 
 
 class WeeklyChartHtmlExtractorTest(unittest.TestCase):
@@ -65,6 +65,56 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         self.assertEqual("PENDING", rows[5]["status"])
         self.assertEqual("", rows[4]["result"])
         self.assertEqual("", rows[5]["result"])
+
+    def test_year_and_date_digits_do_not_turn_markers_into_results(self):
+        html = """
+        <table><tr><td>24-08-2026 to 29-08-2026</td>
+        <td>668 07 449</td><td>470 17 179</td><td>247 33 490</td>
+        <td>568 92 345</td><td>Holiday 2026</td>
+        <td>Market closed 24-08-2026</td></tr></table>
+        """
+        rows, issues = extract_rows(
+            html, market="KALYAN", session_id="main", source_id="archive",
+            retrieved_at="2026-11-17T12:00:00Z"
+        )
+        self.assertEqual([], issues)
+        self.assertEqual("HOLIDAY_CLOSED", rows[4]["status"])
+        self.assertEqual("HOLIDAY_CLOSED", rows[5]["status"])
+        self.assertEqual("", rows[4]["result"])
+        self.assertEqual("", rows[5]["result"])
+
+    def test_contradictory_marker_and_result_is_malformed(self):
+        status, result = _cell_observation("Holiday 668-07-449")
+        self.assertEqual("MALFORMED", status)
+        self.assertEqual("", result)
+
+    def test_source_record_ids_are_date_stable_when_irrelevant_rows_are_inserted(self):
+        weekly_row = (
+            "<tr><td>24-08-2026 to 29-08-2026</td>"
+            + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * 6)
+            + "</tr>"
+        )
+        common = dict(
+            market="KALYAN", session_id="main", source_id="archive",
+            retrieved_at="2026-11-17T12:00:00Z"
+        )
+        first, _ = extract_rows(f"<table>{weekly_row}</table>", **common)
+        shifted, _ = extract_rows(
+            f"<table><tr><td>Archive heading</td></tr>{weekly_row}</table>",
+            **common
+        )
+        self.assertEqual(
+            [row["source_record_id"] for row in first],
+            [row["source_record_id"] for row in shifted]
+        )
+        self.assertEqual("2026-08-24", first[0]["source_record_id"])
+
+    def test_retrieval_timestamp_requires_timezone_offset(self):
+        with self.assertRaisesRegex(ValueError, "UTC offset"):
+            extract_rows(
+                "<table></table>", market="KALYAN", session_id="main",
+                source_id="x", retrieved_at="2026-11-17T12:00:00"
+            )
 
     def test_csv_output_round_trips_commas_and_quotes_in_raw_text(self):
         rows, _ = extract_rows(

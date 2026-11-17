@@ -13,12 +13,12 @@ Optional headers:
 - `market`: `SRIDEVI` or `KALYAN`
 - `session_id`: stable identity such as `main` or `day`; never merge distinct sessions
 - `date`: ISO date, `YYYY-MM-DD`
-- `retrieved_at` and optional `published_at`: ISO-8601 instants, preferably with UTC offset/Z
+- `retrieved_at` and optional `published_at`: ISO-8601 instants; `retrieved_at` must include a UTC offset or `Z`
 - `status`: `PUBLISHED`, `PENDING`, `HOLIDAY_CLOSED`, `MISSING_FROM_SOURCE`, or `MALFORMED`
 - `raw_text`: exact source text as captured; quoted CSV fields support commas, quotes, and embedded newlines
 - `result`: optional normalized `OPN-JJ-CLN` form, e.g. `277-65-249`
 
-A published result is accepted only if its three-digit Pannas and two-digit Jodi are structurally valid and the Jodi matches both Panna digit sums. Invalid published rows are retained as `MALFORMED` observations with their raw text; they are not silently corrected. Non-published statuses never become chart results.
+A published result is accepted only if its three-digit Pannas and two-digit Jodi are structurally valid and the Jodi matches both Panna digit sums. The weekly HTML extractor recognizes grouped, compact, and digit-spaced result layouts; unrelated year/date digits are not treated as a result. Explicit holiday/pending markers remain non-results, and a marker combined with a result-shaped value is flagged as `MALFORMED`. Extracted `source_record_id` values are based on chart date so inserting unrelated rows into a later page snapshot does not change the record identity. Invalid published rows are retained as `MALFORMED` observations with their raw text; they are not silently corrected. Non-published statuses never become chart results.
 
 Rows that cannot be parsed (for example, invalid dates or timestamps) are reported as row-numbered import issues. Valid rows in the same file are still returned.
 
