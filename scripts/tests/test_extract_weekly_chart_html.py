@@ -78,7 +78,7 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
         <td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
-        <td>568</td><td>92</td><td>345</td><td>HOLIDAY</td><td>Pending</td></tr></table>
+        <td>568</td><td>92</td><td>345</td><td>HOLIDAY</td><td></td><td></td><td>Pending</td><td></td><td></td></tr></table>
         """
         rows, issues = extract_rows(
             html, market="KALYAN", session_id="main", source_id="archive",
@@ -94,8 +94,8 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
         html = """
         <table><tr><td>24-08-2026 to 29-08-2026</td>
         <td>668</td><td>07</td><td>449</td><td>470</td><td>17</td><td>179</td><td>247</td><td>33</td><td>490</td>
-        <td>568</td><td>92</td><td>345</td><td>Holiday 2026</td>
-        <td>Market closed 24-08-2026</td></tr></table>
+        <td>568</td><td>92</td><td>345</td><td>Holiday 2026</td><td></td><td></td>
+        <td>Market closed 24-08-2026</td><td></td><td></td></tr></table>
         """
         rows, issues = extract_rows(
             html, market="KALYAN", session_id="main", source_id="archive",
@@ -143,7 +143,7 @@ class WeeklyChartHtmlExtractorTest(unittest.TestCase):
     def test_csv_output_round_trips_commas_and_quotes_in_raw_text(self):
         rows, _ = extract_rows(
             "<table><tr><td>24-08-2026 to 29-08-2026</td>"
-            + "".join(f"<td>{cell}</td>" for cell in ["668 07 449"] * 6)
+            + "".join(f"<td>{cell[:3]}</td><td>{cell[3:5]}</td><td>{cell[5:]}</td>" for cell in ["66807449"] * 6)
             + "</tr></table>",
             market="KALYAN", session_id="main", source_id="fix",
             retrieved_at="2026-11-17T12:00:00Z"
