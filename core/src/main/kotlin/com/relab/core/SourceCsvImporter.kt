@@ -93,7 +93,7 @@ object SourceCsvImporter {
                     sourceUrl = value(row, "source_url").trim().ifEmpty { null },
                     retrievedAt = retrievedAt,
                     publishedAt = publishedAt,
-                    rawText = rawText.ifBlank { "[empty raw text]" },
+                    rawText = rawText,
                     normalizedResult = result,
                     status = status
                 )
