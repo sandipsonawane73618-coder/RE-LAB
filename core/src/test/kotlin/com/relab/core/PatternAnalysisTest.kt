@@ -47,6 +47,11 @@ class PatternAnalysisTest {
         assertEquals(LocalDate.of(2026, 11, 10), result.walkForwardRows[0].date)
         assertEquals("222", result.walkForwardRows[0].globalModePrediction)
         assertEquals("023", result.walkForwardRows[0].actualOpenFamilySequence)
+        assertEquals("244", result.walkForwardRows[0].actualCloseFamilySequence)
+        assertEquals("244", result.walkForwardRows[0].closeGlobalModePrediction)
+        assertEquals(2, result.closeGlobalModeBaseline.evaluated)
+        assertEquals(2, result.closeWeekdayModeBaseline.evaluated)
+        assertEquals(2, result.closePreviousStateBaseline.evaluated)
     }
 
     @Test fun rejectsUnreconciledDuplicateDates() {
