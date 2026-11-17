@@ -182,14 +182,14 @@ def extract_rows(
             combined = " | ".join(parts)
             if any("*" in part for part in parts):
                 status, result = "MISSING_FROM_SOURCE", ""
-            elif re.search(r"\\b(?:holiday|closed|market\\s+off|no\\s+market|weekly\\s+off|pending|awaiting|not\\s+declared)\\b", combined, re.IGNORECASE):
+            elif re.search(r"\b(?:holiday|closed|market\s+off|no\s+market|weekly\s+off|pending|awaiting|not\s+declared)\b", combined, re.IGNORECASE):
                 status, result = _cell_observation(combined)
             elif not any(part.strip() for part in parts):
                 status, result = "MISSING_FROM_SOURCE", ""
             else:
-                open_digits = re.sub(r"\\D", "", open_value)
-                jodi_digits = re.sub(r"\\D", "", jodi_value)
-                close_digits = re.sub(r"\\D", "", close_value)
+                open_digits = re.sub(r"\D", "", open_value)
+                jodi_digits = re.sub(r"\D", "", jodi_value)
+                close_digits = re.sub(r"\D", "", close_value)
                 if len(open_digits) == 3 and len(jodi_digits) == 2 and len(close_digits) == 3:
                     status, result = _cell_observation(
                         f"{open_digits} {jodi_digits} {close_digits}"
