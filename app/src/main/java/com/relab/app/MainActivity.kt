@@ -30,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.relab.core.ObservationStatus
+import com.relab.core.CoverageReport
+import com.relab.core.CoverageState
+import com.relab.core.HistoricalCoverageAudit
 import com.relab.core.ReconciliationState
 import com.relab.core.SourceCsvImporter
 import com.relab.core.SourceReconciliation
@@ -102,6 +105,20 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
     val published = observations.count { it.status == ObservationStatus.PUBLISHED }
     val pending = observations.count { it.status == ObservationStatus.PENDING }
     val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
+    val coverageReports = remember(observations) {
+        observations.groupBy { it.market to it.sessionId }
+            .mapNotNull { (key, rows) ->
+                val dates = rows.map { it.date }
+                if (dates.isEmpty()) null else HistoricalCoverageAudit.analyze(
+                    market = key.first,
+                    sessionId = key.second,
+                    startDate = dates.minOrNull()!!,
+                    endDate = dates.maxOrNull()!!,
+                    observations = rows
+                )
+            }
+            .sortedWith(compareBy<CoverageReport> { it.market.name }.thenBy { it.sessionId })
+    }
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -135,6 +152,12 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                         }
                     }
                 }
+                Text("Historical coverage audit", style = MaterialTheme.typography.titleLarge)
+                if (coverageReports.isEmpty()) {
+                    Text("Coverage audit will appear after source data is imported.")
+                } else {
+                    coverageReports.forEach { coverage -> CoverageReportCard(coverage) }
+                }
                 Text("Recent source observations", style = MaterialTheme.typography.titleLarge)
                 if (groups.isEmpty()) {
                     Text("No source records loaded.")
@@ -158,6 +181,45 @@ private fun RelabHome(initialCsv: String?, initialObservations: List<com.relab.c
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
             }
+        }
+    }
+}
+
+
+@Composable
+private fun CoverageReportCard(report: CoverageReport) {
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Range: ${report.startDate} → ${report.endDate}")
+            Text("Expected trading days: ${report.expectedTradingDays}")
+            Text("Published: ${report.publishedDays} · Conflicts: ${report.conflictDays}")
+            Text("Pending: ${report.pendingDays} · Holidays: ${report.holidayDays}")
+            Text("Source missing: ${report.sourceMissingDays} · No observation: ${report.noObservationDays}")
+            Text("Latest coverage records", style = MaterialTheme.typography.titleSmall)
+            report.days.takeLast(10).asReversed().forEach { day ->
+                val stateLabel = when (day.state) {
+                    CoverageState.NO_OBSERVATION -> "NO OBSERVATION"
+                    CoverageState.HOLIDAY_REPORTED -> "HOLIDAY REPORTED"
+                    CoverageState.PENDING -> "PENDING"
+                    CoverageState.SOURCE_MISSING -> "SOURCE MISSING"
+                    CoverageState.PUBLISHED -> "PUBLISHED"
+                    CoverageState.CONFLICT -> "CONFLICT"
+                }
+                val resultLabel = when {
+                    day.distinctPublishedResults.size > 1 -> day.distinctPublishedResults.joinToString(" / ")
+                    day.distinctPublishedResults.size == 1 -> day.distinctPublishedResults.single()
+                    else -> "${day.observationCount} source observations"
+                }
+                Text("${day.date} · $stateLabel · $resultLabel", style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                "No observation is not assumed to be a holiday. Source conflicts remain unresolved.",
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
