@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.relab.core.Market
 import com.relab.core.ObservationStatus
 import com.relab.core.SourceObservation
+import com.relab.core.SourceObservationMerger
 import java.time.Instant
 import java.time.LocalDate
 
@@ -89,9 +90,46 @@ class LocalObservationDatabase(context: Context) :
         }
     }
 
-    fun loadObservations(): List<SourceObservation> {
+    /**
+     * Appends another CSV import. Existing exact observations are not duplicated,
+     * while distinct source values and separate retrieval snapshots are retained.
+     */
+    fun appendDataset(csv: String, incoming: List<SourceObservation>): List<SourceObservation> {
+        val database = writableDatabase
+        database.beginTransaction()
+        try {
+            val existing = readObservations(database)
+            val merged = SourceObservationMerger.append(existing, incoming)
+            merged.observations.drop(existing.size).forEach { observation ->
+                val values = ContentValues().apply {
+                    put("market", observation.market.name)
+                    put("session_id", observation.sessionId)
+                    put("chart_date", observation.date.toString())
+                    put("source_id", observation.sourceId)
+                    put("source_record_id", observation.sourceRecordId)
+                    put("source_url", observation.sourceUrl)
+                    put("retrieved_at", observation.retrievedAt.toString())
+                    put("published_at", observation.publishedAt?.toString())
+                    put("raw_text", observation.rawText)
+                    put("normalized_result", observation.normalizedResult)
+                    put("status", observation.status.name)
+                }
+                database.insertOrThrow(TABLE_OBSERVATIONS, null, values)
+            }
+            putMetadata(database, KEY_SOURCE_CSV, csv)
+            putMetadata(database, KEY_IMPORTED_AT, Instant.now().toString())
+            database.setTransactionSuccessful()
+            return merged.observations
+        } finally {
+            database.endTransaction()
+        }
+    }
+
+    fun loadObservations(): List<SourceObservation> = readObservations(readableDatabase)
+
+    private fun readObservations(database: SQLiteDatabase): List<SourceObservation> {
         val result = mutableListOf<SourceObservation>()
-        readableDatabase.query(
+        database.query(
             TABLE_OBSERVATIONS,
             arrayOf(
                 "market", "session_id", "chart_date", "source_id", "source_record_id",
