@@ -39,7 +39,13 @@ def extract_manifest(
             reader = csv.DictReader(handle)
             if reader.fieldnames is None:
                 return [], [], ["manifest is empty or has no CSV header"]
-            headers = [name.strip() for name in reader.fieldnames]
+
+            # Normalize harmless surrounding whitespace once, before DictReader
+            # creates row dictionaries. This also catches duplicates such as
+            # "market" and " market " instead of treating one as a missing key.
+            headers = [name.strip() if name is not None else "" for name in reader.fieldnames]
+            if any(not name for name in headers):
+                return [], [], ["manifest contains an empty column name"]
             if len(headers) != len(set(headers)):
                 return [], [], ["manifest contains duplicate column names"]
             missing = [field for field in MANIFEST_FIELDS if field not in headers]
@@ -47,6 +53,7 @@ def extract_manifest(
                 return [], [], [
                     "manifest is missing required columns: " + ", ".join(missing)
                 ]
+            reader.fieldnames = headers
 
             snapshot_count = 0
             for row_number, row in enumerate(reader, start=2):
@@ -99,6 +106,7 @@ def extract_manifest(
         errors.append(f"cannot read manifest {manifest_path}: {error}")
 
     return observations, warnings, errors
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
