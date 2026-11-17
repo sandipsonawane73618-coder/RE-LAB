@@ -28,7 +28,6 @@ data class SourceObservation(
     init {
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(sourceId.isNotBlank()) { "Source ID is required" }
-        require(rawText.isNotBlank()) { "Raw source text is required" }
         require(status != ObservationStatus.PUBLISHED || !normalizedResult.isNullOrBlank()) {
             "Published observations require a normalized result"
         }
