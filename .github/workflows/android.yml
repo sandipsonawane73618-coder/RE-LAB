@@ -65,7 +65,7 @@ jobs:
       - name: Extract captured weekly charts into source CSV
         run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
       - name: Audit extracted market CSV
-        run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/canonical_audit.json
+        run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/canonical_audit.json --eligible-output data/derived/canonical_eligible_observations.csv
       - name: Upload immutable HTML snapshots and metadata
         if: always()
         uses: actions/upload-artifact@v4
