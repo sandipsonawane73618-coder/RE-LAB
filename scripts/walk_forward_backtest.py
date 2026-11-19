@@ -62,23 +62,13 @@ CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
 
 
 def rank_pannas(
-    history: list[dict], target_date: date, side: str, actual: str, limit: int = 10
+    exact_counts: Counter, family_counts: Counter, weekday_counts: Counter,
+    transitions: Counter, previous_state: str, actual: str, limit: int = 10
 ) -> tuple[list[str], int]:
-    values = [row[side] for row in history]
-    families = [family_sequence(value) for value in values]
-    exact_counts = Counter(values)
-    family_counts = Counter(families)
-    weekday_counts = Counter(
-        families[index] for index, row in enumerate(history)
-        if row["date"].weekday() == target_date.weekday()
-    )
-    transitions = Counter(zip(families, families[1:]))
-    previous_state = families[-1]
     max_exact = max(exact_counts.values(), default=1)
     max_family = max(family_counts.values(), default=1)
     max_weekday = max(weekday_counts.values(), default=1)
     max_transition = max(transitions.values(), default=1)
-
     scored = []
     actual_item = None
     for panna in CANDIDATES:
@@ -102,11 +92,11 @@ def rank_pannas(
     return [item[0] for item in top], actual_rank
 
 
-def rank_exact_frequency(history: list[dict], side: str, actual: str) -> int:
-    counts = Counter(row[side] for row in history)
-    actual_count = counts[actual]
+def rank_exact_frequency(exact_counts: Counter, actual: str) -> int:
+    actual_count = exact_counts[actual]
     return 1 + sum(
-        counts[panna] > actual_count or (counts[panna] == actual_count and panna < actual)
+        exact_counts[panna] > actual_count
+        or (exact_counts[panna] == actual_count and panna < actual)
         for panna in CANDIDATES
     )
 
@@ -139,18 +129,36 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
     for session_id, session_rows in sorted(by_session.items()):
         session_rows.sort(key=lambda row: row["date"])
         for side in SIDES:
-            history: list[dict] = []
+            exact_counts = Counter()
+            family_counts = Counter()
+            weekday_family_counts = {weekday: Counter() for weekday in range(7)}
+            transitions = Counter()
+            family_history: list[str] = []
+            history_count = 0
             ranks: list[int] = []
             baseline_ranks: list[int] = []
             for target in session_rows:
                 # Evaluate first, then append target: no same-day or future leakage.
-                if len(history) >= minimum_history:
+                if history_count >= minimum_history:
                     actual = target[side]
-                    _, rank = rank_pannas(history, target["date"], side, actual, 10)
-                    baseline_rank = rank_exact_frequency(history, side, actual)
+                    _, rank = rank_pannas(
+                        exact_counts, family_counts,
+                        weekday_family_counts[target["date"].weekday()],
+                        transitions, family_history[-1], actual, 10
+                    )
+                    baseline_rank = rank_exact_frequency(exact_counts, actual)
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
-                history.append(target)
+
+                panna = target[side]
+                family = family_sequence(panna)
+                if family_history:
+                    transitions[(family_history[-1], family)] += 1
+                family_history.append(family)
+                exact_counts[panna] += 1
+                family_counts[family] += 1
+                weekday_family_counts[target["date"].weekday()][family] += 1
+                history_count += 1
             result = _metrics(ranks, ranks, [], baseline_ranks)
             result.update({
                 "market": market,
