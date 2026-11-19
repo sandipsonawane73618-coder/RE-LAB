@@ -582,7 +582,7 @@ private fun RelabHome(
                 Card(colors = CardDefaults.cardColors()) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Local dataset", style = MaterialTheme.typography.titleLarge)
-                        Text("Source observations: ${observations.size}")
+                        Text("Enabled-market observations: ${activeObservations.size} · ignored legacy-market rows: ${(observations.size - activeObservations.size).coerceAtLeast(0)}")
                         Text("Published: $published   Pending: $pending")
                         Text("Malformed rows: $malformed   Conflicting dates: $conflicts")
                         Text("Reconciled date groups: ${groups.size}")
@@ -630,7 +630,7 @@ private fun RelabHome(
                 }
                 Text("Reverse Engineering Model · evidence-ranked research", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Combines exact panna, digit-family DNA (1/6, 2/7, 3/8, 4/9, 5/0), weekday evidence, previous-state transitions and lagged cross-market conditions. Uses at least 30 earlier valid rows and strict chronological training.",
+                    "Exploratory model uses valid consensus + single-source rows (single-source remains unverified); conflicts, pending and malformed rows are excluded. Combines exact panna, digit-family DNA (1/6, 2/7, 3/8, 4/9, 5/0), Ank, digit positions, SP/DP/TP, reverse panna, weekday, transitions and lagged cross-market conditions. Requires 30 earlier valid rows.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (snapshot == null) {
