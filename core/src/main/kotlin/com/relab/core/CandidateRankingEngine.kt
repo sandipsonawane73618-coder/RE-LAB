@@ -66,13 +66,14 @@ object CandidateRankingEngine {
         side: PannaSide,
         limit: Int = 10,
         minimumHistory: Int = 5,
-        allowSingleSourceExploration: Boolean = false
+        allowSingleSourceExploration: Boolean = false,
+        prebuiltRecords: List<ChartRecord>? = null
     ): CandidateRanking {
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
         require(minimumHistory >= 1) { "Minimum history must be at least 1" }
 
-        val sourceRecords = if (allowSingleSourceExploration) {
+        val sourceRecords = prebuiltRecords ?: if (allowSingleSourceExploration) {
             ReconciledChartBuilder.buildExploratoryRecords(observations)
         } else {
             ReconciledChartBuilder.build(observations).records

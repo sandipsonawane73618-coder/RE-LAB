@@ -159,29 +159,52 @@ object PatternAnalysis {
 
         val weekdayOpen = accepted.groupingBy { it.date.dayOfWeek }.eachCount()
         val weekdayClose = accepted.groupingBy { it.date.dayOfWeek }.eachCount()
+        // Incremental walk-forward counts avoid repeatedly copying and rescanning
+        // every earlier row (the previous implementation was quadratic per market).
+        fun addCount(counts: MutableMap<String, Int>, value: String) {
+            counts[value] = (counts[value] ?: 0) + 1
+        }
+        fun modeFromCounts(counts: Map<String, Int>): String =
+            counts.entries.sortedWith(
+                compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }
+            ).first().key
+
+        val openGlobalCounts = mutableMapOf<String, Int>()
+        val closeGlobalCounts = mutableMapOf<String, Int>()
+        val openWeekdayCountsByDay = mutableMapOf<java.time.DayOfWeek, MutableMap<String, Int>>()
+        val closeWeekdayCountsByDay = mutableMapOf<java.time.DayOfWeek, MutableMap<String, Int>>()
+        if (accepted.isNotEmpty()) {
+            val firstDay = accepted[0].date.dayOfWeek
+            addCount(openGlobalCounts, openSeq[0])
+            addCount(closeGlobalCounts, closeSeq[0])
+            addCount(openWeekdayCountsByDay.getOrPut(firstDay) { mutableMapOf() }, openSeq[0])
+            addCount(closeWeekdayCountsByDay.getOrPut(firstDay) { mutableMapOf() }, closeSeq[0])
+        }
+
         val rows = mutableListOf<WalkForwardRow>()
         for (i in 1 until accepted.size) {
-            val openHistory = openSeq.take(i)
-            val openWeekdayHistory = (0 until i)
-                .filter { accepted[it].date.dayOfWeek == accepted[i].date.dayOfWeek }
-                .map { openSeq[it] }
-            val closeHistory = closeSeq.take(i)
-            val closeWeekdayHistory = (0 until i)
-                .filter { accepted[it].date.dayOfWeek == accepted[i].date.dayOfWeek }
-                .map { closeSeq[it] }
-            val openGlobalMode = mode(openHistory)
-            val closeGlobalMode = mode(closeHistory)
+            val day = accepted[i].date.dayOfWeek
+            val openGlobalMode = modeFromCounts(openGlobalCounts)
+            val closeGlobalMode = modeFromCounts(closeGlobalCounts)
+            val openWeekdayCounts = openWeekdayCountsByDay[day]
+            val closeWeekdayCounts = closeWeekdayCountsByDay[day]
             rows += WalkForwardRow(
                 date = accepted[i].date,
                 actualOpenFamilySequence = openSeq[i],
                 globalModePrediction = openGlobalMode,
-                weekdayModePrediction = if (openWeekdayHistory.isEmpty()) openGlobalMode else mode(openWeekdayHistory),
+                weekdayModePrediction = if (openWeekdayCounts.isNullOrEmpty()) openGlobalMode else modeFromCounts(openWeekdayCounts),
                 previousStatePrediction = openSeq[i - 1],
                 actualCloseFamilySequence = closeSeq[i],
                 closeGlobalModePrediction = closeGlobalMode,
-                closeWeekdayModePrediction = if (closeWeekdayHistory.isEmpty()) closeGlobalMode else mode(closeWeekdayHistory),
+                closeWeekdayModePrediction = if (closeWeekdayCounts.isNullOrEmpty()) closeGlobalMode else modeFromCounts(closeWeekdayCounts),
                 closePreviousStatePrediction = closeSeq[i - 1]
             )
+            // The current day's actual values become training data only after its
+            // prediction is emitted, preserving strict chronological no-leakage.
+            addCount(openGlobalCounts, openSeq[i])
+            addCount(closeGlobalCounts, closeSeq[i])
+            addCount(openWeekdayCountsByDay.getOrPut(day) { mutableMapOf() }, openSeq[i])
+            addCount(closeWeekdayCountsByDay.getOrPut(day) { mutableMapOf() }, closeSeq[i])
         }
         fun openMetric(selector: (WalkForwardRow) -> String) =
             WalkForwardMetric(rows.count { selector(it) == it.actualOpenFamilySequence }, rows.size)
