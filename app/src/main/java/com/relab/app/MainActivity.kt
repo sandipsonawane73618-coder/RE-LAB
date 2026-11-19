@@ -147,16 +147,17 @@ private fun RelabHome(
     onClearCsv: () -> Unit
 ) {
     val context = LocalContext.current
-    LaunchedEffect(observations.isEmpty()) {
-        if (observations.isEmpty() && !linkBusy) {
-            importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
-        }
-    }
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var chartUrl by remember { mutableStateOf("") }
     var linkBusy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(observations.isEmpty()) {
+        if (observations.isEmpty() && !linkBusy) {
+            importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
+        }
+    }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
