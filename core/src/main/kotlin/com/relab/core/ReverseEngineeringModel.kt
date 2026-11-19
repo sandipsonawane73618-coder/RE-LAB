@@ -140,7 +140,7 @@ object ReverseEngineeringModel {
         val historicalFamilies = historicalPannas.map(::familyOf)
         val exactCounts = historicalPannas.groupingBy { it }.eachCount()
         val familyCounts = historicalFamilies.groupingBy { it }.eachCount()
-        val ankCounts = historicalPannas.groupingBy { it.sumOf(Char::digitToInt) % 10 }.eachCount()
+        val ankCounts = historicalPannas.groupingBy { it.sumOf { it.digitToInt() } % 10 }.eachCount()
         val positionCounts = (0..2).map { position ->
             historicalPannas.groupingBy { it[position].digitToInt() }.eachCount()
         }
@@ -237,7 +237,7 @@ object ReverseEngineeringModel {
                 (history.size + 1000.0 * smoothingAlpha)
             val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
                 (history.size + 125.0 * smoothingAlpha)
-            val ank = panna.sumOf(Char::digitToInt) % 10
+            val ank = panna.sumOf { it.digitToInt() } % 10
             val ankProbability = ((ankCounts[ank] ?: 0) + smoothingAlpha) /
                 (history.size + 10.0 * smoothingAlpha)
             val positionProbability = (0..2).map { position ->
@@ -372,7 +372,7 @@ object ReverseEngineeringModel {
             val first = ranking.candidates.first()
             if (first.panna == actualPanna) top1Exact++
             if (ranking.candidates.any { it.panna == actualPanna }) top10Exact++
-            val actualAnk = actualPanna.sumOf(Char::digitToInt) % 10
+            val actualAnk = actualPanna.sumOf { it.digitToInt() } % 10
             if (first.ank == actualAnk) top1Ank++
             if (ranking.candidates.any { it.ank == actualAnk }) top10Ank++
             if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
