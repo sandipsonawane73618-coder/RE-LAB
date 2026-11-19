@@ -893,6 +893,10 @@ private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
                     Text("${index + 1}. ${candidate.panna} · family ${candidate.familySequence} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}/100")
                     Text("Exact ${evidence(candidate.exactPannaEvidence)} · Family ${evidence(candidate.familyEvidence)} · Weekday ${evidence(candidate.weekdayEvidence)} · Transition ${evidence(candidate.previousTransitionEvidence)} · Cross-market ${evidence(candidate.crossMarketConditionalEvidence)}", style = MaterialTheme.typography.bodySmall)
                 }
+                Text("Top family sequences (separate 125-state ranking)", style = MaterialTheme.typography.labelLarge)
+                set.open.familyCandidates.take(5).forEachIndexed { index, family ->
+                    Text("${index + 1}. ${family.familySequence} · evidence ${"%.1f".format(family.score)}/100 · history ${family.historicalCount} · weekday ${family.weekdayCount ?: 0} · transition ${family.previousTransitionCount ?: 0}")
+                }
             }
 
             Text("Close-side reverse model", style = MaterialTheme.typography.titleSmall)
@@ -904,6 +908,10 @@ private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
                     Text("${index + 1}. ${candidate.panna} · family ${candidate.familySequence} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}/100")
                     Text("Exact ${evidence(candidate.exactPannaEvidence)} · Family ${evidence(candidate.familyEvidence)} · Weekday ${evidence(candidate.weekdayEvidence)} · Transition ${evidence(candidate.previousTransitionEvidence)} · Cross-market ${evidence(candidate.crossMarketConditionalEvidence)}", style = MaterialTheme.typography.bodySmall)
                 }
+                Text("Top family sequences (separate 125-state ranking)", style = MaterialTheme.typography.labelLarge)
+                set.close.familyCandidates.take(5).forEachIndexed { index, family ->
+                    Text("${index + 1}. ${family.familySequence} · evidence ${"%.1f".format(family.score)}/100 · history ${family.historicalCount} · weekday ${family.weekdayCount ?: 0} · transition ${family.previousTransitionCount ?: 0}")
+                }
             }
 
             Text("Derived Jodi candidates", style = MaterialTheme.typography.titleSmall)
@@ -913,8 +921,8 @@ private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
             }
 
             Text("Chronological walk-forward validation", style = MaterialTheme.typography.titleSmall)
-            Text("Open: evaluated ${set.openBacktest.evaluatedTargets}, abstained ${set.openBacktest.abstainedTargets}/${set.openBacktest.requestedTargets} · exact top-1 ${set.openBacktest.top1ExactHits} · exact top-10 ${set.openBacktest.top10ExactHits} · family top-1 ${set.openBacktest.top1FamilyHits} · family top-10 ${set.openBacktest.top10FamilyHits} · prior-mode family ${set.openBacktest.priorModeFamilyHits}", style = MaterialTheme.typography.bodySmall)
-            Text("Close: evaluated ${set.closeBacktest.evaluatedTargets}, abstained ${set.closeBacktest.abstainedTargets}/${set.closeBacktest.requestedTargets} · exact top-1 ${set.closeBacktest.top1ExactHits} · exact top-10 ${set.closeBacktest.top10ExactHits} · family top-1 ${set.closeBacktest.top1FamilyHits} · family top-10 ${set.closeBacktest.top10FamilyHits} · prior-mode family ${set.closeBacktest.priorModeFamilyHits}", style = MaterialTheme.typography.bodySmall)
+            Text("Open: n=${set.openBacktest.evaluatedTargets}, abstained=${set.openBacktest.abstainedTargets}/${set.openBacktest.requestedTargets} · exact top-1 ${set.openBacktest.top1ExactHits} (${pct(set.openBacktest.top1ExactRate)}) · exact top-10 ${set.openBacktest.top10ExactHits} (${pct(set.openBacktest.top10ExactRate)}) · family top-1 ${set.openBacktest.top1FamilyHits} (${pct(set.openBacktest.top1FamilyRate)}) · family top-10 ${set.openBacktest.top10FamilyHits} (${pct(set.openBacktest.top10FamilyRate)}) · prior-mode ${set.openBacktest.priorModeFamilyHits} (${pct(set.openBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
+            Text("Close: n=${set.closeBacktest.evaluatedTargets}, abstained=${set.closeBacktest.abstainedTargets}/${set.closeBacktest.requestedTargets} · exact top-1 ${set.closeBacktest.top1ExactHits} (${pct(set.closeBacktest.top1ExactRate)}) · exact top-10 ${set.closeBacktest.top10ExactHits} (${pct(set.closeBacktest.top10ExactRate)}) · family top-1 ${set.closeBacktest.top1FamilyHits} (${pct(set.closeBacktest.top1FamilyRate)}) · family top-10 ${set.closeBacktest.top10FamilyHits} (${pct(set.closeBacktest.top10FamilyRate)}) · prior-mode ${set.closeBacktest.priorModeFamilyHits} (${pct(set.closeBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
             Text(
                 "Hit rates are historical out-of-sample measurements, not future guarantees. Relative evidence scores are not probabilities. Source verification status is shown in the reconciliation audit.",
                 style = MaterialTheme.typography.labelSmall
