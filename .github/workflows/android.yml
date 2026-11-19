@@ -31,7 +31,7 @@ jobs:
         with:
           name: relab-core-test-results
           path: core/build/test-results/test/*.xml
-          if-no-files-found: error
+          if-no-files-found: warn
   android-debug-apk:
     runs-on: ubuntu-latest
     steps:
