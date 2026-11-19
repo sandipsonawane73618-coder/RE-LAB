@@ -137,7 +137,7 @@ def extract_rows(
     source_url: str = "",
 ) -> tuple[list[dict[str, str]], list[str]]:
     market = market.upper()
-    supported_markets = {"SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR"}
+    supported_markets = {"SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR", "MILAN_DAY", "MILAN_NIGHT", "RAJDHANI_DAY", "RAJDHANI_NIGHT"}
     if market not in supported_markets:
         raise ValueError("market must be one of: " + ", ".join(sorted(supported_markets)))
     if not session_id.strip() or not source_id.strip():
@@ -154,6 +154,8 @@ def extract_rows(
     allowed_day_counts = {
         "SRIDEVI": {7}, "SRIDEVI_NIGHT": {7}, "KALYAN": {6},
         "TIME_BAZAR": {7}, "MAIN_BAZAR": {5},
+        "MILAN_DAY": {7}, "MILAN_NIGHT": {6},
+        "RAJDHANI_DAY": {6}, "RAJDHANI_NIGHT": {5},
     }[market]
 
     for row_number, cells in enumerate(parser.rows, start=1):
@@ -225,7 +227,7 @@ def write_csv(rows: Iterable[dict[str, str]], output) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("html_file", type=Path)
-    parser.add_argument("--market", required=True, choices=("SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR"))
+    parser.add_argument("--market", required=True, choices=("SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "TIME_BAZAR", "MAIN_BAZAR", "MILAN_DAY", "MILAN_NIGHT", "RAJDHANI_DAY", "RAJDHANI_NIGHT"))
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--source-id", required=True)
     parser.add_argument("--retrieved-at", required=True, help="ISO-8601 instant, e.g. 2026-11-17T12:00:00+05:30")
