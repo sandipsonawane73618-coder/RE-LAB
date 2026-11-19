@@ -212,6 +212,7 @@ private fun RelabHome(
     }
     val patternAnalyses = remember(researchRecords) { PatternAnalysis.analyze(researchRecords) }
     val intelligenceReports = remember(researchRecords) { com.relab.core.MarketIntelligence.analyze(researchRecords) }
+    val crossMarketReports = remember(researchRecords) { com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords) }
     val candidateSets = remember(observations) {
         researchRecords.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
             val target = LocalDate.now()
@@ -488,6 +489,16 @@ private fun RelabHome(
                     Text("No valid published rows available for pattern analysis yet. Check the imported chart rows and source format.")
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
+                }
+                Text("Cross-Market Reverse Engineering · five enabled markets", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Compares matching dates and sessions across Sridevi, Sridevi Night, Kalyan, Main Bazar and Time Bazar. Historical co-occurrence only; not a prediction or causal claim.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (crossMarketReports.isEmpty()) {
+                    Text("Cross-market comparison will appear when at least two enabled markets have valid records for the same date and session.")
+                } else {
+                    crossMarketReports.forEach { CrossMarketResearchCard(it) }
                 }
                 Text("Market Intelligence · market-specific behaviour", style = MaterialTheme.typography.titleLarge)
                 Text(
