@@ -871,12 +871,16 @@ private fun importAllCanonicalCharts(
                 }
             }
         }
+        // SQLite merge + bulk insert can involve thousands of observations. Keep it
+        // off the main thread; only publish the completed immutable snapshot to Compose.
+        val saveResult = if (imported.isEmpty()) null else runCatching { save(imported) }
         mainHandler.post {
             try {
                 if (imported.isEmpty()) {
                     updateMessage("No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " + outcomes.joinToString(" | "))
                 } else {
-                    val merged = save(imported)
+                    val merged = saveResult?.getOrThrow()
+                        ?: error("Chart rows were fetched but local save did not complete")
                     updateObservations(merged)
                     updateMessage("Automatic 5-market fetch complete. Imported ${imported.size} observations; saved total ${merged.size}. " + outcomes.joinToString(" | "))
                 }
