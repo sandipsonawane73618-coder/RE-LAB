@@ -32,7 +32,7 @@ class AuditSourceCsvTests(unittest.TestCase):
         self.assertEqual(0, report["markets"]["SRIDEVI_NIGHT"]["rows"])
 
     def test_panna_jodi_math_preserves_leading_zeroes(self):
-        self.assertTrue(audit_source_csv.valid_result("001-12-009"))
+        self.assertTrue(audit_source_csv.valid_result("001-19-009"))
         self.assertFalse(audit_source_csv.valid_result("001-00-009"))
         self.assertFalse(audit_source_csv.valid_result("1-12-009"))
 
