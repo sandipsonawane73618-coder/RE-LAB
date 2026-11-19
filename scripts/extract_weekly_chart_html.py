@@ -164,7 +164,8 @@ def extract_rows(
         # Use the Monday start plus the actual three-cell groups as the date axis,
         # and retain any disagreement as a source-quality warning.
         cell_total = len(cells) - 1
-        if start.weekday() != 0 or end < start:
+        range_days = (end - start).days + 1
+        if start.weekday() != 0 or not 1 <= range_days <= 7:
             issues.append(f"row {row_number}: invalid Monday-start weekly range for {market}: {cells[0]}")
             continue
         if cell_total % 3 != 0 or not 1 <= cell_total // 3 <= 7:
@@ -174,11 +175,16 @@ def extract_rows(
             )
             continue
         daily_groups = [cells[index:index + 3] for index in range(1, len(cells), 3)]
-        range_days = (end - start).days + 1
+        if len(daily_groups) > range_days:
+            issues.append(
+                f"row {row_number}: date range spans {range_days} days but has "
+                f"{len(daily_groups)} result groups; row skipped to avoid shifting dates"
+            )
+            continue
         if range_days != len(daily_groups):
             issues.append(
                 f"row {row_number}: date range spans {range_days} days but has "
-                f"{len(daily_groups)} result groups; dates mapped from Monday start"
+                f"{len(daily_groups)} result groups; trailing dates treated as non-result days"
             )
         for offset, parts in enumerate(daily_groups):
             chart_date = start + timedelta(days=offset)
