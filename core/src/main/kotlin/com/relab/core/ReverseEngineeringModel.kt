@@ -4,6 +4,8 @@ import java.time.LocalDate
 
 enum class ReverseEngineeringSide { OPEN, CLOSE }
 
+data class ReverseEngineeringJodiCandidate(val jodi: String, val score: Double, val supportingPannaPairs: Int)
+
 data class ReverseEngineeringCandidate(
     val panna: String,
     val familySequence: String,
@@ -92,6 +94,11 @@ object ReverseEngineeringModel {
             .filter { it.market in enabledMarkets && it.sessionId == sessionId && it.date.isBefore(targetDate) }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
             .toList()
+        validRows.groupBy { it.market to it.date }.forEach { (identity, rows) ->
+            require(rows.map { it.sessionId }.distinct().size == rows.size) {
+                "Duplicate dates for ${identity.first} must be reconciled before cross-market model ranking"
+            }
+        }
         val history = validRows.filter { it.market == market }.sortedBy { it.date }
         require(history.map { it.date }.distinct().size == history.size) {
             "Duplicate dates for $market/$sessionId must be reconciled before model ranking"
@@ -275,6 +282,29 @@ object ReverseEngineeringModel {
             market, sessionId, side, targets.size, evaluated, abstained,
             top1Exact, top10Exact, top1Family, top10Family, baselineFamily
         )
+    }
+
+    fun deriveJodiCandidates(
+        openCandidates: List<ReverseEngineeringCandidate>,
+        closeCandidates: List<ReverseEngineeringCandidate>,
+        limit: Int = 10
+    ): List<ReverseEngineeringJodiCandidate> {
+        require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
+        val scores = mutableMapOf<String, Double>()
+        val support = mutableMapOf<String, Int>()
+        openCandidates.forEach { open ->
+            closeCandidates.forEach { close ->
+                val openAnk = open.panna.sumOf { it.digitToInt() } % 10
+                val closeAnk = close.panna.sumOf { it.digitToInt() } % 10
+                val jodi = "$openAnk$closeAnk"
+                scores[jodi] = (scores[jodi] ?: 0.0) + open.score * close.score / 100.0
+                support[jodi] = (support[jodi] ?: 0) + 1
+            }
+        }
+        return scores.map { (jodi, score) ->
+            ReverseEngineeringJodiCandidate(jodi, score, support[jodi] ?: 0)
+        }.sortedWith(compareByDescending<ReverseEngineeringJodiCandidate> { it.score }.thenBy { it.jodi })
+            .take(limit)
     }
 
     private fun pannaOf(record: ChartRecord, side: ReverseEngineeringSide): String =
