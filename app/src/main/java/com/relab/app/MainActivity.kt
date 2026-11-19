@@ -181,13 +181,11 @@ private data class DashboardAnalysisSnapshot(
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
-    val coverageReports: List<com.relab.core.CoverageReport>,
     val sourceTiming: List<com.relab.core.SourceTimingSummary>
 )
 
 private fun buildDashboardAnalysisSnapshot(
-    observations: List<com.relab.core.SourceObservation>,
-    coverageRangeOverrides: Map<String, Pair<LocalDate, LocalDate>>
+    observations: List<com.relab.core.SourceObservation>
 ): DashboardAnalysisSnapshot {
     val activeObservations = observations.filter {
         it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
@@ -250,23 +248,10 @@ private fun buildDashboardAnalysisSnapshot(
         }
     )
 
-    val coverageReports = activeObservations.groupBy { it.market to it.sessionId }
-        .mapNotNull { (key, rows) ->
-            val dates = rows.map { it.date }
-            if (dates.isEmpty()) null else com.relab.core.HistoricalCoverageAudit.analyze(
-                market = key.first,
-                sessionId = key.second,
-                startDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
-                endDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
-                observations = rows
-            )
-        }
-        .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
-
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, candidateSets, reverseModelSets, reverseModelArtifacts, coverageReports,
+        crossMarketReports, candidateSets, reverseModelSets, reverseModelArtifacts,
         com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
     )
 }
@@ -340,18 +325,39 @@ private fun RelabHome(
 
     // Reconciliation, pattern scans, candidate generation and chronological backtests
     // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
-    LaunchedEffect(observations, coverageRangeOverrides) {
+    LaunchedEffect(observations) {
         analysisSnapshot = null
         analysisError = null
         val rows = observations
-        val ranges = coverageRangeOverrides
         try {
             val computed = withContext(Dispatchers.Default) {
-                buildDashboardAnalysisSnapshot(rows, ranges)
+                buildDashboardAnalysisSnapshot(rows)
             }
             analysisSnapshot = computed
         } catch (error: Exception) {
             analysisError = error.message ?: "Unknown analysis error"
+        }
+    }
+
+    var coverageReports by remember { mutableStateOf<List<com.relab.core.CoverageReport>>(emptyList()) }
+    LaunchedEffect(observations, coverageRangeOverrides) {
+        val rows = observations.filter {
+            it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
+        }
+        val ranges = coverageRangeOverrides
+        coverageReports = withContext(Dispatchers.Default) {
+            rows.groupBy { it.market to it.sessionId }
+                .mapNotNull { (key, marketRows) ->
+                    val dates = marketRows.map { it.date }
+                    if (dates.isEmpty()) null else com.relab.core.HistoricalCoverageAudit.analyze(
+                        market = key.first,
+                        sessionId = key.second,
+                        startDate = ranges["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
+                        endDate = ranges["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
+                        observations = marketRows
+                    )
+                }
+                .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
         }
     }
 
@@ -375,7 +381,6 @@ private fun RelabHome(
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
     val reverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
-    val coverageReports = snapshot?.coverageReports.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
 
     val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
