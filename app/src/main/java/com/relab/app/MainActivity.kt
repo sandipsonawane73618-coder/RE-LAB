@@ -987,6 +987,10 @@ private fun importChartLink(
                 val report = com.relab.core.HtmlChartImporter.import(
                     html, connection.url.toString(), market, "main", java.time.Instant.now()
                 )
+                // Persist large chart imports on this worker thread, not the UI thread.
+                val saveResult = if (report.observations.isEmpty()) null else runCatching {
+                    save(report.observations)
+                }
                 mainHandler.post {
                     try {
                         if (report.observations.isEmpty()) {
@@ -994,7 +998,8 @@ private fun importChartLink(
                                 ?: "No dated chart-result rows found. This page may be JavaScript-rendered or use an unsupported layout."
                             updateMessage("No records imported: $detail Skipped rows: ${report.skippedRows}.")
                         } else {
-                            val merged = save(report.observations)
+                            val merged = saveResult?.getOrThrow()
+                                ?: error("Chart rows were fetched but local save did not complete")
                             updateObservations(merged)
                             updateMessage(
                                 "${market.name}: fetched ${report.observations.size} rows; total saved observations ${merged.size}. " +
