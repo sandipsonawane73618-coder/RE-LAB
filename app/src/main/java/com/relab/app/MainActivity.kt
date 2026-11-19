@@ -217,11 +217,13 @@ private fun RelabHome(
             val target = LocalDate.now()
             val open = com.relab.core.CandidateRankingEngine.rank(
                 observations, market, sessionId, target, com.relab.core.PannaSide.OPEN,
-                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+                prebuiltRecords = researchRecords
             )
             val close = com.relab.core.CandidateRankingEngine.rank(
                 observations, market, sessionId, target, com.relab.core.PannaSide.CLOSE,
-                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+                prebuiltRecords = researchRecords
             )
             Triple(
                 open,
