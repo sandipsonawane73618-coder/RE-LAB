@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
 import com.relab.core.CoverageState
@@ -81,17 +83,6 @@ class MainActivity : ComponentActivity() {
         val database = LocalObservationDatabase(this)
         val preferences = getSharedPreferences("relab_local", MODE_PRIVATE)
 
-        // One-time migration from the first CSV-only build. Keep the old preference
-        // until the database transaction succeeds so a failed migration is recoverable.
-        val legacyCsv = preferences.getString("source_csv", null)
-        if (database.loadOriginalCsv() == null && !legacyCsv.isNullOrBlank()) {
-            val legacyReport = SourceCsvImporter.import(legacyCsv)
-            if (legacyReport.observations.isNotEmpty()) {
-                database.replaceDataset(legacyCsv, legacyReport.observations)
-                preferences.edit().remove("source_csv").apply()
-            }
-        }
-
         val initialCoverageRanges = preferences.all.mapNotNull { (key, value) ->
             if (!key.startsWith(COVERAGE_RANGE_PREFIX) || value !is String) return@mapNotNull null
             val parts = value.split('|')
@@ -104,30 +95,61 @@ class MainActivity : ComponentActivity() {
         }.toMap()
 
         setContent {
-            RelabHome(
-                initialCoverageRanges = initialCoverageRanges,
-                onSaveCoverageRange = { key, start, end ->
-                    preferences.edit().putString(COVERAGE_RANGE_PREFIX + key, "$start|$end").apply()
-                },
-                initialCsv = database.loadOriginalCsv(),
-                initialObservations = database.loadObservations(),
-                onSaveCsv = { csv, observations ->
-                    require(observations.isNotEmpty()) { "No valid source observations to save" }
-                    database.appendDataset(csv, observations)
-                },
-                onSaveLinkObservations = { imported ->
-                    require(imported.isNotEmpty()) { "No chart rows were extracted from this link" }
-                    database.appendDataset(SourceCsvExporter.export(imported), imported)
-                },
-                onClearCsv = {
-                    database.clearDataset()
-                    val rangeKeys = preferences.all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }
-                    preferences.edit().apply {
-                        remove("source_csv")
-                        rangeKeys.forEach(::remove)
-                    }.apply()
+            var initialData by remember {
+                mutableStateOf<Pair<String?, List<com.relab.core.SourceObservation>>?>(null)
+            }
+            LaunchedEffect(Unit) {
+                initialData = withContext(Dispatchers.IO) {
+                    // One-time migration from the first CSV-only build. Keep the old
+                    // preference until the database transaction succeeds.
+                    val legacyCsv = preferences.getString("source_csv", null)
+                    if (database.loadOriginalCsv() == null && !legacyCsv.isNullOrBlank()) {
+                        val legacyReport = SourceCsvImporter.import(legacyCsv)
+                        if (legacyReport.observations.isNotEmpty()) {
+                            database.replaceDataset(legacyCsv, legacyReport.observations)
+                            preferences.edit().remove("source_csv").apply()
+                        }
+                    }
+                    database.loadOriginalCsv() to database.loadObservations()
                 }
-            )
+            }
+
+            val loaded = initialData
+            if (loaded == null) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column(
+                        Modifier.fillMaxSize().padding(24.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("Loading saved chart history…", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            } else {
+                RelabHome(
+                    initialCoverageRanges = initialCoverageRanges,
+                    onSaveCoverageRange = { key, start, end ->
+                        preferences.edit().putString(COVERAGE_RANGE_PREFIX + key, "$start|$end").apply()
+                    },
+                    initialCsv = loaded.first,
+                    initialObservations = loaded.second,
+                    onSaveCsv = { csv, observations ->
+                        require(observations.isNotEmpty()) { "No valid source observations to save" }
+                        database.appendDataset(csv, observations)
+                    },
+                    onSaveLinkObservations = { imported ->
+                        require(imported.isNotEmpty()) { "No chart rows were extracted from this link" }
+                        database.appendDataset(SourceCsvExporter.export(imported), imported)
+                    },
+                    onClearCsv = {
+                        database.clearDataset()
+                        val rangeKeys = preferences.all.keys.filter { it.startsWith(COVERAGE_RANGE_PREFIX) }
+                        preferences.edit().apply {
+                            remove("source_csv")
+                            rangeKeys.forEach(::remove)
+                        }.apply()
+                    }
+                )
+            }
         }
     }
 
