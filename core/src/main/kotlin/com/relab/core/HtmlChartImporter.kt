@@ -49,16 +49,12 @@ object HtmlChartImporter {
             val raw = cells.joinToString(" | ")
             val weekStart = parseDate(cells.first())
             val dayCellTotal = cells.size - 1
-            val allowedDayCounts = when (market) {
-                Market.KALYAN -> setOf(6)
-                Market.MAIN_BAZAR -> setOf(5)
-                Market.TIME_BAZAR -> setOf(7)
-                Market.SRIDEVI, Market.SRIDEVI_NIGHT -> setOf(7)
-            }
+            // Weekly schedules changed historically. Trust the explicit Monday-to-end-date
+            // range and its matching three-cell groups instead of a market-wide fixed count.
             val rangeDates = rangePattern.findAll(cells.first()).mapNotNull { parseDate(it.value) }.toList()
             val isThreeCellLayout = dayCellTotal % 3 == 0
             val dayCount = if (isThreeCellLayout) dayCellTotal / 3 else -1
-            if (weekStart != null && dayCount in allowedDayCounts) {
+            if (weekStart != null && dayCount in 1..7) {
                 if (weekStart.dayOfWeek != java.time.DayOfWeek.MONDAY ||
                     rangeDates.size != 2 ||
                     java.time.temporal.ChronoUnit.DAYS.between(rangeDates[0], rangeDates[1]).toInt() + 1 != dayCount) {
