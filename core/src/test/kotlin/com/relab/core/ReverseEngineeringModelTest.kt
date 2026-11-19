@@ -72,6 +72,18 @@ class ReverseEngineeringModelTest {
         assertTrue(sameFamily.all { it.familyEvidence == sameFamily.first().familyEvidence })
     }
 
+    @Test fun familyModelRanksOnlyBaseFiveSequences() {
+        val result = ReverseEngineeringModel.rank(
+            history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN, minimumHistory = 30
+        )
+        assertTrue(result.familyCandidates.isNotEmpty())
+        assertTrue(result.familyCandidates.all { candidate ->
+            candidate.familySequence.length == 3 && candidate.familySequence.all { it in '0'..'4' }
+        })
+        assertEquals("111", result.familyCandidates.first().familySequence)
+    }
+
     @Test fun futureRowsCannotChangeHistoricalRanking() {
         val past = history()
         val target = LocalDate.of(2026, 3, 1)
