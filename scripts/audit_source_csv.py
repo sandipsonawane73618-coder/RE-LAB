@@ -33,14 +33,52 @@ def valid_result(value: str) -> bool:
     return jodi == expected
 
 
-def audit(path: Path) -> dict:
+def read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        return list(reader.fieldnames or []), list(reader)
+
+
+def eligible_published_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Keep only published rows with a unique market/session/date/source key."""
+    counts = Counter(
+        (row.get("market", "").strip().upper(), row.get("session_id", ""),
+         row.get("date", ""), row.get("source_id", ""))
+        for row in rows
+    )
+    return [
+        row for row in rows
+        if row.get("status", "").upper() == "PUBLISHED"
+        and counts[(row.get("market", "").strip().upper(), row.get("session_id", ""),
+                    row.get("date", ""), row.get("source_id", ""))] == 1
+    ]
+
+
+def audit(path: Path) -> dict:
+    _, rows = read_rows(path)
     by_market = defaultdict(list)
     for row in rows:
         by_market[row.get("market", "").strip().upper()].append(row)
 
-    report = {"input": str(path), "total_rows": len(rows), "markets": {}}
+    all_key_counts = Counter(
+        (row.get("market", "").strip().upper(), row.get("session_id", ""),
+         row.get("date", ""), row.get("source_id", ""))
+        for row in rows
+    )
+    eligible = eligible_published_rows(rows)
+    eligible_counts = Counter(row.get("market", "").strip().upper() for row in eligible)
+    report = {
+        "input": str(path),
+        "total_rows": len(rows),
+        "eligible_published_unique_rows": len(eligible),
+        "published_duplicate_rows_excluded": sum(
+            1 for row in rows
+            if row.get("status", "").upper() == "PUBLISHED"
+            and all_key_counts[(row.get("market", "").strip().upper(), row.get("session_id", ""),
+                                row.get("date", ""), row.get("source_id", ""))] > 1
+        ),
+        "markets": {},
+    }
     for market in MARKETS:
         subset = by_market.get(market, [])
         dates = []
@@ -85,6 +123,7 @@ def audit(path: Path) -> dict:
             "duplicate_source_date_keys": len(duplicate_keys),
             "duplicate_key_samples": duplicate_keys[:20],
             "published_rows": published,
+            "eligible_published_unique_rows": eligible_counts[market],
             "malformed_rows_or_values": malformed,
             "published_invalid_panna_jodi_math": invalid_math,
             "statuses": dict(sorted(statuses.items())),
@@ -98,8 +137,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv_file", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--eligible-output", type=Path,
+                        help="Optional CSV containing only unique published market/session/date/source rows")
     args = parser.parse_args()
     result = audit(args.csv_file)
+    if args.eligible_output:
+        fields, rows = read_rows(args.csv_file)
+        eligible = eligible_published_rows(rows)
+        args.eligible_output.parent.mkdir(parents=True, exist_ok=True)
+        with args.eligible_output.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\\n")
+            writer.writeheader()
+            writer.writerows(eligible)
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
