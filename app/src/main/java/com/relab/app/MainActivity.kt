@@ -374,6 +374,7 @@ private fun RelabHome(
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
+    val reverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val coverageReports = snapshot?.coverageReports.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
 
@@ -448,7 +449,8 @@ private fun RelabHome(
         if (uri != null) {
             try {
                 val bundle = ResearchBundleExporter.export(
-                    observations, chartBuild.records, patternAnalyses, coverageReports, java.time.Instant.now()
+                    observations, chartBuild.records, patternAnalyses, coverageReports, java.time.Instant.now(),
+                    reverseModelArtifacts = reverseModelArtifacts
                 )
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bundle) }
                     ?: error("Research bundle file could not be written")
