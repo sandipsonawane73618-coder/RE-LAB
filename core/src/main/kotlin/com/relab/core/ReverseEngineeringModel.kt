@@ -181,18 +181,6 @@ object ReverseEngineeringModel {
             val family = buildString { append(value / 25); append((value / 5) % 5); append(value % 5) }
             val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
                 (history.size + 125.0 * smoothingAlpha)
-            val ank = panna.sumOf(Char::digitToInt) % 10
-            val ankProbability = ((ankCounts[ank] ?: 0) + smoothingAlpha) /
-                (history.size + 10.0 * smoothingAlpha)
-            val positionProbability = (0..2).map { position ->
-                ((positionCounts[position][panna[position].digitToInt()] ?: 0) + smoothingAlpha) /
-                    (history.size + 10.0 * smoothingAlpha)
-            }.average()
-            val type = ChartMath.pannaType(panna)
-            val typeProbability = ((pannaTypeCounts[type] ?: 0) + smoothingAlpha) /
-                (history.size + PannaType.entries.size * smoothingAlpha)
-            val reverseProbability = ((reversePannaCounts[panna.reversed()] ?: 0) + smoothingAlpha) /
-                (history.size + 1000.0 * smoothingAlpha)
             val weekdayProbability = if (weekdayRows.isEmpty()) null else
                 ((weekdayCounts[family] ?: 0) + smoothingAlpha) /
                     (weekdayRows.size + 125.0 * smoothingAlpha)
@@ -249,6 +237,18 @@ object ReverseEngineeringModel {
                 (history.size + 1000.0 * smoothingAlpha)
             val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
                 (history.size + 125.0 * smoothingAlpha)
+            val ank = panna.sumOf(Char::digitToInt) % 10
+            val ankProbability = ((ankCounts[ank] ?: 0) + smoothingAlpha) /
+                (history.size + 10.0 * smoothingAlpha)
+            val positionProbability = (0..2).map { position ->
+                ((positionCounts[position][panna[position].digitToInt()] ?: 0) + smoothingAlpha) /
+                    (history.size + 10.0 * smoothingAlpha)
+            }.average()
+            val type = ChartMath.pannaType(panna)
+            val typeProbability = ((pannaTypeCounts[type] ?: 0) + smoothingAlpha) /
+                (history.size + PannaType.entries.size * smoothingAlpha)
+            val reverseProbability = ((reversePannaCounts[panna.reversed()] ?: 0) + smoothingAlpha) /
+                (history.size + 1000.0 * smoothingAlpha)
             val weekdayProbability = if (weekdayRows.isEmpty()) null else
                 ((weekdayCounts[family] ?: 0) + smoothingAlpha) /
                     (weekdayRows.size + 125.0 * smoothingAlpha)
