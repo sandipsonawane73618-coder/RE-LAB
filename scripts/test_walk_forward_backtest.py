@@ -25,8 +25,7 @@ class WalkForwardBacktestTests(unittest.TestCase):
 
     def test_empty_market_abstains_without_fake_accuracy(self):
         result = backtest.evaluate_market([], "KALYAN", minimum_history=1)
-        self.assertEqual(0, result["main:open"]["tested_targets"])
-        self.assertEqual(0.0, result["main:open"]["top10_hit_rate"])
+        self.assertEqual({}, result)
 
 
 if __name__ == "__main__":
