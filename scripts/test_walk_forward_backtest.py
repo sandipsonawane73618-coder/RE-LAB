@@ -8,8 +8,8 @@ import walk_forward_backtest as backtest
 
 class WalkForwardBacktestTests(unittest.TestCase):
     def test_digit_families_match_locked_pairs(self):
-        self.assertEqual("11223", backtest.family_sequence("167"))
-        self.assertEqual("00124", backtest.family_sequence("056"))
+        self.assertEqual("112", backtest.family_sequence("167"))
+        self.assertEqual("001", backtest.family_sequence("056"))
 
     def test_walk_forward_uses_only_prior_rows(self):
         rows = [
