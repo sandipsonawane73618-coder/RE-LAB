@@ -163,9 +163,7 @@ private data class ReverseModelDashboardSet(
     val sessionId: String,
     val open: com.relab.core.ReverseEngineeringRanking,
     val close: com.relab.core.ReverseEngineeringRanking,
-    val jodi: List<com.relab.core.ReverseEngineeringJodiCandidate>,
-    val openBacktest: com.relab.core.ReverseEngineeringBacktestReport,
-    val closeBacktest: com.relab.core.ReverseEngineeringBacktestReport
+    val jodi: List<com.relab.core.ReverseEngineeringJodiCandidate>
 )
 
 private data class DashboardAnalysisSnapshot(
@@ -225,24 +223,15 @@ private fun buildDashboardAnalysisSnapshot(
             researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
             limit = 10, minimumHistory = 30
         )
-        val openBacktest = com.relab.core.ReverseEngineeringModel.backtest(
-            researchRecords, market, sessionId, com.relab.core.ReverseEngineeringSide.OPEN,
-            targetLimit = 120, minimumHistory = 30, candidateLimit = 10
-        )
-        val closeBacktest = com.relab.core.ReverseEngineeringModel.backtest(
-            researchRecords, market, sessionId, com.relab.core.ReverseEngineeringSide.CLOSE,
-            targetLimit = 120, minimumHistory = 30, candidateLimit = 10
-        )
         ReverseModelDashboardSet(
             market, sessionId, open, close,
-            com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10),
-            openBacktest, closeBacktest
+            com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10)
         )
     }
 
     val reverseModelArtifacts = com.relab.core.ReverseEngineeringCsvExporter.exportAll(
         reverseModelSets.flatMap { listOf(it.open, it.close) },
-        reverseModelSets.flatMap { listOf(it.openBacktest, it.closeBacktest) },
+        emptyList(),
         reverseModelSets.map {
             com.relab.core.ReverseEngineeringJodiReport(it.market, it.sessionId, targetDate, it.jodi)
         }
@@ -382,6 +371,53 @@ private fun RelabHome(
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
     val reverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
+
+    var reverseBacktestResults by remember {
+        mutableStateOf<Map<String, Pair<com.relab.core.ReverseEngineeringBacktestReport, com.relab.core.ReverseEngineeringBacktestReport>>>(emptyMap())
+    }
+    var reverseBacktestArtifacts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var reverseBacktestRequest by remember { mutableStateOf<ReverseModelDashboardSet?>(null) }
+    var reverseBacktestBusyKey by remember { mutableStateOf<String?>(null) }
+    var reverseBacktestError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(observations) {
+        reverseBacktestResults = emptyMap()
+        reverseBacktestArtifacts = emptyMap()
+        reverseBacktestError = null
+        reverseBacktestRequest = null
+    }
+
+    LaunchedEffect(reverseBacktestRequest, researchRecords) {
+        val request = reverseBacktestRequest ?: return@LaunchedEffect
+        val key = "${request.market.name}|${request.sessionId}"
+        reverseBacktestBusyKey = key
+        reverseBacktestError = null
+        try {
+            val reports = withContext(Dispatchers.Default) {
+                val open = com.relab.core.ReverseEngineeringModel.backtest(
+                    researchRecords, request.market, request.sessionId,
+                    com.relab.core.ReverseEngineeringSide.OPEN,
+                    targetLimit = 20, minimumHistory = 30, candidateLimit = 10
+                )
+                val close = com.relab.core.ReverseEngineeringModel.backtest(
+                    researchRecords, request.market, request.sessionId,
+                    com.relab.core.ReverseEngineeringSide.CLOSE,
+                    targetLimit = 20, minimumHistory = 30, candidateLimit = 10
+                )
+                open to close
+            }
+            reverseBacktestResults = reverseBacktestResults + (key to reports)
+            reverseBacktestArtifacts = reverseBacktestArtifacts +
+                com.relab.core.ReverseEngineeringCsvExporter.exportAll(
+                    emptyList(), listOf(reports.first, reports.second), emptyList()
+                )
+        } catch (error: Exception) {
+            reverseBacktestError = error.message ?: "Unknown walk-forward validation error"
+        } finally {
+            reverseBacktestBusyKey = null
+            reverseBacktestRequest = null
+        }
+    }
 
     val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
@@ -654,7 +690,16 @@ private fun RelabHome(
                 } else if (reverseModelSets.isEmpty()) {
                     Text("No valid history is available for the five enabled markets yet.")
                 } else {
-                    reverseModelSets.forEach { ReverseEngineeringModelCard(it) }
+                    reverseModelSets.forEach { set ->
+                        val backtestKey = "${set.market.name}|${set.sessionId}"
+                        ReverseEngineeringModelCard(
+                            set = set,
+                            backtests = reverseBacktestResults[backtestKey],
+                            backtestBusy = reverseBacktestBusyKey == backtestKey,
+                            backtestError = reverseBacktestError.takeIf { reverseBacktestBusyKey == null && reverseBacktestResults[backtestKey] == null },
+                            onRunBacktest = { reverseBacktestRequest = set }
+                        )
+                    }
                 }
                 Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
                 if (candidateSets.isEmpty()) {
@@ -898,7 +943,13 @@ private fun MarketIntelligenceCard(report: com.relab.core.MarketIntelligenceRepo
 }
 
 @Composable
-private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
+private fun ReverseEngineeringModelCard(
+    set: ReverseModelDashboardSet,
+    backtests: Pair<com.relab.core.ReverseEngineeringBacktestReport, com.relab.core.ReverseEngineeringBacktestReport>?,
+    backtestBusy: Boolean,
+    backtestError: String?,
+    onRunBacktest: () -> Unit
+) {
     fun pct(value: Double): String = "${"%.1f".format(value * 100.0)}%"
     fun evidence(value: Double?): String = value?.let { "${"%.3f".format(it)}" } ?: "—"
 
@@ -945,8 +996,20 @@ private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
             }
 
             Text("Chronological walk-forward validation", style = MaterialTheme.typography.titleSmall)
-            Text("Open: n=${set.openBacktest.evaluatedTargets}, abstained=${set.openBacktest.abstainedTargets}/${set.openBacktest.requestedTargets} · exact top-1 ${set.openBacktest.top1ExactHits} (${pct(set.openBacktest.top1ExactRate)}) · exact top-10 ${set.openBacktest.top10ExactHits} (${pct(set.openBacktest.top10ExactRate)}) · ank top-1 ${set.openBacktest.top1AnkHits} (${pct(set.openBacktest.top1AnkRate)}) · ank top-10 ${set.openBacktest.top10AnkHits} (${pct(set.openBacktest.top10AnkRate)}) · family top-1 ${set.openBacktest.top1FamilyHits} (${pct(set.openBacktest.top1FamilyRate)}) · family top-10 ${set.openBacktest.top10FamilyHits} (${pct(set.openBacktest.top10FamilyRate)}) · prior-mode ${set.openBacktest.priorModeFamilyHits} (${pct(set.openBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
-            Text("Close: n=${set.closeBacktest.evaluatedTargets}, abstained=${set.closeBacktest.abstainedTargets}/${set.closeBacktest.requestedTargets} · exact top-1 ${set.closeBacktest.top1ExactHits} (${pct(set.closeBacktest.top1ExactRate)}) · exact top-10 ${set.closeBacktest.top10ExactHits} (${pct(set.closeBacktest.top10ExactRate)}) · ank top-1 ${set.closeBacktest.top1AnkHits} (${pct(set.closeBacktest.top1AnkRate)}) · ank top-10 ${set.closeBacktest.top10AnkHits} (${pct(set.closeBacktest.top10AnkRate)}) · family top-1 ${set.closeBacktest.top1FamilyHits} (${pct(set.closeBacktest.top1FamilyRate)}) · family top-10 ${set.closeBacktest.top10FamilyHits} (${pct(set.closeBacktest.top10FamilyRate)}) · prior-mode ${set.closeBacktest.priorModeFamilyHits} (${pct(set.closeBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
+            if (backtests == null) {
+                Text("This heavier validation is kept off startup so the saved history and research screens can load first.")
+                Button(onClick = onRunBacktest, enabled = !backtestBusy) {
+                    Text(if (backtestBusy) "Running walk-forward validation…" else "Run 20-target walk-forward validation")
+                }
+                backtestError?.let {
+                    Text("Walk-forward error: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                val openBacktest = backtests.first
+                val closeBacktest = backtests.second
+                Text("Open: n=${openBacktest.evaluatedTargets}, abstained=${openBacktest.abstainedTargets}/${openBacktest.requestedTargets} · exact top-1 ${openBacktest.top1ExactHits} (${pct(openBacktest.top1ExactRate)}) · exact top-10 ${openBacktest.top10ExactHits} (${pct(openBacktest.top10ExactRate)}) · ank top-1 ${openBacktest.top1AnkHits} (${pct(openBacktest.top1AnkRate)}) · ank top-10 ${openBacktest.top10AnkHits} (${pct(openBacktest.top10AnkRate)}) · family top-1 ${openBacktest.top1FamilyHits} (${pct(openBacktest.top1FamilyRate)}) · family top-10 ${openBacktest.top10FamilyHits} (${pct(openBacktest.top10FamilyRate)}) · prior-mode ${openBacktest.priorModeFamilyHits} (${pct(openBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
+                Text("Close: n=${closeBacktest.evaluatedTargets}, abstained=${closeBacktest.abstainedTargets}/${closeBacktest.requestedTargets} · exact top-1 ${closeBacktest.top1ExactHits} (${pct(closeBacktest.top1ExactRate)}) · exact top-10 ${closeBacktest.top10ExactHits} (${pct(closeBacktest.top10ExactRate)}) · ank top-1 ${closeBacktest.top1AnkHits} (${pct(closeBacktest.top1AnkRate)}) · ank top-10 ${closeBacktest.top10AnkHits} (${pct(closeBacktest.top10AnkRate)}) · family top-1 ${closeBacktest.top1FamilyHits} (${pct(closeBacktest.top1FamilyRate)}) · family top-10 ${closeBacktest.top10FamilyHits} (${pct(closeBacktest.top10FamilyRate)}) · prior-mode ${closeBacktest.priorModeFamilyHits} (${pct(closeBacktest.priorModeFamilyRate)})", style = MaterialTheme.typography.bodySmall)
+            }
             Text(
                 "Hit rates are historical out-of-sample measurements, not future guarantees. Relative evidence scores are not probabilities. Source verification status is shown in the reconciliation audit.",
                 style = MaterialTheme.typography.labelSmall
