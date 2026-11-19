@@ -46,6 +46,13 @@ object CrossMarketReverseEngineering {
     private data class DateSession(val date: LocalDate, val sessionId: String)
 
     fun analyze(records: List<ChartRecord>): List<CrossMarketPairReport> {
+        val validInput = records.filter { it.market in enabledMarkets }
+            .filter { ChartMath.validate(it) is ValidationResult.Valid }
+        validInput.groupBy { Triple(it.market, it.sessionId, it.date) }.forEach { (key, rows) ->
+            require(rows.size == 1) {
+                "Duplicate cross-market rows for ${key.first}/${key.second} on ${key.third} must be reconciled first"
+            }
+        }
         val validByMarket = enabledMarkets.associateWith { market ->
             records.asSequence()
                 .filter { it.market == market }
