@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -329,24 +330,47 @@ private fun RelabHome(
     }
 
     var coverageReports by remember { mutableStateOf<List<com.relab.core.CoverageReport>>(emptyList()) }
-    LaunchedEffect(observations, coverageRangeOverrides) {
-        val rows = observations.filter {
-            it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
+    var coverageLoading by remember { mutableStateOf(true) }
+    var coverageError by remember { mutableStateOf<String?>(null) }
+
+    // Run coverage only after the main analysis snapshot finishes. Running both
+    // full-history pipelines at once doubled peak memory on cold launches.
+    LaunchedEffect(observations, coverageRangeOverrides, analysisSnapshot, analysisError) {
+        if (analysisSnapshot == null) {
+            coverageLoading = analysisError == null
+            if (analysisError != null) {
+                coverageReports = emptyList()
+                coverageError = analysisError
+            }
+            return@LaunchedEffect
         }
-        val ranges = coverageRangeOverrides
-        coverageReports = withContext(Dispatchers.Default) {
-            rows.groupBy { it.market to it.sessionId }
-                .mapNotNull { (key, marketRows) ->
-                    val dates = marketRows.map { it.date }
-                    if (dates.isEmpty()) null else com.relab.core.HistoricalCoverageAudit.analyze(
-                        market = key.first,
-                        sessionId = key.second,
-                        startDate = ranges["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
-                        endDate = ranges["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
-                        observations = marketRows
-                    )
-                }
-                .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
+        coverageLoading = true
+        coverageError = null
+        try {
+            val rows = observations.filter {
+                it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
+            }
+            val ranges = coverageRangeOverrides
+            val computed = withContext(Dispatchers.Default) {
+                rows.groupBy { it.market to it.sessionId }
+                    .mapNotNull { (key, marketRows) ->
+                        val dates = marketRows.map { it.date }
+                        if (dates.isEmpty()) null else com.relab.core.HistoricalCoverageAudit.analyze(
+                            market = key.first,
+                            sessionId = key.second,
+                            startDate = ranges["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
+                            endDate = ranges["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
+                            observations = marketRows
+                        )
+                    }
+                    .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
+            }
+            coverageReports = computed
+        } catch (error: Exception) {
+            coverageReports = emptyList()
+            coverageError = error.message ?: "Unknown coverage audit error"
+        } finally {
+            coverageLoading = false
         }
     }
 
@@ -542,6 +566,20 @@ private fun RelabHome(
                 importMessage = "Bundle validation error: ${error.message ?: "Unknown error"}"
             }
         }
+    }
+
+    val startupLoading = linkBusy || (snapshot == null && analysisError == null) || coverageLoading
+    if (startupLoading) {
+        val startupStatus = when {
+            linkBusy -> "Fetching all five market charts…"
+            snapshot == null -> "Building the reverse-engineering analysis…"
+            else -> "Completing historical coverage audit…"
+        }
+        StartupLoadingScreen(
+            status = startupStatus,
+            detail = importMessage ?: "Loading saved history and preparing the research workspace."
+        )
+        return
     }
 
     MaterialTheme {
@@ -1269,4 +1307,30 @@ private fun importChartLink(
             }
         }
     }.start()
+}
+
+
+@Composable
+private fun StartupLoadingScreen(status: String, detail: String) {
+    MaterialTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(28.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+            ) {
+                Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
+                Text("Reverse Engineering Research Lab", style = MaterialTheme.typography.titleMedium)
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(14.dp))
+                CircularProgressIndicator(strokeWidth = 5.dp)
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(10.dp))
+                Text(status, style = MaterialTheme.typography.titleMedium)
+                Text(detail, style = MaterialTheme.typography.bodySmall)
+                Text("The workspace opens after startup data and analysis are ready.", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
 }
