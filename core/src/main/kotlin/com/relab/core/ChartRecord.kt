@@ -11,6 +11,19 @@ enum class Market {
     RAJDHANI_DAY,
     RAJDHANI_NIGHT;
 
+    /** Current operating weekdays; historical schedule changes are retained by row-level date ranges. */
+    val activeDays: Set<java.time.DayOfWeek>
+        get() = when (this) {
+            SRIDEVI, SRIDEVI_NIGHT -> java.time.DayOfWeek.values().toSet()
+            KALYAN, TIME_BAZAR, MILAN_DAY, MILAN_NIGHT, RAJDHANI_DAY ->
+                java.time.DayOfWeek.values().filter { it != java.time.DayOfWeek.SUNDAY }.toSet()
+            MAIN_BAZAR, RAJDHANI_NIGHT -> setOf(
+                java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY,
+                java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY,
+                java.time.DayOfWeek.FRIDAY
+            )
+        }
+
     companion object {
         /** Resolve canonical panel-chart URL paths without conflating sessions. */
         fun fromSourceUrl(value: String): Market? {
