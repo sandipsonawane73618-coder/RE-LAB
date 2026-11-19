@@ -319,48 +319,49 @@ private fun RelabHome(
     }
 
     val report = remember(rawCsv) { rawCsv?.let { SourceCsvImporter.import(it) } }
-    val groups = remember(observations) { SourceReconciliation.reconcile(observations) }
-    val conflicts = groups.count { it.state == ReconciliationState.CONFLICT }
-    val repeatedSourceRecords = remember(observations) {
-        SourceObservationMerger.auditRepeatedSourceRecords(observations)
-    }
-    val repeatedPublishedResults = remember(observations) {
-        SourceObservationMerger.auditRepeatedPublishedResultsAcrossDates(observations)
-    }
-    val published = observations.count { it.status == ObservationStatus.PUBLISHED }
-    val pending = observations.count { it.status == ObservationStatus.PENDING }
-    val malformed = observations.count { it.status == ObservationStatus.MALFORMED }
-    val chartBuild = remember(observations) { ReconciledChartBuilder.build(observations) }
-    // Exploratory records include valid single-publisher rows, but remain visibly
-    // unverified; the consensus ledger and reconciliation counts stay unchanged.
-    val researchRecords = remember(observations) {
-        ReconciledChartBuilder.buildExploratoryRecords(observations)
-    }
-    val patternAnalyses = remember(researchRecords) { PatternAnalysis.analyze(researchRecords) }
-    val intelligenceReports = remember(researchRecords) { com.relab.core.MarketIntelligence.analyze(researchRecords) }
-    val crossMarketReports = remember(researchRecords) { com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords) }
-    val candidateSets = remember(observations) {
-        researchRecords.map { it.market to it.sessionId }.distinct().map { (market, sessionId) ->
-            val target = LocalDate.now()
-            val open = com.relab.core.CandidateRankingEngine.rank(
-                observations, market, sessionId, target, com.relab.core.PannaSide.OPEN,
-                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
-                prebuiltRecords = researchRecords
-            )
-            val close = com.relab.core.CandidateRankingEngine.rank(
-                observations, market, sessionId, target, com.relab.core.PannaSide.CLOSE,
-                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
-                prebuiltRecords = researchRecords
-            )
-            Triple(
-                open,
-                close,
-                com.relab.core.CandidateRankingEngine.deriveJodiCandidates(
-                    open.candidates, close.candidates, limit = 10
-                )
-            )
+    var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
+    var analysisSnapshot by remember { mutableStateOf<DashboardAnalysisSnapshot?>(null) }
+    var analysisError by remember { mutableStateOf<String?>(null) }
+
+    // Reconciliation, pattern scans, candidate generation and chronological backtests
+    // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
+    LaunchedEffect(observations, coverageRangeOverrides) {
+        analysisSnapshot = null
+        analysisError = null
+        val rows = observations
+        val ranges = coverageRangeOverrides
+        try {
+            val computed = withContext(Dispatchers.Default) {
+                buildDashboardAnalysisSnapshot(rows, ranges)
+            }
+            analysisSnapshot = computed
+        } catch (error: Exception) {
+            analysisError = error.message ?: "Unknown analysis error"
         }
     }
+
+    val snapshot = analysisSnapshot
+    val activeObservations = snapshot?.activeObservations
+        ?: observations.filter { it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets }
+    val groups = snapshot?.groups.orEmpty()
+    val conflicts = groups.count { it.state == ReconciliationState.CONFLICT }
+    val repeatedSourceRecords = snapshot?.repeatedSourceRecords.orEmpty()
+    val repeatedPublishedResults = snapshot?.repeatedPublishedResults.orEmpty()
+    val published = activeObservations.count { it.status == ObservationStatus.PUBLISHED }
+    val pending = activeObservations.count { it.status == ObservationStatus.PENDING }
+    val malformed = activeObservations.count { it.status == ObservationStatus.MALFORMED }
+    val chartBuild = snapshot?.chartBuild ?: com.relab.core.ChartBuildReport(
+        emptyList(), emptyList(), emptyList(), emptyList(), emptyList()
+    )
+    val researchRecords = snapshot?.researchRecords.orEmpty()
+    val patternAnalyses = snapshot?.patternAnalyses.orEmpty()
+    val intelligenceReports = snapshot?.intelligenceReports.orEmpty()
+    val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
+    val candidateSets = snapshot?.candidateSets.orEmpty()
+    val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
+    val coverageReports = snapshot?.coverageReports.orEmpty()
+    val sourceTiming = snapshot?.sourceTiming.orEmpty()
+
     val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
