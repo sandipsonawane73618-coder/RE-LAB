@@ -369,7 +369,7 @@ private fun RelabHome(
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
-    val reverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
+    val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
 
     var reverseBacktestResults by remember {
@@ -418,6 +418,8 @@ private fun RelabHome(
             reverseBacktestRequest = null
         }
     }
+
+    val reverseModelArtifacts = baseReverseModelArtifacts + reverseBacktestArtifacts
 
     val researchExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
