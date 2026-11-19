@@ -180,6 +180,7 @@ private data class DashboardAnalysisSnapshot(
     val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
+    val reverseModelArtifacts: Map<String, String>,
     val coverageReports: List<com.relab.core.CoverageReport>,
     val sourceTiming: List<com.relab.core.SourceTimingSummary>
 )
@@ -241,6 +242,14 @@ private fun buildDashboardAnalysisSnapshot(
         )
     }
 
+    val reverseModelArtifacts = com.relab.core.ReverseEngineeringCsvExporter.exportAll(
+        reverseModelSets.flatMap { listOf(it.open, it.close) },
+        reverseModelSets.flatMap { listOf(it.openBacktest, it.closeBacktest) },
+        reverseModelSets.map {
+            com.relab.core.ReverseEngineeringJodiReport(it.market, it.sessionId, targetDate, it.jodi)
+        }
+    )
+
     val coverageReports = activeObservations.groupBy { it.market to it.sessionId }
         .mapNotNull { (key, rows) ->
             val dates = rows.map { it.date }
@@ -257,7 +266,7 @@ private fun buildDashboardAnalysisSnapshot(
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, candidateSets, reverseModelSets, coverageReports,
+        crossMarketReports, candidateSets, reverseModelSets, reverseModelArtifacts, coverageReports,
         com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
     )
 }
