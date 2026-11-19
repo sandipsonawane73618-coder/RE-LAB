@@ -620,7 +620,19 @@ private fun RelabHome(
                 } else {
                     intelligenceReports.forEach { MarketIntelligenceCard(it) }
                 }
-                Text("Next draw candidate research", style = MaterialTheme.typography.titleLarge)
+                Text("Reverse Engineering Model · evidence-ranked research", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Combines exact panna, digit-family DNA (1/6, 2/7, 3/8, 4/9, 5/0), weekday evidence, previous-state transitions and lagged cross-market conditions. Uses at least 30 earlier valid rows and strict chronological training.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (snapshot == null) {
+                    Text(analysisError?.let { "Research analysis error: $it" } ?: "Analysing five-market history and running chronological backtests off the UI thread…")
+                } else if (reverseModelSets.isEmpty()) {
+                    Text("No valid history is available for the five enabled markets yet.")
+                } else {
+                    reverseModelSets.forEach { ReverseEngineeringModelCard(it) }
+                }
+                Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
                 if (candidateSets.isEmpty()) {
                     Text("No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
                 } else {
@@ -855,6 +867,56 @@ private fun MarketIntelligenceCard(report: com.relab.core.MarketIntelligenceRepo
             )
             Text(
                 "Shift flag compares two equal recent/older windows; it is a descriptive distribution test, not a prediction or proof of a market mechanism.",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReverseEngineeringModelCard(set: ReverseModelDashboardSet) {
+    fun pct(value: Double): String = "${"%.1f".format(value * 100.0)}%"
+    fun evidence(value: Double?): String = value?.let { "${"%.3f".format(it)}" } ?: "—"
+
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("${set.market} · ${set.sessionId}", style = MaterialTheme.typography.titleMedium)
+            Text("Open-side reverse model", style = MaterialTheme.typography.titleSmall)
+            if (set.open.abstained) {
+                Text("ABSTAIN: ${set.open.note}")
+            } else {
+                Text("Training rows: ${set.open.trainingRecords} · Active layers: ${set.open.activeEvidenceLayers.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                set.open.candidates.forEachIndexed { index, candidate ->
+                    Text("${index + 1}. ${candidate.panna} · family ${candidate.familySequence} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}/100")
+                    Text("Exact ${evidence(candidate.exactPannaEvidence)} · Family ${evidence(candidate.familyEvidence)} · Weekday ${evidence(candidate.weekdayEvidence)} · Transition ${evidence(candidate.previousTransitionEvidence)} · Cross-market ${evidence(candidate.crossMarketConditionalEvidence)}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Text("Close-side reverse model", style = MaterialTheme.typography.titleSmall)
+            if (set.close.abstained) {
+                Text("ABSTAIN: ${set.close.note}")
+            } else {
+                Text("Training rows: ${set.close.trainingRecords} · Active layers: ${set.close.activeEvidenceLayers.joinToString()}", style = MaterialTheme.typography.bodySmall)
+                set.close.candidates.forEachIndexed { index, candidate ->
+                    Text("${index + 1}. ${candidate.panna} · family ${candidate.familySequence} · ${candidate.pannaType} · evidence ${"%.1f".format(candidate.score)}/100")
+                    Text("Exact ${evidence(candidate.exactPannaEvidence)} · Family ${evidence(candidate.familyEvidence)} · Weekday ${evidence(candidate.weekdayEvidence)} · Transition ${evidence(candidate.previousTransitionEvidence)} · Cross-market ${evidence(candidate.crossMarketConditionalEvidence)}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Text("Derived Jodi candidates", style = MaterialTheme.typography.titleSmall)
+            if (set.jodi.isEmpty()) Text("Jodi candidates require both open and close model rankings.")
+            else set.jodi.forEachIndexed { index, candidate ->
+                Text("${index + 1}. ${candidate.jodi} · relative score ${"%.1f".format(candidate.score)} · supporting pairs ${candidate.supportingPannaPairs}")
+            }
+
+            Text("Chronological walk-forward validation", style = MaterialTheme.typography.titleSmall)
+            Text("Open: evaluated ${set.openBacktest.evaluatedTargets}, abstained ${set.openBacktest.abstainedTargets}/${set.openBacktest.requestedTargets} · exact top-1 ${set.openBacktest.top1ExactHits} · exact top-10 ${set.openBacktest.top10ExactHits} · family top-1 ${set.openBacktest.top1FamilyHits} · family top-10 ${set.openBacktest.top10FamilyHits} · prior-mode family ${set.openBacktest.priorModeFamilyHits}", style = MaterialTheme.typography.bodySmall)
+            Text("Close: evaluated ${set.closeBacktest.evaluatedTargets}, abstained ${set.closeBacktest.abstainedTargets}/${set.closeBacktest.requestedTargets} · exact top-1 ${set.closeBacktest.top1ExactHits} · exact top-10 ${set.closeBacktest.top10ExactHits} · family top-1 ${set.closeBacktest.top1FamilyHits} · family top-10 ${set.closeBacktest.top10FamilyHits} · prior-mode family ${set.closeBacktest.priorModeFamilyHits}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Hit rates are historical out-of-sample measurements, not future guarantees. Relative evidence scores are not probabilities. Source verification status is shown in the reconciliation audit.",
                 style = MaterialTheme.typography.labelSmall
             )
         }
