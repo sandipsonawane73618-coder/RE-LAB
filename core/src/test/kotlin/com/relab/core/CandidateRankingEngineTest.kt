@@ -110,4 +110,23 @@ class CandidateRankingEngineTest {
         val second = CandidateRankingEngine.rank(future, Market.SRIDEVI, "main", target, PannaSide.OPEN)
         assertEquals(first.candidates, second.candidates)
     }
+    @Test fun canonicalRankingUsesOnePublisherWithoutCallingItConsensus() {
+        val singlePublisher = observations().filter { it.sourceId == "publisher-a" }
+        val ranked = CandidateRankingEngine.rankCanonical(
+            singlePublisher, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 11, 8), PannaSide.OPEN, minimumHistory = 5
+        )
+        assertFalse(ranked.abstained)
+        assertEquals(6, ranked.trainingRecords)
+        assertTrue(ranked.note.contains("publisher-a"))
+        assertTrue(ranked.note.contains("unverified"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun canonicalRankingRejectsMixedPublishers() {
+        CandidateRankingEngine.rankCanonical(
+            observations(), Market.SRIDEVI, "main",
+            LocalDate.of(2026, 11, 8), PannaSide.OPEN, minimumHistory = 5
+        )
+    }
 }
