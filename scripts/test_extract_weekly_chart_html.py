@@ -61,6 +61,17 @@ class WeeklyExtractorNineMarketTests(unittest.TestCase):
         self.assertEqual("2024-01-06", rows[-1]["date"])
         self.assertTrue(any("spans 7 days but has 6 result groups" in issue for issue in issues))
 
+    def test_shorter_date_range_than_result_columns_is_skipped(self):
+        html = "<table><tr><td>1/1/24 to 6/1/24</td>" + "".join(
+            "<td>123</td><td>65</td><td>456</td>" for _ in range(7)
+        ) + "</tr></table>"
+        rows, issues = MODULE.extract_rows(
+            html, market="SRIDEVI", session_id="main", source_id="canonical",
+            retrieved_at="2026-11-19T10:00:00+05:30"
+        )
+        self.assertEqual([], rows)
+        self.assertTrue(any("row skipped to avoid shifting dates" in issue for issue in issues))
+
     def test_invalid_jodi_is_retained_as_malformed_not_corrected(self):
         html = "<table><tr><td>1/1/24 to 7/1/24</td>" + "".join(
             "<td>123</td><td>00</td><td>456</td>" for _ in range(7)
