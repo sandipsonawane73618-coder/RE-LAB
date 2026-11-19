@@ -403,23 +403,6 @@ private fun RelabHome(
         }
     }
 
-    var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
-    val coverageReports = remember(observations, coverageRangeOverrides) {
-        observations.groupBy { it.market to it.sessionId }
-            .mapNotNull { (key, rows) ->
-                val dates = rows.map { it.date }
-                if (dates.isEmpty()) null else HistoricalCoverageAudit.analyze(
-                    market = key.first,
-                    sessionId = key.second,
-                    startDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
-                    endDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
-                    observations = rows
-                )
-            }
-            .sortedWith(compareBy<CoverageReport> { it.market.name }.thenBy { it.sessionId })
-    }
-
-    val sourceTiming = remember(observations) { SourceTimingAnalytics.summarize(observations) }
     val timingExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
