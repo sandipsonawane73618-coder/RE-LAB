@@ -32,6 +32,21 @@ class WeeklyExtractorNineMarketTests(unittest.TestCase):
                 self.assertTrue(all(row["status"] == "PUBLISHED" for row in rows))
                 self.assertTrue(all(row["result"] == "123-65-456" for row in rows))
 
+
+    def test_historical_week_length_is_not_rejected_by_current_schedule(self):
+        # Weekly schedules can change over the archive's lifetime. A valid
+        # Monday-to-Saturday row must remain importable for a market whose
+        # current page also contains Sunday columns.
+        html = "<table><tr><td>1/1/24 to 6/1/24</td>" + "".join(
+            "<td>123</td><td>65</td><td>456</td>" for _ in range(6)
+        ) + "</tr></table>"
+        rows, issues = MODULE.extract_rows(
+            html, market="SRIDEVI", session_id="main", source_id="canonical",
+            retrieved_at="2026-11-19T10:00:00+05:30"
+        )
+        self.assertEqual(6, len(rows))
+        self.assertEqual([], issues)
+
     def test_invalid_jodi_is_retained_as_malformed_not_corrected(self):
         html = "<table><tr><td>1/1/24 to 7/1/24</td>" + "".join(
             "<td>123</td><td>00</td><td>456</td>" for _ in range(7)
