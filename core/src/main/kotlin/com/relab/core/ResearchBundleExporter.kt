@@ -14,8 +14,17 @@ object ResearchBundleExporter {
         consensusRecords: List<ChartRecord>,
         analyses: List<MarketAnalysis>,
         coverageReports: List<CoverageReport>,
-        generatedAt: Instant
+        generatedAt: Instant,
+        reverseModelArtifacts: Map<String, String> = emptyMap()
     ): ByteArray {
+        val modelFiles = if (reverseModelArtifacts.isEmpty()) {
+            ReverseEngineeringCsvExporter.exportAll(emptyList(), emptyList(), emptyList())
+        } else reverseModelArtifacts
+        modelFiles.keys.forEach { name ->
+            require(name.startsWith("reverse-model-") && name.endsWith(".csv")) {
+                "Unexpected reverse model artifact name: $name"
+            }
+        }
         val artifacts = linkedMapOf(
             "source-observations.csv" to SourceCsvExporter.export(observations),
             "derived-consensus-research.csv" to DerivedChartCsvExporter.export(consensusRecords),
@@ -27,6 +36,10 @@ object ResearchBundleExporter {
             ),
             "README.txt" to readme(observations, consensusRecords, analyses, coverageReports, generatedAt)
         )
+        modelFiles.forEach { (name, content) ->
+            require(name !in artifacts) { "Duplicate research bundle artifact: $name" }
+            artifacts[name] = content
+        }
         val index = buildString {
             appendLine("{")
             appendLine("  \"bundle_format_version\": 1,")
@@ -71,6 +84,10 @@ object ResearchBundleExporter {
         appendLine("- walk-forward-audit.csv: chronological out-of-sample baseline audit")
         appendLine("- historical-coverage-audit.csv: expected-day coverage states")
         appendLine("- source-publication-timing.csv: explicit publication-to-capture timing")
+        appendLine("- reverse-model-panna-rankings.csv: exact panna rankings and evidence components")
+        appendLine("- reverse-model-family-rankings.csv: separate 125-state family-sequence rankings")
+        appendLine("- reverse-model-jodi-rankings.csv: Jodi candidates derived from open/close panna rankings")
+        appendLine("- reverse-model-walk-forward.csv: chronological top-1/top-10 exact, Ank and family hit rates")
         appendLine("- research-manifest.json: dataset checksum, reconciliation and timing metadata")
         appendLine("- bundle-index.json: SHA-256 and byte size for every other artifact")
         appendLine()
