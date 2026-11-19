@@ -163,7 +163,7 @@ object ReverseEngineeringModel {
             }.toList()
 
         val familyCandidates = (0 until 125).map { value ->
-            val family = value.toString().padStart(3, '0')
+            val family = buildString { append(value / 25); append((value / 5) % 5); append(value % 5) }
             val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
                 (history.size + 125.0 * smoothingAlpha)
             val weekdayProbability = if (weekdayRows.isEmpty()) null else
