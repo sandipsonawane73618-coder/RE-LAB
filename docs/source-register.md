@@ -15,7 +15,7 @@ This register lists candidate public archives for source-observation collection.
 
 | Source ID | URL | Coverage / notes | Collection rule |
 |---|---|---|---|
-| `fixresult` | https://www.fixresult.in/kalyan-matka-chart.html | Weekly Mon–Sat table; archive overview states 1,221 records from 31 Oct 2022 through 24 Sep 2026. | Useful historical baseline; preserve missing cells and anomalous rows. |
+| `fixresult` | https://sattamatkajodi.com/record/kalyan-penal-chart.php | Weekly Mon–Sat table; archive overview states 1,221 records from 31 Oct 2022 through 24 Sep 2026. | Useful historical baseline; preserve missing cells and anomalous rows. |
 | `matkaflash` | https://matkaflash.com/kalyan | Archive states 1,240 dated records from 17 Oct 2022. A 16 Nov 2026 board snapshot displayed 390-24-257, which conflicts with other recent chart observations. | Keep the 16 Nov value as source-specific evidence; do not merge it into another date or session without reconciliation. |
 | `kalyanchart` | https://kalyanchart.cyou/history/ | Separate history pages for Kalyan and other day/night sessions. Some archive views have shown stale repeated values. | Verify date and session identity row-by-row; repeated rows are not automatically daily results. |
 
@@ -48,8 +48,8 @@ The application scope is nine independent chart streams. This section records th
 
 | Market ID | Canonical panel page | Publisher ID | Weekly layout |
 |---|---|---|---|
-| `SRIDEVI` | https://matkaflash.com/sridevi/panel-chart | `matkaflash` | Daily/session-specific; confirm actual table layout before import |
-| `SRIDEVI_NIGHT` | https://sattamatkajodi.com/sridevi-night-panel-chart.php | `sattamatkajodi` | Confirm page layout and active days from captured rows |
+| `SRIDEVI` | https://sattamatkajodi.com/record/sridevi-satta-penal-chart.php | `matkaflash` | Daily/session-specific; confirm actual table layout before import |
+| `SRIDEVI_NIGHT` | https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php | `sattamatkajodi` | Confirm page layout and active days from captured rows |
 | `KALYAN` | https://www.fixresult.in/kalyan-matka-chart.html | `fixresult` | Monday–Saturday |
 | `MAIN_BAZAR` | https://sattamatkajodi.com/main-bazar-panel-chart.php | `sattamatkajodi` | Monday–Friday |
 | `TIME_BAZAR` | https://sattamatkajodi.com/time-bazar-panel-chart.php | `sattamatkajodi` | Daily |
