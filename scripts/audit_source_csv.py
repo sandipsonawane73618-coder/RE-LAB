@@ -55,6 +55,17 @@ def eligible_published_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     ]
 
 
+def write_eligible_csv(source: Path, output: Path) -> int:
+    fields, rows = read_rows(source)
+    eligible = eligible_published_rows(rows)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\\n")
+        writer.writeheader()
+        writer.writerows(eligible)
+    return len(eligible)
+
+
 def audit(path: Path) -> dict:
     _, rows = read_rows(path)
     by_market = defaultdict(list)
@@ -143,13 +154,7 @@ def main() -> int:
     args = parser.parse_args()
     result = audit(args.csv_file)
     if args.eligible_output:
-        fields, rows = read_rows(args.csv_file)
-        eligible = eligible_published_rows(rows)
-        args.eligible_output.parent.mkdir(parents=True, exist_ok=True)
-        with args.eligible_output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
-            writer.writeheader()
-            writer.writerows(eligible)
+        write_eligible_csv(args.csv_file, args.eligible_output)
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
