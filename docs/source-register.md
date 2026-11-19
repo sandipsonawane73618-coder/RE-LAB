@@ -48,16 +48,16 @@ The application scope is nine independent chart streams. This section records th
 
 | Market ID | Canonical panel page | Publisher ID | Weekly layout |
 |---|---|---|---|
-| `SRIDEVI` | https://sattamatkajodi.com/record/sridevi-satta-penal-chart.php | `matkaflash` | Daily/session-specific; confirm actual table layout before import |
-| `SRIDEVI_NIGHT` | https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php | `sattamatkajodi` | Confirm page layout and active days from captured rows |
-| `KALYAN` | https://www.fixresult.in/kalyan-matka-chart.html | `fixresult` | Monday–Saturday |
+| `SRIDEVI` | https://sattamatkajodi.com/record/sridevi-satta-penal-chart.php | `sattamatkajodi` | Monday–Sunday; Sunday included |
+| `SRIDEVI_NIGHT` | https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php | `sattamatkajodi` | Monday–Sunday; Sunday included |
+| `KALYAN` | https://sattamatkajodi.com/record/kalyan-penal-chart.php | `sattamatkajodi` | Monday–Saturday |
 | `MAIN_BAZAR` | https://sattamatkajodi.com/main-bazar-panel-chart.php | `sattamatkajodi` | Monday–Friday |
-| `TIME_BAZAR` | https://sattamatkajodi.com/time-bazar-panel-chart.php | `sattamatkajodi` | Daily |
-| `MILAN_DAY` | https://sattamatkajodi.com/record/milan-day-penal-chart.php | `sattamatkajodi` | Monday–Sunday |
+| `TIME_BAZAR` | https://sattamatkajodi.com/time-bazar-panel-chart.php | `sattamatkajodi` | Monday–Sunday table; Sunday cells are starred in newer years |
+| `MILAN_DAY` | https://sattamatkajodi.com/record/milan-day-penal-chart.php | `sattamatkajodi` | Monday–Sunday historically; Sunday starred from February 2022 |
 | `MILAN_NIGHT` | https://sattamatkajodi.com/record/milan-night-penal-chart.php | `sattamatkajodi` | Monday–Saturday |
-| `RAJDHANI_DAY` | https://sattamatkajodi.com/satta-matka-chart.php (Rajdhani Day Panel Chart index entry) | `sattamatkajodi` | Monday–Saturday |
+| `RAJDHANI_DAY` | https://sattamatkajodi.com/record/rajdhani-day-penal-chart.php | `sattamatkajodi` | Monday–Saturday |
 | `RAJDHANI_NIGHT` | https://sattamatkajodi.com/record/rajdhani-night-penal-chart.php | `sattamatkajodi` | Monday–Friday |
 
-All page views from the same publisher reuse the same `source_id`; a publisher is not counted as independent corroboration merely because it exposes multiple market pages. For each market, capture the exact final page URL, timestamp, raw row text, and source revision before importing. The weekly extractor's layout checks must be confirmed against real saved HTML for every market; a passing parser run alone does not establish chart correctness.
+All nine selected canonical pages are from one publisher and reuse the same `source_id`. This is one canonical chart stream per market, not multi-publisher corroboration. The older multi-publisher entries earlier in this register are discovery notes only and must not be merged into these canonical datasets. For each market, capture the exact final page URL, timestamp, raw row text, and source revision before importing. The weekly extractor's layout checks must be confirmed against real saved HTML for every market; a passing parser run alone does not establish chart correctness.
 
 The chart publisher's all-market index lists Sridevi Day/Night, Milan Day/Night, Rajdhani Day/Night, Main Bazar, and Time Bazar as separate panel-chart entries. See https://sattamatkajodi.com/satta-matka-chart.php. The market's advertised weekly schedule is only a parser expectation: missing cells remain missing unless the source explicitly marks a holiday.
