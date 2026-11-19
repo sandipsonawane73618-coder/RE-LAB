@@ -578,6 +578,7 @@ private fun RelabHome(
                     ) { Text("Export source timing CSV") }
                 }
                 importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                val currentReport = report
                 Card(colors = CardDefaults.cardColors()) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Local dataset", style = MaterialTheme.typography.titleLarge)
@@ -585,12 +586,12 @@ private fun RelabHome(
                         Text("Published: $published   Pending: $pending")
                         Text("Malformed rows: $malformed   Conflicting dates: $conflicts")
                         Text("Reconciled date groups: ${groups.size}")
-                        if (report == null) {
+                        if (currentReport == null) {
                             Text("No CSV backup is loaded. Historical charts are fetched automatically when the local dataset is empty; manual import is optional.")
                         }
-                        if (report != null && report.issues.isNotEmpty()) {
-                            Text("Import row issues: ${report.issues.size}")
-                            report.issues.take(5).forEach { issue ->
+                        if (currentReport != null && currentReport.issues.isNotEmpty()) {
+                            Text("Import row issues: ${currentReport.issues.size}")
+                            currentReport.issues.take(5).forEach { issue ->
                                 Text("Row ${issue.rowNumber}: ${issue.message}", style = MaterialTheme.typography.bodySmall)
                             }
                         }
