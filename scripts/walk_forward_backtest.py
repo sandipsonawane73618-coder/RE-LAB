@@ -139,7 +139,7 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
                 history.append(target)
-            result = _metrics([], ranks, [], baseline_ranks)
+            result = _metrics(ranks, ranks, [], baseline_ranks)
             result.update({
                 "market": market,
                 "session_id": session_id,
