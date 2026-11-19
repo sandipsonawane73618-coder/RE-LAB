@@ -312,20 +312,24 @@ private fun RelabHome(
     var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     var analysisSnapshot by remember { mutableStateOf<DashboardAnalysisSnapshot?>(null) }
     var analysisError by remember { mutableStateOf<String?>(null) }
+    var analysisCompletedFor by remember { mutableStateOf<List<com.relab.core.SourceObservation>?>(null) }
 
     // Reconciliation, pattern scans, candidate generation and chronological backtests
     // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
     LaunchedEffect(observations) {
         analysisSnapshot = null
         analysisError = null
+        analysisCompletedFor = null
         val rows = observations
         try {
             val computed = withContext(Dispatchers.Default) {
                 buildDashboardAnalysisSnapshot(rows)
             }
             analysisSnapshot = computed
+            analysisCompletedFor = rows
         } catch (error: Exception) {
             analysisError = error.message ?: "Unknown analysis error"
+            analysisCompletedFor = rows
         }
     }
 
@@ -335,13 +339,16 @@ private fun RelabHome(
 
     // Run coverage only after the main analysis snapshot finishes. Running both
     // full-history pipelines at once doubled peak memory on cold launches.
-    LaunchedEffect(observations, coverageRangeOverrides, analysisSnapshot, analysisError) {
+    LaunchedEffect(observations, coverageRangeOverrides, analysisCompletedFor, analysisSnapshot, analysisError) {
+        // Do not analyse a new dataset using the previous launch's snapshot.
+        if (analysisCompletedFor != observations) {
+            coverageLoading = true
+            return@LaunchedEffect
+        }
         if (analysisSnapshot == null) {
-            coverageLoading = analysisError == null
-            if (analysisError != null) {
-                coverageReports = emptyList()
-                coverageError = analysisError
-            }
+            coverageLoading = false
+            coverageReports = emptyList()
+            coverageError = analysisError
             return@LaunchedEffect
         }
         coverageLoading = true
