@@ -4,11 +4,15 @@ enum class Market(val activeDays: Set<java.time.DayOfWeek>) {
     SRIDEVI(java.time.DayOfWeek.entries.toSet()),
     SRIDEVI_NIGHT(java.time.DayOfWeek.entries.toSet()),
     KALYAN(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
+    MAIN_BAZAR(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY)),
     TIME_BAZAR(java.time.DayOfWeek.entries.toSet()),
-    MAIN_BAZAR(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY));
+    MILAN_DAY(java.time.DayOfWeek.entries.toSet()),
+    MILAN_NIGHT(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
+    RAJDHANI_DAY(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
+    RAJDHANI_NIGHT(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY));
 
     companion object {
-        /** Resolve only the five explicitly supported source chart paths. */
+        /** Resolve known canonical panel-chart URL paths to independent market IDs. */
         fun fromSourceUrl(value: String): Market? {
             val path = runCatching { java.net.URI(value).path.lowercase(java.util.Locale.ROOT) }
                 .getOrNull() ?: return null
@@ -18,6 +22,10 @@ enum class Market(val activeDays: Set<java.time.DayOfWeek>) {
                 path.endsWith("/kalyan-penal-chart.php") -> KALYAN
                 path.endsWith("/time-bazar-panel-chart.php") -> TIME_BAZAR
                 path.endsWith("/main-bazar-panel-chart.php") -> MAIN_BAZAR
+                path.endsWith("/milan-day-penal-chart.php") -> MILAN_DAY
+                path.endsWith("/milan-night-penal-chart.php") -> MILAN_NIGHT
+                path.endsWith("/rajdhani-day-penal-chart.php") -> RAJDHANI_DAY
+                path.endsWith("/rajdhani-night-penal-chart.php") -> RAJDHANI_NIGHT
                 else -> null
             }
         }
