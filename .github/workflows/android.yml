@@ -62,10 +62,12 @@ jobs:
           python-version: "3.12"
       - name: Capture nine canonical chart pages
         run: python scripts/capture_canonical_charts.py --output-dir data/captures
+      - name: Extract captured weekly charts into source CSV
+        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
       - name: Upload immutable HTML snapshots and metadata
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relab-canonical-chart-captures
-          path: data/captures/
+          path: |\n            data/captures/\n            data/derived/
           if-no-files-found: warn
