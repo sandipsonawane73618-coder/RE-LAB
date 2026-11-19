@@ -30,7 +30,7 @@ class ReverseEngineeringModelTest {
 
     @Test fun usesOnlyFiveEnabledMarketsAndAbstainsForInsufficientHistory() {
         val result = ReverseEngineeringModel.rank(
-            history(), Market.SRIDEVI, "main", LocalDate.of(2026, 1, 50),
+            history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
             ReverseEngineeringSide.OPEN, minimumHistory = 50
         )
         assertTrue(result.abstained)
