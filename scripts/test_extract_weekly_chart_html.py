@@ -47,6 +47,20 @@ class WeeklyExtractorNineMarketTests(unittest.TestCase):
         self.assertEqual(6, len(rows))
         self.assertEqual([], issues)
 
+    def test_cell_groups_define_historical_week_length_when_range_end_drifts(self):
+        # Kalyan has six result columns even when the publisher labels the week
+        # through Sunday. Keep six observations and flag the source discrepancy.
+        html = "<table><tr><td>1/1/24 to 7/1/24</td>" + "".join(
+            "<td>123</td><td>65</td><td>456</td>" for _ in range(6)
+        ) + "</tr></table>"
+        rows, issues = MODULE.extract_rows(
+            html, market="KALYAN", session_id="main", source_id="canonical",
+            retrieved_at="2026-11-19T10:00:00+05:30"
+        )
+        self.assertEqual(6, len(rows))
+        self.assertEqual("2024-01-06", rows[-1]["date"])
+        self.assertTrue(any("spans 7 days but has 6 result groups" in issue for issue in issues))
+
     def test_invalid_jodi_is_retained_as_malformed_not_corrected(self):
         html = "<table><tr><td>1/1/24 to 7/1/24</td>" + "".join(
             "<td>123</td><td>00</td><td>456</td>" for _ in range(7)
