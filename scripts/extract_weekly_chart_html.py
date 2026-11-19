@@ -151,13 +151,6 @@ def extract_rows(
     parser.feed(html)
     output: list[dict[str, str]] = []
     issues: list[str] = []
-    allowed_day_counts = {
-        "SRIDEVI": {7}, "SRIDEVI_NIGHT": {7}, "KALYAN": {6},
-        "TIME_BAZAR": {7}, "MAIN_BAZAR": {5},
-        "MILAN_DAY": {7}, "MILAN_NIGHT": {6},
-        "RAJDHANI_DAY": {6}, "RAJDHANI_NIGHT": {5},
-    }[market]
-
     for row_number, cells in enumerate(parser.rows, start=1):
         if len(cells) < 2:
             continue
@@ -166,8 +159,8 @@ def extract_rows(
             continue
         start, end = week
         day_count = (end - start).days + 1
-        if start.weekday() != 0 or day_count not in allowed_day_counts:
-            issues.append(f"row {row_number}: week range does not match {market} chart layout: {cells[0]}")
+        if start.weekday() != 0 or not 1 <= day_count <= 7:
+            issues.append(f"row {row_number}: invalid Monday-start weekly range for {market}: {cells[0]}")
             continue
         if len(cells) != (day_count * 3) + 1:
             issues.append(
