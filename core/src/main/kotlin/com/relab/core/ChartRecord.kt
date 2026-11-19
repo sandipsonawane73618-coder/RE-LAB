@@ -18,6 +18,7 @@ enum class Market {
             return when {
                 path.endsWith("/record/sridevi-satta-penal-chart.php") -> SRIDEVI
                 path.endsWith("/record/sridevi-night-satta-penal-chart.php") -> SRIDEVI_NIGHT
+                path.endsWith("/record/kalyan-penal-chart.php") -> KALYAN
                 path.endsWith("/time-bazar-panel-chart.php") -> TIME_BAZAR
                 path.endsWith("/main-bazar-panel-chart.php") -> MAIN_BAZAR
                 path.endsWith("/record/milan-day-penal-chart.php") -> MILAN_DAY
