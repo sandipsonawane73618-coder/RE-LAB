@@ -752,6 +752,29 @@ private fun MarketIntelligenceCard(report: com.relab.core.MarketIntelligenceRepo
 }
 
 @Composable
+private fun CrossMarketResearchCard(report: com.relab.core.CrossMarketPairReport) {
+    fun pct(count: Int): String =
+        if (report.sharedDates == 0) "—" else "${"%.1f".format(count * 100.0 / report.sharedDates)}%"
+
+    val openLinks = report.topOpenRelations.joinToString { "${it.fromFamilySequence}→${it.toFamilySequence} (${it.count})" }
+    val closeLinks = report.topCloseRelations.joinToString { "${it.fromFamilySequence}→${it.toFamilySequence} (${it.count})" }
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text("${report.firstMarket} ↔ ${report.secondMarket}", style = MaterialTheme.typography.titleMedium)
+            Text("Same-date/session comparisons: ${report.sharedDates}", style = MaterialTheme.typography.bodySmall)
+            Text("Open family match: ${report.openFamilyMatches} (${pct(report.openFamilyMatches)}) · Close family match: ${report.closeFamilyMatches} (${pct(report.closeFamilyMatches)})")
+            Text("Open Ank match: ${report.openAnkMatches} · Close Ank match: ${report.closeAnkMatches} · Exact Jodi match: ${report.jodiMatches} (${pct(report.jodiMatches)})")
+            if (openLinks.isNotBlank()) Text("Top open-family relations: $openLinks", style = MaterialTheme.typography.bodySmall)
+            if (closeLinks.isNotBlank()) Text("Top close-family relations: $closeLinks", style = MaterialTheme.typography.bodySmall)
+            Text("Descriptive co-occurrence only. Shared dates do not establish causation or future prediction.", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
         ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
