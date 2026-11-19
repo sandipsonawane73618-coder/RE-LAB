@@ -49,6 +49,7 @@ def eligible_published_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return [
         row for row in rows
         if row.get("status", "").upper() == "PUBLISHED"
+        and valid_result(row.get("result", ""))
         and counts[(row.get("market", "").strip().upper(), row.get("session_id", ""),
                     row.get("date", ""), row.get("source_id", ""))] == 1
     ]
