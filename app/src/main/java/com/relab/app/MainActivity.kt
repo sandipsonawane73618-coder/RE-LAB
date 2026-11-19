@@ -318,7 +318,13 @@ private fun RelabHome(
         }
     }
 
-    val report = remember(rawCsv) { rawCsv?.let { SourceCsvImporter.import(it) } }
+    var report by remember { mutableStateOf<com.relab.core.CsvImportReport?>(null) }
+    LaunchedEffect(rawCsv) {
+        val csv = rawCsv
+        report = if (csv.isNullOrBlank()) null else withContext(Dispatchers.IO) {
+            SourceCsvImporter.import(csv)
+        }
+    }
     var coverageRangeOverrides by remember { mutableStateOf(initialCoverageRanges) }
     var analysisSnapshot by remember { mutableStateOf<DashboardAnalysisSnapshot?>(null) }
     var analysisError by remember { mutableStateOf<String?>(null) }
@@ -406,7 +412,7 @@ private fun RelabHome(
     val timingExportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
-                val csv = SourceTimingAnalytics.exportCsv(observations)
+                val csv = SourceTimingAnalytics.exportCsv(activeObservations)
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(csv) }
                     ?: error("Source timing file could not be written")
                 importMessage = "Exported publication-to-capture timing for ${sourceTiming.size} publisher/session groups. Missing publication times remain unestimated."
