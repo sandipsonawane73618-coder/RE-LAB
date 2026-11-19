@@ -66,6 +66,8 @@ jobs:
         run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
       - name: Audit extracted market CSV
         run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/canonical_audit.json --eligible-output data/derived/canonical_eligible_observations.csv
+      - name: Run chronological walk-forward evaluation
+        run: python scripts/walk_forward_backtest.py data/derived/canonical_eligible_observations.csv --minimum-history 30 --output data/derived/walk_forward_report.json
       - name: Upload immutable HTML snapshots and metadata
         if: always()
         uses: actions/upload-artifact@v4
