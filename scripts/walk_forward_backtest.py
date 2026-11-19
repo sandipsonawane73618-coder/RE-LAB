@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import heapq
 import json
 from collections import Counter
 from datetime import date
@@ -56,7 +57,13 @@ def read_eligible(path: Path) -> dict[str, list[dict]]:
     return grouped
 
 
-def rank_pannas(history: list[dict], target_date: date, side: str, limit: int = 1000) -> list[tuple[str, float]]:
+CANDIDATES = tuple(f"{value:03d}" for value in range(1000))
+CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
+
+
+def rank_pannas(
+    history: list[dict], target_date: date, side: str, actual: str, limit: int = 10
+) -> tuple[list[str], int]:
     values = [row[side] for row in history]
     families = [family_sequence(value) for value in values]
     exact_counts = Counter(values)
@@ -72,29 +79,36 @@ def rank_pannas(history: list[dict], target_date: date, side: str, limit: int = 
     max_weekday = max(weekday_counts.values(), default=1)
     max_transition = max(transitions.values(), default=1)
 
-    ranked = []
-    for value in range(1000):
-        panna = f"{value:03d}"
-        family = family_sequence(panna)
+    scored = []
+    actual_item = None
+    for panna in CANDIDATES:
+        family = CANDIDATE_FAMILIES[panna]
         exact = exact_counts[panna]
         family_count = family_counts[family]
-        weekday_count = weekday_counts[family]
-        transition_count = transitions[(previous_state, family)]
         score = (
             0.30 * exact / max_exact
             + 0.35 * family_count / max_family
-            + 0.20 * weekday_count / max_weekday
-            + 0.15 * transition_count / max_transition
+            + 0.20 * weekday_counts[family] / max_weekday
+            + 0.15 * transitions[(previous_state, family)] / max_transition
         ) * 100.0
-        ranked.append((panna, score, family_count, exact))
-    ranked.sort(key=lambda item: (-item[1], -item[2], -item[3], item[0]))
-    return [(item[0], item[1]) for item in ranked[:limit]]
+        item = (panna, score, family_count, exact)
+        scored.append(item)
+        if panna == actual:
+            actual_item = item
+
+    sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
+    top = heapq.nsmallest(limit, scored, key=sort_key)
+    actual_rank = 1 + sum(sort_key(item) < sort_key(actual_item) for item in scored)
+    return [item[0] for item in top], actual_rank
 
 
-def rank_exact_frequency(history: list[dict], side: str, limit: int = 1000) -> list[str]:
+def rank_exact_frequency(history: list[dict], side: str, actual: str) -> int:
     counts = Counter(row[side] for row in history)
-    return sorted((f"{value:03d}" for value in range(1000)),
-                  key=lambda panna: (-counts[panna], panna))[:limit]
+    actual_count = counts[actual]
+    return 1 + sum(
+        counts[panna] > actual_count or (counts[panna] == actual_count and panna < actual)
+        for panna in CANDIDATES
+    )
 
 
 def _metrics(hits: list[int], ranks: list[int], baseline_hits: list[int], baseline_ranks: list[int]) -> dict:
@@ -131,11 +145,9 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
             for target in session_rows:
                 # Evaluate first, then append target: no same-day or future leakage.
                 if len(history) >= minimum_history:
-                    ranked = rank_pannas(history, target["date"], side, 1000)
-                    baseline = rank_exact_frequency(history, side, 1000)
                     actual = target[side]
-                    rank = next((index + 1 for index, item in enumerate(ranked) if item[0] == actual), 0)
-                    baseline_rank = next((index + 1 for index, item in enumerate(baseline) if item == actual), 0)
+                    _, rank = rank_pannas(history, target["date"], side, actual, 10)
+                    baseline_rank = rank_exact_frequency(history, side, actual)
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
                 history.append(target)
