@@ -147,7 +147,7 @@ def main() -> int:
         eligible = eligible_published_rows(rows)
         args.eligible_output.parent.mkdir(parents=True, exist_ok=True)
         with args.eligible_output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\\n")
+            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
             writer.writeheader()
             writer.writerows(eligible)
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
