@@ -19,6 +19,16 @@ data class ReverseEngineeringCandidate(
     val crossMarketConditionalEvidence: Double?
 )
 
+data class ReverseEngineeringFamilyCandidate(
+    val familySequence: String,
+    val score: Double,
+    val historicalCount: Int,
+    val weekdayCount: Int?,
+    val previousTransitionCount: Int?,
+    val openCloseConditionalCount: Int?,
+    val crossMarketConditionalCount: Int?
+)
+
 data class ReverseEngineeringRanking(
     val market: Market,
     val sessionId: String,
@@ -28,6 +38,7 @@ data class ReverseEngineeringRanking(
     val minimumHistoryRequired: Int,
     val abstained: Boolean,
     val candidates: List<ReverseEngineeringCandidate>,
+    val familyCandidates: List<ReverseEngineeringFamilyCandidate>,
     val activeEvidenceLayers: List<String>,
     val note: String
 )
@@ -106,7 +117,7 @@ object ReverseEngineeringModel {
         if (history.size < minimumHistory) {
             return ReverseEngineeringRanking(
                 market, sessionId, side, targetDate, history.size, minimumHistory,
-                true, emptyList(), emptyList(),
+                true, emptyList(), emptyList(), emptyList(),
                 "Insufficient earlier valid history: need $minimumHistory rows; found ${history.size}. Model abstained."
             )
         }
@@ -150,6 +161,59 @@ object ReverseEngineeringModel {
                     .map { it.second }.groupingBy { it }.eachCount()
                 if (conditional.isEmpty()) null else CrossMarketSignal(conditional, conditional.values.sum())
             }.toList()
+
+        val familyCandidates = (0 until 125).map { value ->
+            val family = value.toString().padStart(3, '0')
+            val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
+                (history.size + 125.0 * smoothingAlpha)
+            val weekdayProbability = if (weekdayRows.isEmpty()) null else
+                ((weekdayCounts[family] ?: 0) + smoothingAlpha) /
+                    (weekdayRows.size + 125.0 * smoothingAlpha)
+            val transitionProbability = if (history.size < 2) null else
+                ((transitionCounts["$previousFamily>$family"] ?: 0) + smoothingAlpha) /
+                    (history.size - 1 + 125.0 * smoothingAlpha)
+            val openCloseProbability = if (openCloseCounts.isEmpty()) null else
+                ((openCloseCounts[family] ?: 0) + smoothingAlpha) /
+                    (openCloseCounts.values.sum() + 125.0 * smoothingAlpha)
+            val crossProbability = if (crossSignals.isEmpty()) null else
+                crossSignals.map { signal ->
+                    ((signal.conditionalCounts[family] ?: 0) + smoothingAlpha) /
+                        (signal.denominator + 125.0 * smoothingAlpha)
+                }.average()
+            listOf(family, familyProbability.toString(), weekdayProbability?.toString().orEmpty(),
+                transitionProbability?.toString().orEmpty(), openCloseProbability?.toString().orEmpty(),
+                crossProbability?.toString().orEmpty())
+        }
+
+        fun maxFamilyValue(index: Int): Double =
+            familyCandidates.mapNotNull { it[index].toDoubleOrNull() }.maxOrNull()?.coerceAtLeast(1e-12) ?: 1.0
+        val familyMaxima = (1..5).map(::maxFamilyValue)
+        val rankedFamilies = familyCandidates.map { values ->
+            val raw = (1..5).map { index -> values[index].toDoubleOrNull()?.div(familyMaxima[index - 1]) }
+            val familyWeights = listOf(0.35, 0.20, 0.20, 0.10, 0.15)
+            var score = 0.0
+            var total = 0.0
+            raw.forEachIndexed { index, value ->
+                if (value != null) {
+                    score += value * familyWeights[index]
+                    total += familyWeights[index]
+                }
+            }
+            val family = values[0]
+            ReverseEngineeringFamilyCandidate(
+                familySequence = family,
+                score = if (total == 0.0) 0.0 else score / total * 100.0,
+                historicalCount = familyCounts[family] ?: 0,
+                weekdayCount = if (weekdayRows.isEmpty()) null else weekdayCounts[family] ?: 0,
+                previousTransitionCount = if (history.size < 2) null else transitionCounts["$previousFamily>$family"] ?: 0,
+                openCloseConditionalCount = if (openCloseCounts.isEmpty()) null else openCloseCounts[family] ?: 0,
+                crossMarketConditionalCount = if (crossSignals.isEmpty()) null else crossSignals.sumOf { it.conditionalCounts[family] ?: 0 }
+            )
+        }.sortedWith(
+            compareByDescending<ReverseEngineeringFamilyCandidate> { it.score }
+                .thenByDescending { it.historicalCount }
+                .thenBy { it.familySequence }
+        ).take(10)
 
         val candidates = (0..999).map { value ->
             val panna = value.toString().padStart(3, '0')
@@ -223,7 +287,7 @@ object ReverseEngineeringModel {
 
         return ReverseEngineeringRanking(
             market, sessionId, side, targetDate, history.size, minimumHistory,
-            false, ranked, active,
+            false, ranked, rankedFamilies, active,
             "Relative evidence index only; not a calibrated probability or guarantee. Training data ends before $targetDate. Source confidence is governed by the reconciliation ledger."
         )
     }
@@ -268,8 +332,8 @@ object ReverseEngineeringModel {
             val first = ranking.candidates.first()
             if (first.panna == actualPanna) top1Exact++
             if (ranking.candidates.any { it.panna == actualPanna }) top10Exact++
-            if (first.familySequence == actualFamily) top1Family++
-            if (ranking.candidates.any { it.familySequence == actualFamily }) top10Family++
+            if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
+            if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
             val priorFamilies = actualRows.filter { it.date.isBefore(actual.date) }
                 .map { familyOf(pannaOf(it, side)) }
