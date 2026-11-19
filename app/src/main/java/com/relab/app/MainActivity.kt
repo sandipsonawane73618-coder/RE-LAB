@@ -591,12 +591,13 @@ private fun RelabHome(
                     }
                 }
                 Text("Pattern research · exploratory + verified", style = MaterialTheme.typography.titleLarge)
+                Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar. Other legacy market rows are excluded from analysis.", style = MaterialTheme.typography.bodySmall)
                 Text(
                     "Analysis input: ${researchRecords.size} valid historical rows (${chartBuild.records.size} consensus + ${chartBuild.singleSourceUnverifiedGroups.size} single-source groups) · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (patternAnalyses.isEmpty()) {
-                    Text("No valid published rows available for pattern analysis yet. Check the imported chart rows and source format.")
+                    Text(if (snapshot == null) "Analysing historical patterns…" else "No valid published rows available for pattern analysis yet. Check the imported chart rows and source format.")
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
@@ -606,7 +607,7 @@ private fun RelabHome(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (crossMarketReports.isEmpty()) {
-                    Text("Cross-market comparison will appear when at least two enabled markets have valid records for the same date and session.")
+                    Text(if (snapshot == null) "Analysing same-date cross-market relationships…" else "Cross-market comparison will appear when at least two enabled markets have valid records for the same date and session.")
                 } else {
                     crossMarketReports.forEach { CrossMarketResearchCard(it) }
                 }
@@ -616,7 +617,7 @@ private fun RelabHome(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (intelligenceReports.isEmpty()) {
-                    Text("Market intelligence will appear after valid published chart rows are available.")
+                    Text(if (snapshot == null) "Calculating market regime and distribution shifts…" else "Market intelligence will appear after valid published chart rows are available.")
                 } else {
                     intelligenceReports.forEach { MarketIntelligenceCard(it) }
                 }
@@ -634,7 +635,7 @@ private fun RelabHome(
                 }
                 Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
                 if (candidateSets.isEmpty()) {
-                    Text("No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
+                    Text(if (snapshot == null) "Preparing legacy baseline candidates…" else "No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
                 } else {
                     candidateSets.forEach { (open, close, jodi) ->
                         CandidateResearchCard(open, close, jodi)
@@ -642,7 +643,7 @@ private fun RelabHome(
                 }
                 Text("Historical coverage audit", style = MaterialTheme.typography.titleLarge)
                 if (coverageReports.isEmpty()) {
-                    Text("Coverage audit will appear after source data is imported.")
+                    Text(if (snapshot == null) "Calculating historical coverage…" else "Coverage audit will appear after source data is imported.")
                 } else {
                     coverageReports.forEach { coverage ->
                         CoverageReportCard(coverage) { start, end ->
@@ -654,13 +655,13 @@ private fun RelabHome(
                 }
                 Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
                 if (repeatedSourceRecords.isEmpty()) {
-                    Text("No repeated source-record IDs found. Records without a source record ID are not guessed or grouped.")
+                    Text(if (snapshot == null) "Checking repeated source-record IDs…" else "No repeated source-record IDs found. Records without a source record ID are not guessed or grouped.")
                 } else {
                     DuplicateObservationAuditCard(repeatedSourceRecords)
                 }
                 Text("Repeated result across dates · stale archive review", style = MaterialTheme.typography.titleLarge)
                 if (repeatedPublishedResults.isEmpty()) {
-                    Text("No identical published result repeated across 3 or more distinct dates by the same source.")
+                    Text(if (snapshot == null) "Checking repeated published values…" else "No identical published result repeated across 3 or more distinct dates by the same source.")
                 } else {
                     RepeatedPublishedResultAuditCard(repeatedPublishedResults)
                 }
