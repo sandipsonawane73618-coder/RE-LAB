@@ -10,7 +10,7 @@ Optional headers:
 
 `source_record_id,source_url,published_at,result`
 
-- `market`: `SRIDEVI` or `KALYAN`
+- `market`: `SRIDEVI`, `SRIDEVI_NIGHT`, `KALYAN`, `MAIN_BAZAR`, `TIME_BAZAR`, `MILAN_DAY`, `MILAN_NIGHT`, `RAJDHANI_DAY`, or `RAJDHANI_NIGHT`
 - `session_id`: stable identity such as `main` or `day`; never merge distinct sessions
 - `source_id`: canonical publisher ID, not a page URL or page ID; all pages/views from one publisher must reuse the same ID. Use `source_url` to identify the exact page. Independent consensus counts distinct `source_id` values only.
 - `date`: ISO date, `YYYY-MM-DD`
