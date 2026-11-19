@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -146,6 +147,11 @@ private fun RelabHome(
     onClearCsv: () -> Unit
 ) {
     val context = LocalContext.current
+    LaunchedEffect(observations.isEmpty()) {
+        if (observations.isEmpty() && !linkBusy) {
+            importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
+        }
+    }
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
@@ -369,6 +375,11 @@ private fun RelabHome(
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
+                Button(
+                    enabled = !linkBusy,
+                    onClick = { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (linkBusy) "Fetching 5 markets…" else "Fetch / Refresh All 5 Markets") }
                 Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
                 OutlinedTextField(
                     value = chartUrl,
@@ -813,6 +824,73 @@ private fun CandidateResearchCard(
             }
         }
     }
+}
+
+/** Fetches and stores history for the five markets enabled in this app. */
+private fun importAllCanonicalCharts(
+    save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
+    updateObservations: (List<com.relab.core.SourceObservation>) -> Unit,
+    updateMessage: (String) -> Unit,
+    updateBusy: (Boolean) -> Unit
+) {
+    val sources = listOf(
+        "https://sattamatkajodi.com/record/sridevi-satta-penal-chart.php",
+        "https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php",
+        "https://sattamatkajodi.com/record/kalyan-penal-chart.php",
+        "https://sattamatkajodi.com/main-bazar-panel-chart.php",
+        "https://sattamatkajodi.com/time-bazar-panel-chart.php"
+    )
+    val mainHandler = Handler(Looper.getMainLooper())
+    updateBusy(true)
+    updateMessage("Fetching historical charts for all 5 enabled markets…")
+    Thread {
+        val imported = mutableListOf<com.relab.core.SourceObservation>()
+        val outcomes = mutableListOf<String>()
+        sources.forEach { sourceUrl ->
+            val market = com.relab.core.Market.fromSourceUrl(sourceUrl)
+            if (market == null) {
+                outcomes += "Unknown market URL: $sourceUrl"
+            } else {
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = URL(sourceUrl).openConnection() as HttpURLConnection
+                    connection.instanceFollowRedirects = true
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 25000
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty("User-Agent", "RE-LAB-Android/0.1")
+                    connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                    val code = connection.responseCode
+                    require(code in 200..299) { "HTTP $code" }
+                    val type = connection.contentType.orEmpty().lowercase()
+                    require(type.contains("text/html") || type.contains("application/xhtml+xml") || type.isBlank()) { "Unexpected content type: $type" }
+                    val bytes = connection.inputStream.use { readBoundedBytes(it, 8_000_000L) }
+                    val report = com.relab.core.HtmlChartImporter.import(bytes.toString(Charsets.UTF_8), connection.url.toString(), market, "main", java.time.Instant.now())
+                    imported += report.observations
+                    outcomes += "${market.name}: ${report.observations.size} rows, ${report.issues.size} issues, ${report.skippedRows} skipped"
+                } catch (error: Exception) {
+                    outcomes += "${market.name}: FAILED — ${error.message ?: "unknown error"}"
+                } finally {
+                    connection?.disconnect()
+                }
+            }
+        }
+        mainHandler.post {
+            try {
+                if (imported.isEmpty()) {
+                    updateMessage("No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " + outcomes.joinToString(" | "))
+                } else {
+                    val merged = save(imported)
+                    updateObservations(merged)
+                    updateMessage("Automatic 5-market fetch complete. Imported ${imported.size} observations; saved total ${merged.size}. " + outcomes.joinToString(" | "))
+                }
+            } catch (error: Exception) {
+                updateMessage("Fetched charts but local save failed: ${error.message ?: "unknown error"}")
+            } finally {
+                updateBusy(false)
+            }
+        }
+    }.start()
 }
 
 private fun importChartLink(
