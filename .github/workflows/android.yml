@@ -69,5 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: relab-canonical-chart-captures
-          path: |\n            data/captures/\n            data/derived/
+          path: |
+            data/captures/
+            data/derived/
           if-no-files-found: warn
