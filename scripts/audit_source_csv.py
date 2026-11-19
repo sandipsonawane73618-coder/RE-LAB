@@ -60,7 +60,7 @@ def write_eligible_csv(source: Path, output: Path) -> int:
     eligible = eligible_published_rows(rows)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\\n")
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(eligible)
     return len(eligible)
