@@ -153,8 +153,8 @@ private fun RelabHome(
     var chartUrl by remember { mutableStateOf("") }
     var linkBusy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(observations.isEmpty()) {
-        if (observations.isEmpty() && !linkBusy) {
+    LaunchedEffect(Unit) {
+        if (initialObservations.isEmpty() && observations.isEmpty() && !linkBusy) {
             importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
         }
     }
@@ -467,12 +467,7 @@ private fun RelabHome(
                         Text("Malformed rows: $malformed   Conflicting dates: $conflicts")
                         Text("Reconciled date groups: ${groups.size}")
                         if (report == null) {
-                            Text("No CSV imported yet. Import a source CSV to begin historical research.")
-                            Text(
-                                "Required columns: market, session_id, date, source_id, retrieved_at, raw_text, status. " +
-                                    "For a published result, include the result column too.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Text("No CSV backup is loaded. Historical charts are fetched automatically when the local dataset is empty; manual import is optional.")
                         }
                         if (report != null && report.issues.isNotEmpty()) {
                             Text("Import row issues: ${report.issues.size}")
