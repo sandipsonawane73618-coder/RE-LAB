@@ -158,18 +158,28 @@ def extract_rows(
         if week is None:
             continue
         start, end = week
-        day_count = (end - start).days + 1
-        if start.weekday() != 0 or not 1 <= day_count <= 7:
+        # The publisher's date-range end is not consistently aligned with the
+        # number of populated weekday columns: weekend closures and historical
+        # schedule changes can leave a 7-day range with only 5/6 result groups.
+        # Use the Monday start plus the actual three-cell groups as the date axis,
+        # and retain any disagreement as a source-quality warning.
+        cell_total = len(cells) - 1
+        if start.weekday() != 0 or end < start:
             issues.append(f"row {row_number}: invalid Monday-start weekly range for {market}: {cells[0]}")
             continue
-        if len(cells) != (day_count * 3) + 1:
+        if cell_total % 3 != 0 or not 1 <= cell_total // 3 <= 7:
             issues.append(
-                f"row {row_number}: date range has {day_count} days but row contains "
-                f"{len(cells) - 1} cells; expected three cells per day"
+                f"row {row_number}: unsupported weekly cell count ({cell_total}); "
+                "expected 1 to 7 groups of three"
             )
             continue
-
         daily_groups = [cells[index:index + 3] for index in range(1, len(cells), 3)]
+        range_days = (end - start).days + 1
+        if range_days != len(daily_groups):
+            issues.append(
+                f"row {row_number}: date range spans {range_days} days but has "
+                f"{len(daily_groups)} result groups; dates mapped from Monday start"
+            )
         for offset, parts in enumerate(daily_groups):
             chart_date = start + timedelta(days=offset)
             raw_cell = " | ".join(parts)
