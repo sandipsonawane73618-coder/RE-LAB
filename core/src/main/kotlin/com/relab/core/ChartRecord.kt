@@ -1,31 +1,29 @@
 package com.relab.core
 
-enum class Market(val activeDays: Set<java.time.DayOfWeek>) {
-    SRIDEVI(java.time.DayOfWeek.entries.toSet()),
-    SRIDEVI_NIGHT(java.time.DayOfWeek.entries.toSet()),
-    KALYAN(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
-    MAIN_BAZAR(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY)),
-    TIME_BAZAR(java.time.DayOfWeek.entries.toSet()),
-    MILAN_DAY(java.time.DayOfWeek.entries.toSet()),
-    MILAN_NIGHT(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
-    RAJDHANI_DAY(java.time.DayOfWeek.entries.filter { it != java.time.DayOfWeek.SUNDAY }.toSet()),
-    RAJDHANI_NIGHT(setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY));
+enum class Market {
+    SRIDEVI,
+    SRIDEVI_NIGHT,
+    KALYAN,
+    MAIN_BAZAR,
+    TIME_BAZAR,
+    MILAN_DAY,
+    MILAN_NIGHT,
+    RAJDHANI_DAY,
+    RAJDHANI_NIGHT;
 
     companion object {
-        /** Resolve known canonical panel-chart URL paths to independent market IDs. */
+        /** Resolve canonical panel-chart URL paths without conflating sessions. */
         fun fromSourceUrl(value: String): Market? {
-            val path = runCatching { java.net.URI(value).path.lowercase(java.util.Locale.ROOT) }
-                .getOrNull() ?: return null
+            val path = runCatching { java.net.URI(value).path.lowercase(java.util.Locale.ROOT) }.getOrNull() ?: return null
             return when {
-                path.endsWith("/sridevi-night-satta-penal-chart.php") -> SRIDEVI_NIGHT
-                path.endsWith("/sridevi-satta-penal-chart.php") -> SRIDEVI
-                path.endsWith("/kalyan-penal-chart.php") -> KALYAN
+                path.endsWith("/record/sridevi-satta-penal-chart.php") -> SRIDEVI
+                path.endsWith("/record/sridevi-night-satta-penal-chart.php") -> SRIDEVI_NIGHT
                 path.endsWith("/time-bazar-panel-chart.php") -> TIME_BAZAR
                 path.endsWith("/main-bazar-panel-chart.php") -> MAIN_BAZAR
-                path.endsWith("/milan-day-penal-chart.php") -> MILAN_DAY
-                path.endsWith("/milan-night-penal-chart.php") -> MILAN_NIGHT
-                path.endsWith("/rajdhani-day-penal-chart.php") -> RAJDHANI_DAY
-                path.endsWith("/rajdhani-night-penal-chart.php") -> RAJDHANI_NIGHT
+                path.endsWith("/record/milan-day-penal-chart.php") -> MILAN_DAY
+                path.endsWith("/record/milan-night-penal-chart.php") -> MILAN_NIGHT
+                path.endsWith("/record/rajdhani-day-penal-chart.php") -> RAJDHANI_DAY
+                path.endsWith("/record/rajdhani-night-penal-chart.php") -> RAJDHANI_NIGHT
                 else -> null
             }
         }
@@ -87,7 +85,6 @@ object ChartMath {
         if (record.closePanna.length != 3 || !record.closePanna.all(Char::isDigit)) errors += "Close Panna must contain exactly 3 digits"
         if (record.jodi.length != 2 || !record.jodi.all(Char::isDigit)) errors += "Jodi must contain exactly 2 digits"
         if (record.sourceId.isBlank()) errors += "Source ID is required"
-        if (record.date.dayOfWeek !in record.market.activeDays) errors += "Date is outside the market's configured weekdays"
         if (errors.isNotEmpty()) return ValidationResult.Invalid(errors)
 
         val openDigits = record.openPanna.map { it.digitToInt() }
