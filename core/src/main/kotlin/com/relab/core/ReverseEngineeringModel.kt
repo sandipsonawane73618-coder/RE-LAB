@@ -10,9 +10,14 @@ data class ReverseEngineeringCandidate(
     val panna: String,
     val familySequence: String,
     val pannaType: PannaType,
+    val ank: Int,
     val score: Double,
     val exactPannaEvidence: Double,
     val familyEvidence: Double,
+    val ankEvidence: Double,
+    val positionEvidence: Double,
+    val pannaTypeEvidence: Double,
+    val reversePannaEvidence: Double,
     val weekdayEvidence: Double?,
     val previousTransitionEvidence: Double?,
     val openCloseConditionalEvidence: Double?,
@@ -52,12 +57,16 @@ data class ReverseEngineeringBacktestReport(
     val abstainedTargets: Int,
     val top1ExactHits: Int,
     val top10ExactHits: Int,
+    val top1AnkHits: Int,
+    val top10AnkHits: Int,
     val top1FamilyHits: Int,
     val top10FamilyHits: Int,
     val priorModeFamilyHits: Int
 ) {
     val top1ExactRate: Double get() = rate(top1ExactHits)
     val top10ExactRate: Double get() = rate(top10ExactHits)
+    val top1AnkRate: Double get() = rate(top1AnkHits)
+    val top10AnkRate: Double get() = rate(top10AnkHits)
     val top1FamilyRate: Double get() = rate(top1FamilyHits)
     val top10FamilyRate: Double get() = rate(top10FamilyHits)
     val priorModeFamilyRate: Double get() = rate(priorModeFamilyHits)
@@ -131,6 +140,12 @@ object ReverseEngineeringModel {
         val historicalFamilies = historicalPannas.map(::familyOf)
         val exactCounts = historicalPannas.groupingBy { it }.eachCount()
         val familyCounts = historicalFamilies.groupingBy { it }.eachCount()
+        val ankCounts = historicalPannas.groupingBy { it.sumOf(Char::digitToInt) % 10 }.eachCount()
+        val positionCounts = (0..2).map { position ->
+            historicalPannas.groupingBy { it[position].digitToInt() }.eachCount()
+        }
+        val pannaTypeCounts = historicalPannas.groupingBy { ChartMath.pannaType(it) }.eachCount()
+        val reversePannaCounts = historicalPannas.map { it.reversed() }.groupingBy { it }.eachCount()
         val weekdayRows = history.indices.filter { history[it].date.dayOfWeek == targetDate.dayOfWeek }
         val weekdayCounts = weekdayRows.map { historicalFamilies[it] }.groupingBy { it }.eachCount()
         val transitionCounts = historicalFamilies.zipWithNext()
@@ -166,6 +181,18 @@ object ReverseEngineeringModel {
             val family = buildString { append(value / 25); append((value / 5) % 5); append(value % 5) }
             val familyProbability = ((familyCounts[family] ?: 0) + smoothingAlpha) /
                 (history.size + 125.0 * smoothingAlpha)
+            val ank = panna.sumOf(Char::digitToInt) % 10
+            val ankProbability = ((ankCounts[ank] ?: 0) + smoothingAlpha) /
+                (history.size + 10.0 * smoothingAlpha)
+            val positionProbability = (0..2).map { position ->
+                ((positionCounts[position][panna[position].digitToInt()] ?: 0) + smoothingAlpha) /
+                    (history.size + 10.0 * smoothingAlpha)
+            }.average()
+            val type = ChartMath.pannaType(panna)
+            val typeProbability = ((pannaTypeCounts[type] ?: 0) + smoothingAlpha) /
+                (history.size + PannaType.entries.size * smoothingAlpha)
+            val reverseProbability = ((reversePannaCounts[panna.reversed()] ?: 0) + smoothingAlpha) /
+                (history.size + 1000.0 * smoothingAlpha)
             val weekdayProbability = if (weekdayRows.isEmpty()) null else
                 ((weekdayCounts[family] ?: 0) + smoothingAlpha) /
                     (weekdayRows.size + 125.0 * smoothingAlpha)
@@ -237,8 +264,9 @@ object ReverseEngineeringModel {
                         (signal.denominator + 125.0 * smoothingAlpha)
                 }.average()
             ReverseEngineeringCandidate(
-                panna, family, ChartMath.pannaType(panna), 0.0,
-                exactProbability, familyProbability, weekdayProbability,
+                panna, family, type, ank, 0.0,
+                exactProbability, familyProbability, ankProbability, positionProbability,
+                typeProbability, reverseProbability, weekdayProbability,
                 transitionProbability, openCloseProbability, crossProbability
             )
         }
@@ -247,13 +275,19 @@ object ReverseEngineeringModel {
             candidates.mapNotNull(selector).maxOrNull()?.coerceAtLeast(1e-12) ?: 1.0
         val maxima = listOf(
             maxOf { it.exactPannaEvidence }, maxOf { it.familyEvidence },
+            maxOf { it.ankEvidence }, maxOf { it.positionEvidence },
+            maxOf { it.pannaTypeEvidence }, maxOf { it.reversePannaEvidence },
             maxOf { it.weekdayEvidence }, maxOf { it.previousTransitionEvidence },
             maxOf { it.openCloseConditionalEvidence }, maxOf { it.crossMarketConditionalEvidence }
         )
-        val weights = listOf(0.10, 0.30, 0.15, 0.20, 0.10, 0.15)
+        val weights = listOf(0.08, 0.22, 0.10, 0.12, 0.06, 0.06, 0.10, 0.12, 0.07, 0.07)
         val active = buildList {
             add("Exact panna recurrence")
             add("Digit-family sequence")
+            add("Ank distribution")
+            add("Digit-position distribution")
+            add("SP/DP/TP panna type")
+            add("Reverse-panna recurrence")
             if (weekdayRows.isNotEmpty()) add("Target weekday")
             if (history.size >= 2) add("Previous-state transition")
             if (openCloseCounts.isNotEmpty()) add("Known open-to-close conditional")
@@ -264,10 +298,14 @@ object ReverseEngineeringModel {
             val values = listOf(
                 candidate.exactPannaEvidence / maxima[0],
                 candidate.familyEvidence / maxima[1],
-                candidate.weekdayEvidence?.div(maxima[2]),
-                candidate.previousTransitionEvidence?.div(maxima[3]),
-                candidate.openCloseConditionalEvidence?.div(maxima[4]),
-                candidate.crossMarketConditionalEvidence?.div(maxima[5])
+                candidate.ankEvidence / maxima[2],
+                candidate.positionEvidence / maxima[3],
+                candidate.pannaTypeEvidence / maxima[4],
+                candidate.reversePannaEvidence / maxima[5],
+                candidate.weekdayEvidence?.div(maxima[6]),
+                candidate.previousTransitionEvidence?.div(maxima[7]),
+                candidate.openCloseConditionalEvidence?.div(maxima[8]),
+                candidate.crossMarketConditionalEvidence?.div(maxima[9])
             )
             var weighted = 0.0
             var totalWeight = 0.0
@@ -315,6 +353,8 @@ object ReverseEngineeringModel {
         var abstained = 0
         var top1Exact = 0
         var top10Exact = 0
+        var top1Ank = 0
+        var top10Ank = 0
         var top1Family = 0
         var top10Family = 0
         var baselineFamily = 0
@@ -332,6 +372,9 @@ object ReverseEngineeringModel {
             val first = ranking.candidates.first()
             if (first.panna == actualPanna) top1Exact++
             if (ranking.candidates.any { it.panna == actualPanna }) top10Exact++
+            val actualAnk = actualPanna.sumOf(Char::digitToInt) % 10
+            if (first.ank == actualAnk) top1Ank++
+            if (ranking.candidates.any { it.ank == actualAnk }) top10Ank++
             if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
             if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
@@ -344,7 +387,7 @@ object ReverseEngineeringModel {
         }
         return ReverseEngineeringBacktestReport(
             market, sessionId, side, targets.size, evaluated, abstained,
-            top1Exact, top10Exact, top1Family, top10Family, baselineFamily
+            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily
         )
     }
 
