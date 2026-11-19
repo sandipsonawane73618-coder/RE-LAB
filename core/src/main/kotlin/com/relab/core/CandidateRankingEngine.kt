@@ -39,6 +39,25 @@ data class CandidateRanking(
  * single-source observations enter the ranking.
  */
 object CandidateRankingEngine {
+    /**
+     * Ranks against one explicitly selected canonical chart publisher.
+     * Single-publisher rows remain unverified provenance-wise; this method
+     * does not relabel them as consensus or merge other publishers.
+     */
+    fun rankCanonical(
+        observations: List<SourceObservation>, market: Market, sessionId: String,
+        targetDate: LocalDate, side: PannaSide, limit: Int = 10, minimumHistory: Int = 5
+    ): CandidateRanking {
+        val canonicalRows = observations.filter { it.market == market && it.sessionId == sessionId }
+        require(canonicalRows.map { it.sourceId }.distinct().size <= 1) {
+            "Canonical ranking accepts exactly one sourceId per market/session"
+        }
+        val result = rank(canonicalRows, market, sessionId, targetDate, side, limit, minimumHistory, allowSingleSourceExploration = true)
+        val publisher = canonicalRows.firstOrNull()?.sourceId ?: "unknown"
+        return result.copy(note = if (result.abstained) result.note else
+            "Ranked from prior valid rows of one canonical publisher ($publisher). Single-source provenance is unverified; score is a relative evidence index, not probability or a guarantee.")
+    }
+
     fun rank(
         observations: List<SourceObservation>,
         market: Market,
