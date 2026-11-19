@@ -158,6 +158,110 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private data class ReverseModelDashboardSet(
+    val market: com.relab.core.Market,
+    val sessionId: String,
+    val open: com.relab.core.ReverseEngineeringRanking,
+    val close: com.relab.core.ReverseEngineeringRanking,
+    val jodi: List<com.relab.core.ReverseEngineeringJodiCandidate>,
+    val openBacktest: com.relab.core.ReverseEngineeringBacktestReport,
+    val closeBacktest: com.relab.core.ReverseEngineeringBacktestReport
+)
+
+private data class DashboardAnalysisSnapshot(
+    val activeObservations: List<com.relab.core.SourceObservation>,
+    val groups: List<com.relab.core.ReconciliationGroup>,
+    val repeatedSourceRecords: List<com.relab.core.DuplicateObservationGroup>,
+    val repeatedPublishedResults: List<com.relab.core.RepeatedPublishedResultGroup>,
+    val chartBuild: com.relab.core.ChartBuildReport,
+    val researchRecords: List<com.relab.core.ChartRecord>,
+    val patternAnalyses: List<com.relab.core.MarketAnalysis>,
+    val intelligenceReports: List<com.relab.core.MarketIntelligenceReport>,
+    val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
+    val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
+    val reverseModelSets: List<ReverseModelDashboardSet>,
+    val coverageReports: List<com.relab.core.CoverageReport>,
+    val sourceTiming: List<com.relab.core.SourceTimingSummary>
+)
+
+private fun buildDashboardAnalysisSnapshot(
+    observations: List<com.relab.core.SourceObservation>,
+    coverageRangeOverrides: Map<String, Pair<LocalDate, LocalDate>>
+): DashboardAnalysisSnapshot {
+    val activeObservations = observations.filter {
+        it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
+    }
+    val groups = com.relab.core.SourceReconciliation.reconcile(activeObservations)
+    val repeatedSourceRecords = com.relab.core.SourceObservationMerger.auditRepeatedSourceRecords(activeObservations)
+    val repeatedPublishedResults = com.relab.core.SourceObservationMerger.auditRepeatedPublishedResultsAcrossDates(activeObservations)
+    val chartBuild = com.relab.core.ReconciledChartBuilder.build(activeObservations)
+    val researchRecords = com.relab.core.ReconciledChartBuilder.buildExploratoryRecords(activeObservations)
+    val patternAnalyses = com.relab.core.PatternAnalysis.analyze(researchRecords)
+    val intelligenceReports = com.relab.core.MarketIntelligence.analyze(researchRecords)
+    val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
+    val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
+        .sortedWith(compareBy({ it.first.name }, { it.second }))
+    val targetDate = LocalDate.now()
+
+    val candidateSets = marketSessions.map { (market, sessionId) ->
+        val open = com.relab.core.CandidateRankingEngine.rank(
+            activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.OPEN,
+            limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+            prebuiltRecords = researchRecords
+        )
+        val close = com.relab.core.CandidateRankingEngine.rank(
+            activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.CLOSE,
+            limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+            prebuiltRecords = researchRecords
+        )
+        Triple(open, close, com.relab.core.CandidateRankingEngine.deriveJodiCandidates(open.candidates, close.candidates, 10))
+    }
+
+    val reverseModelSets = marketSessions.map { (market, sessionId) ->
+        val open = com.relab.core.ReverseEngineeringModel.rank(
+            researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.OPEN,
+            limit = 10, minimumHistory = 30
+        )
+        val close = com.relab.core.ReverseEngineeringModel.rank(
+            researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
+            limit = 10, minimumHistory = 30
+        )
+        val openBacktest = com.relab.core.ReverseEngineeringModel.backtest(
+            researchRecords, market, sessionId, com.relab.core.ReverseEngineeringSide.OPEN,
+            targetLimit = 120, minimumHistory = 30, candidateLimit = 10
+        )
+        val closeBacktest = com.relab.core.ReverseEngineeringModel.backtest(
+            researchRecords, market, sessionId, com.relab.core.ReverseEngineeringSide.CLOSE,
+            targetLimit = 120, minimumHistory = 30, candidateLimit = 10
+        )
+        ReverseModelDashboardSet(
+            market, sessionId, open, close,
+            com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10),
+            openBacktest, closeBacktest
+        )
+    }
+
+    val coverageReports = activeObservations.groupBy { it.market to it.sessionId }
+        .mapNotNull { (key, rows) ->
+            val dates = rows.map { it.date }
+            if (dates.isEmpty()) null else com.relab.core.HistoricalCoverageAudit.analyze(
+                market = key.first,
+                sessionId = key.second,
+                startDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.first ?: dates.minOrNull()!!,
+                endDate = coverageRangeOverrides["${key.first.name}:${key.second}"]?.second ?: dates.maxOrNull()!!,
+                observations = rows
+            )
+        }
+        .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
+
+    return DashboardAnalysisSnapshot(
+        activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
+        chartBuild, researchRecords, patternAnalyses, intelligenceReports,
+        crossMarketReports, candidateSets, reverseModelSets, coverageReports,
+        com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
+    )
+}
+
 @Composable
 private fun RelabHome(
     initialCsv: String?,
