@@ -40,3 +40,24 @@ This register lists candidate public archives for source-observation collection.
 ## Data ingestion status
 
 This register is a collection plan and reconciliation aid, **not proof that these archives have been downloaded into the app**. Only observations present in an imported source CSV are counted by the app's coverage audit or pattern analysis. Record the actual retrieval instant and do not backdate a current scrape to the chart date.
+
+
+## Nine-market canonical collection scope
+
+The application scope is nine independent chart streams. This section records the selected canonical panel page for each stream; it is a collection plan, not proof of a completed download. Do not combine values across these markets or day/night sessions.
+
+| Market ID | Canonical panel page | Publisher ID | Weekly layout |
+|---|---|---|---|
+| `SRIDEVI` | https://matkaflash.com/sridevi/panel-chart | `matkaflash` | Daily/session-specific; confirm actual table layout before import |
+| `SRIDEVI_NIGHT` | https://sattamatkajodi.com/sridevi-night-panel-chart.php | `sattamatkajodi` | Confirm page layout and active days from captured rows |
+| `KALYAN` | https://www.fixresult.in/kalyan-matka-chart.html | `fixresult` | Monday–Saturday |
+| `MAIN_BAZAR` | https://sattamatkajodi.com/main-bazar-panel-chart.php | `sattamatkajodi` | Monday–Friday |
+| `TIME_BAZAR` | https://sattamatkajodi.com/time-bazar-panel-chart.php | `sattamatkajodi` | Daily |
+| `MILAN_DAY` | https://sattamatkajodi.com/record/milan-day-penal-chart.php | `sattamatkajodi` | Monday–Sunday |
+| `MILAN_NIGHT` | https://sattamatkajodi.com/record/milan-night-penal-chart.php | `sattamatkajodi` | Monday–Saturday |
+| `RAJDHANI_DAY` | https://sattamatkajodi.com/satta-matka-chart.php (Rajdhani Day Panel Chart index entry) | `sattamatkajodi` | Monday–Saturday |
+| `RAJDHANI_NIGHT` | https://sattamatkajodi.com/record/rajdhani-night-penal-chart.php | `sattamatkajodi` | Monday–Friday |
+
+All page views from the same publisher reuse the same `source_id`; a publisher is not counted as independent corroboration merely because it exposes multiple market pages. For each market, capture the exact final page URL, timestamp, raw row text, and source revision before importing. The weekly extractor's layout checks must be confirmed against real saved HTML for every market; a passing parser run alone does not establish chart correctness.
+
+The chart publisher's all-market index lists Sridevi Day/Night, Milan Day/Night, Rajdhani Day/Night, Main Bazar, and Time Bazar as separate panel-chart entries. See https://sattamatkajodi.com/satta-matka-chart.php. The market's advertised weekly schedule is only a parser expectation: missing cells remain missing unless the source explicitly marks a holiday.
