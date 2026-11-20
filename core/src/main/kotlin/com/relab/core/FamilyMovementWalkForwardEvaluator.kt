@@ -76,20 +76,20 @@ object FamilyMovementWalkForwardEvaluator {
                             val rankedClasses = classCounts.entries.sortedWith(
                                 compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }
                             ).map { it.key }
-                            val baselineExact = exactCounts.entries.sortedWith(
+                            val exactRanking = exactCounts.entries.sortedWith(
                                 compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }
-                            ).firstOrNull()?.key
-                            val baselineKey = baselineExact?.let(FamilyMovementMath::key)
+                            ).map { it.key }
+                            val actualVariants = FamilyMovementMath.variants(actual).toSet()
                             evaluated++
                             if (rankedClasses.take(1).contains(actualKey)) top1++
                             if (rankedClasses.take(3).contains(actualKey)) top3++
                             if (rankedClasses.take(5).contains(actualKey)) top5++
                             if (rankedClasses.take(10).contains(actualKey)) top10++
-                            val baselineRank = baselineKey?.let(rankedClasses::indexOf) ?: -1
-                            if (baselineRank in 0..0) base1++
-                            if (baselineRank in 0..2) base3++
-                            if (baselineRank in 0..4) base5++
-                            if (baselineRank in 0..9) base10++
+                            // Exact-frequency baseline predicts exact values, without family expansion.
+                            if (exactRanking.take(1).any(actualVariants::contains)) base1++
+                            if (exactRanking.take(3).any(actualVariants::contains)) base3++
+                            if (exactRanking.take(5).any(actualVariants::contains)) base5++
+                            if (exactRanking.take(10).any(actualVariants::contains)) base10++
                         } else {
                             abstained++
                         }
