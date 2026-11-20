@@ -1,5 +1,6 @@
 package com.relab.app
 import com.relab.core.AiEvidenceCitationAuditor
+import com.relab.core.AiCitationAudit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -64,21 +65,31 @@ class AiResearchEngine {
             GEMINI:
         """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
         val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
-        val citationAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
-        val auditSummary = buildString {
-            append("DETERMINISTIC CITATION AUDIT (traceability only; verified references do not prove a claim is true):\n")
-            append("Supplied evidence references: ${citationAudit.suppliedReferences}\n")
-            append("Citations checked: ${citationAudit.citedReferences}\n")
-            append("Verified citations: ${citationAudit.verifiedReferences.size}\n")
-            append("Unsupported citations: ${citationAudit.unsupportedReferences.size}")
-            if (citationAudit.unsupportedReferences.isNotEmpty()) {
-                append("\nUnsupported reference tokens: ")
-                append(citationAudit.unsupportedReferences.joinToString(", "))
-            }
-            if (citationAudit.citedReferences == 0) append("\nNo machine-checkable chart/scanner citations were found.")
-        }
-        return AiResearchResult(first, critique, synthesis + "\n\n" + auditSummary)
+
+        // Audit both independent AI stages, not only the final Gemini summary.
+        val groqAudit = AiEvidenceCitationAuditor.audit(evidence, critique)
+        val finalAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
+        return AiResearchResult(
+            first,
+            critique + "\n\n" + formatCitationAudit("GROQ INDEPENDENT REVIEW", groqAudit),
+            synthesis + "\n\n" + formatCitationAudit("FINAL GEMINI SYNTHESIS", finalAudit)
+        )
     }
+
+    private fun formatCitationAudit(stage: String, audit: AiCitationAudit): String = buildString {
+        append("DETERMINISTIC CITATION AUDIT — $stage\n")
+        append("Traceability check only; a verified reference does not prove a claim is true.\n")
+        append("Supplied evidence references: ${audit.suppliedReferences}\n")
+        append("Citations checked: ${audit.citedReferences}\n")
+        append("Verified citations: ${audit.verifiedReferences.size}\n")
+        append("Unsupported citations: ${audit.unsupportedReferences.size}")
+        if (audit.unsupportedReferences.isNotEmpty()) {
+            append("\nUnsupported reference tokens: ")
+            append(audit.unsupportedReferences.joinToString(", "))
+        }
+        if (audit.citedReferences == 0) append("\nWARNING: No machine-checkable chart/scanner citations were found.")
+    }
+
     private fun callGemini(key: String, prompt: String): String {
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user")
             .put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
