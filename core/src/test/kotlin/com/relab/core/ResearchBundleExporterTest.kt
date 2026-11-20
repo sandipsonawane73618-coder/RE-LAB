@@ -42,6 +42,7 @@ class ResearchBundleExporterTest {
             "walk-forward-audit.csv", "historical-coverage-audit.csv",
             "source-publication-timing.csv", "research-manifest.json",
             "family-movement-walk-forward.csv",
+            "research-to-backtest.csv", "research-to-backtest-report.txt",
             "reverse-model-panna-rankings.csv", "reverse-model-family-rankings.csv",
             "reverse-model-jodi-rankings.csv", "reverse-model-walk-forward.csv",
             "README.txt", "bundle-index.json"
@@ -57,6 +58,8 @@ class ResearchBundleExporterTest {
             .joinToString("") { "%02x".format(it) }
         assertTrue(index.contains(expectedHash))
         assertTrue(String(entries.getValue("README.txt"), Charsets.UTF_8).contains("not guaranteed predictions"))
+        assertTrue(String(entries.getValue("research-to-backtest.csv"), Charsets.UTF_8).contains("verification_status"))
+        assertTrue(String(entries.getValue("research-to-backtest-report.txt"), Charsets.UTF_8).contains("RESEARCH-TO-BACKTEST REPORT"))
         assertNotNull(bytes)
     }
 }
