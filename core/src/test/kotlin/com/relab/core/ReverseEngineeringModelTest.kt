@@ -152,7 +152,7 @@ class ReverseEngineeringModelTest {
 
     @Test fun directionalPatternScanUsesOnlyRowsBeforeTargetDate() {
         val past = history()
-        val future = row(Market.SRIDEVI, 100, open = "123", close = "456")
+        val future = row(Market.SRIDEVI, 100, open = "123", close = "456").copy(sourceId = "future-only")
         val report = ReverseEngineeringModel.scanDirectionalPatterns(
             past + future,
             Market.SRIDEVI,
