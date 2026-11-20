@@ -621,10 +621,13 @@ private fun RelabHome(
                     Text("Predictions will appear when enough verified history is available.")
                 } else {
                     reverseModelSets.forEach { set ->
-                        val actual = chartBuild.records.firstOrNull {
+                        // Result visibility must not depend on multi-source consensus.
+                        // A valid result from one publisher is still published (unverified),
+                        // while conflicts must be shown for review rather than labelled pending.
+                        val resultGroup = groups.firstOrNull {
                             it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
                         }
-                        MarketPredictionSheet(set, actual)
+                        MarketPredictionSheet(set, resultGroup)
                     }
                 }
                 OutlinedButton(
@@ -864,15 +867,22 @@ private data class PredictionDisplayCell(
 )
 
 @Composable
-private fun MarketPredictionSheet(set: ReverseModelDashboardSet, actual: com.relab.core.ChartRecord?) {
+private fun MarketPredictionSheet(
+    set: ReverseModelDashboardSet,
+    resultGroup: com.relab.core.ReconciliationGroup?
+) {
     val open = set.open.candidates.take(10)
     val close = set.close.candidates.take(10)
     val openPannas = open.map { it.panna }
     val closePannas = close.map { it.panna }
-    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }.sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first }).take(10).map { it.first.toString() }
+    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }
+        .sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first })
+        .take(10).map { it.first.toString() }
     val jodis = set.jodi.take(10).map { it.jodi }
-    val sangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.panna) to (o.score * c.score / 100.0) } }.sortedByDescending { it.second }.take(10).map { it.first }
-    val halfSangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.ank) to (o.score * c.score / 100.0) } }.sortedByDescending { it.second }.distinctBy { it.first }.take(10).map { it.first }
+    val sangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.panna) to (o.score * c.score / 100.0) } }
+        .sortedByDescending { it.second }.take(10).map { it.first }
+    val halfSangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.ank) to (o.score * c.score / 100.0) } }
+        .sortedByDescending { it.second }.distinctBy { it.first }.take(10).map { it.first }
     val marketName = when (set.market) {
         com.relab.core.Market.SRIDEVI -> "Sridevi Day"
         com.relab.core.Market.SRIDEVI_NIGHT -> "Sridevi Night"
@@ -881,14 +891,34 @@ private fun MarketPredictionSheet(set: ReverseModelDashboardSet, actual: com.rel
         com.relab.core.Market.TIME_BAZAR -> "Time Bazar"
         else -> set.market.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
     }
+    val publishedValues = resultGroup?.observations
+        ?.filter { it.status == com.relab.core.ObservationStatus.PUBLISHED }
+        ?.mapNotNull { it.normalizedResult }
+        ?.distinct()
+        ?.sorted()
+        .orEmpty()
+    val hasPublishedResult = publishedValues.isNotEmpty()
     Card {
         Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleSmall)
-            if (actual != null) {
-                Text("RESULT PUBLISHED · ${actual.date}", color = Color(0xFF1B5E20), style = MaterialTheme.typography.labelMedium)
-                PredictionTableRow("Open Panna", actual.openPanna, true)
-                PredictionTableRow("Close Panna", actual.closePanna, true)
-                PredictionTableRow("Jodi", actual.jodi, true)
+            if (hasPublishedResult) {
+                val conflict = publishedValues.size > 1
+                val resultLabel = when {
+                    conflict -> "RESULT CONFLICT · REVIEW SOURCES"
+                    resultGroup?.state == com.relab.core.ReconciliationState.CONSENSUS -> "RESULT PUBLISHED · VERIFIED"
+                    else -> "RESULT PUBLISHED · SINGLE SOURCE"
+                }
+                Text("$resultLabel · $selectedDate", color = if (conflict) MaterialTheme.colorScheme.error else Color(0xFF1B5E20), style = MaterialTheme.typography.labelMedium)
+                publishedValues.forEach { value ->
+                    val parts = value.split('-')
+                    if (parts.size == 3) {
+                        PredictionTableRow("Open Panna", parts[0], !conflict)
+                        PredictionTableRow("Jodi", parts[1], !conflict)
+                        PredictionTableRow("Close Panna", parts[2], !conflict)
+                    } else {
+                        PredictionTableRow("Published value", value, !conflict)
+                    }
+                }
             } else {
                 Text("PREDICTION · ${set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                 PredictionTableRow("Open Ank", openAnks.joinToString(" · "), false, true)
