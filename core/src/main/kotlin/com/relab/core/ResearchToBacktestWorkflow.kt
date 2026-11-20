@@ -247,6 +247,29 @@ object ResearchToBacktestCsvExporter {
         return (listOf(header) + rows).joinToString("\n") { row -> row.joinToString(",") { it.csvEscape() } }
     }
 
+    fun exportEvidence(report: ResearchToBacktestReport): String {
+        val header = listOf(
+            "market", "session", "channel", "outcome_mode", "pattern", "occurrences",
+            "evaluated_occurrences", "hits", "misses", "hit_rate", "baseline_hit_rate",
+            "lift", "rank_score", "pattern_wilson_lower_95", "pattern_wilson_upper_95",
+            "baseline_wilson_lower_95", "baseline_wilson_upper_95", "assessment"
+        )
+        val ranked = report.rankedExactPatternEvidence.map { PatternOutcomeMode.EXACT to it } +
+            report.rankedFamilyPatternEvidence.map { PatternOutcomeMode.FAMILY_MOVEMENT to it }
+        val rows = ranked.map { (mode, item) ->
+            val evidence = item.evidence
+            listOf(
+                evidence.market.name, evidence.sessionId, evidence.channel.name, mode.name,
+                evidence.pattern, evidence.occurrences.toString(), evidence.evaluatedOccurrences.toString(),
+                evidence.hits.toString(), evidence.misses.toString(), evidence.hitRate.csvRate(),
+                evidence.baselineHitRate.csvRate(), evidence.baselineLift.csvRate(),
+                item.rankScore.csvRate(), item.hitRateLower95.csvRate(), item.hitRateUpper95.csvRate(),
+                item.baselineLower95.csvRate(), item.baselineUpper95.csvRate(), item.assessment.name
+            )
+        }
+        return (listOf(header) + rows).joinToString("\n") { row -> row.joinToString(",") { it.csvEscape() } }
+    }
+
     private fun Double?.csvRate(): String = this?.let { String.format(Locale.ROOT, "%.6f", it) } ?: ""
     private fun String.csvEscape(): String = if (any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
         "\"" + replace("\"", "\"\"") + "\""
