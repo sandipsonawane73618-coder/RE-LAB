@@ -79,8 +79,8 @@ object PatternEvidenceDatabase {
                             PatternEvidenceChannel.JODI -> row.jodi
                         }
                     }
-                    windowLengths.forEach { windowLength ->
-                        if (rows.size <= windowLength) return@forEach
+                    windowLengths.forEach windowLoop@ { windowLength ->
+                        if (rows.size <= windowLength) return@windowLoop
                         data class Event(
                             val date: LocalDate,
                             val outcome: String,
