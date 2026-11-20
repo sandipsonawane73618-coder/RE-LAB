@@ -166,6 +166,11 @@ object ProposedPatternBacktester {
 data class ResearchToBacktestReport(
     val targetDateExclusive: LocalDate,
     val scannerRankings: List<ReverseEngineeringRanking>,
+    val datasetRecordsProvided: Int = 0,
+    val validConsensusRowsBeforeCutoff: Int = 0,
+    val excludedOnOrAfterCutoff: Int = 0,
+    val invalidRowsBeforeCutoff: Int = 0,
+    val coveredMarketSessions: Int = 0,
     val exactPatternEvidence: List<PatternEvidenceRecord>,
     val familyPatternEvidence: List<PatternEvidenceRecord>,
     val rankedExactPatternEvidence: List<RankedPatternEvidence>,
@@ -176,6 +181,7 @@ data class ResearchToBacktestReport(
         fun rate(value: Double?) = value?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "n/a"
         appendLine("RESEARCH-TO-BACKTEST REPORT")
         appendLine("Target cutoff (exclusive): $targetDateExclusive")
+        appendLine("DATASET AUDIT: provided=$datasetRecordsProvided | valid consensus rows before cutoff=$validConsensusRowsBeforeCutoff | excluded on/after cutoff=$excludedOnOrAfterCutoff | invalid before cutoff=$invalidRowsBeforeCutoff | covered market/sessions=$coveredMarketSessions")
         appendLine("Scanner rankings: ${scannerRankings.size}")
         scannerRankings.take(12).forEach { ranking ->
             val candidates = ranking.candidates.take(3).joinToString("; ") { it.panna + " (" + rate(it.score) + ")" }
@@ -217,7 +223,9 @@ object ResearchToBacktestWorkflow {
         require(scannerRankings.all { it.targetDate == targetDateExclusive }) {
             "Scanner rankings must use the same exclusive target date as the backtest"
         }
-        val eligible = records.filter { it.date.isBefore(targetDateExclusive) }
+        val beforeCutoff = records.filter { it.date.isBefore(targetDateExclusive) }
+        val eligible = beforeCutoff.filter { ChartMath.validate(it) is ValidationResult.Valid }
+        val coveredMarketSessions = eligible.map { it.market to it.sessionId }.distinct().size
         val exactEvidence = PatternEvidenceDatabase.analyze(
             eligible, targetDateExclusive, outcomeMode = PatternOutcomeMode.EXACT
         )
@@ -255,8 +263,17 @@ object ResearchToBacktestWorkflow {
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id })
         return ResearchToBacktestReport(
-            targetDateExclusive, scannerRankings.toList(), exactEvidence, familyEvidence,
-            rankedExact, rankedFamily, assessments
+            targetDateExclusive, scannerRankings.toList(),
+            datasetRecordsProvided = records.size,
+            validConsensusRowsBeforeCutoff = eligible.size,
+            excludedOnOrAfterCutoff = records.size - beforeCutoff.size,
+            invalidRowsBeforeCutoff = beforeCutoff.size - eligible.size,
+            coveredMarketSessions = coveredMarketSessions,
+            exactPatternEvidence = exactEvidence,
+            familyPatternEvidence = familyEvidence,
+            rankedExactPatternEvidence = rankedExact,
+            rankedFamilyPatternEvidence = rankedFamily,
+            assessments = assessments
         )
     }
 }
