@@ -18,6 +18,7 @@ object ResearchBundleValidator {
         "derived-consensus-research.csv",
         "walk-forward-audit.csv",
         "historical-coverage-audit.csv",
+        "family-movement-walk-forward.csv",
         "source-publication-timing.csv",
         "reverse-model-panna-rankings.csv",
         "reverse-model-family-rankings.csv",
