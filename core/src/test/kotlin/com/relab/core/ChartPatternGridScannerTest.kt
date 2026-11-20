@@ -123,4 +123,22 @@ class ChartPatternGridScannerTest {
             it.direction == PatternDirection.VERTICAL && it.pattern == "147"
         })
     }
+
+    @Test fun scansJodiColumnsHorizontallyAndVertically() {
+        val rows = listOf(
+            row(1, "001").copy(closePanna = "002", jodi = "12"),
+            row(2, "003").copy(closePanna = "004", jodi = "34"),
+            row(3, "005").copy(closePanna = "006", jodi = "56")
+        )
+        val report = ChartPatternGridScanner.scan(
+            rows, ChartPatternSide.JODI, minimumLength = 2, maximumStep = 1
+        ).single()
+        assertTrue(report.occurrences.any {
+            it.direction == PatternDirection.HORIZONTAL && it.pattern == "12"
+        })
+        assertTrue(report.occurrences.any {
+            it.direction == PatternDirection.VERTICAL && it.pattern == "135"
+        })
+    }
+
 }
