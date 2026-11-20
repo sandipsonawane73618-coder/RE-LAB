@@ -55,10 +55,20 @@ object PatternEvidenceRanking {
             "Recency scale must be positive and finite"
         }
         return evidence.map { item ->
-            val enough = item.evaluatedOccurrences >= minimumEvaluations &&
-                item.hitRate != null && item.baselineHitRate != null &&
-                item.hits in 0..item.evaluatedOccurrences &&
+            val validCounts = item.evaluatedOccurrences > 0 &&
+                item.occurrences >= item.evaluatedOccurrences &&
+                item.hits >= 0 && item.misses >= 0 &&
+                item.hits + item.misses == item.evaluatedOccurrences &&
                 item.baselineHits in 0..item.evaluatedOccurrences
+            val expectedHitRate = if (validCounts) item.hits.toDouble() / item.evaluatedOccurrences else null
+            val expectedBaselineRate = if (validCounts) item.baselineHits.toDouble() / item.evaluatedOccurrences else null
+            val validRates = item.hitRate != null && item.baselineHitRate != null &&
+                item.hitRate.isFinite() && item.baselineHitRate.isFinite() &&
+                item.hitRate in 0.0..1.0 && item.baselineHitRate in 0.0..1.0 &&
+                expectedHitRate != null && expectedBaselineRate != null &&
+                kotlin.math.abs(item.hitRate - expectedHitRate) <= 1e-9 &&
+                kotlin.math.abs(item.baselineHitRate - expectedBaselineRate) <= 1e-9
+            val enough = item.evaluatedOccurrences >= minimumEvaluations && validCounts && validRates
             val patternInterval = if (enough) wilson(item.hits, item.evaluatedOccurrences) else null
             val baselineInterval = if (enough) wilson(item.baselineHits, item.evaluatedOccurrences) else null
             val support = item.evaluatedOccurrences.toDouble() /
