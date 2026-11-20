@@ -63,6 +63,19 @@ class AiResearchEngine internal constructor(
             Include a claim-audit table: claim | Gemini view | Groq view | evidence citation | status.
             Preserve unresolved disagreements and uncertainty.
             Finish with the next 3 reproducible tests and the minimum data each test requires.
+            Also finish with one machine-readable proposal block using this exact wrapper:
+            RELAB_PROPOSALS_JSON
+            [
+              {"id":"p1","market":"SRIDEVI","session":"main","channel":"OPEN_PANNA","pattern":"123>456","outcomeMode":"EXACT","rationale":"short evidence-linked reason"}
+            ]
+            END_RELAB_PROPOSALS_JSON
+            The JSON must be an array, including [] when no reproducible pattern can be specified.
+            market must be one of the nine exact market enum names shown in evidence.
+            session must exactly match a supplied session. channel must be OPEN_PANNA, CLOSE_PANNA or JODI.
+            pattern is 1–20 prior observed values joined by >; Panna values are 3 digits and Jodi values are 2 digits.
+            outcomeMode must be EXACT or FAMILY_MOVEMENT. Only propose patterns supported by supplied rows;
+            never invent missing values, markets, sessions, sample sizes or results. These are UNVERIFIED hypotheses,
+            not backtest results. Never put verification status or a claimed hit rate in this JSON.
             $evidenceRules
             QUESTION: $q
             EVIDENCE: $evidence
