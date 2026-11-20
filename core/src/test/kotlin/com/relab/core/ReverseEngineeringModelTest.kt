@@ -167,4 +167,33 @@ class ReverseEngineeringModelTest {
         assertFalse(report.occurrences.any { it.sourceIds.contains(future.sourceId) })
     }
 
+
+    @Test fun jodiFamilySequenceModelEntryPointExcludesTargetAndFutureRows() {
+        val past = history()
+        val future = row(Market.SRIDEVI, 100, open = "123", close = "456")
+            .copy(sourceId = "future-sequence-row")
+        val reports = ReverseEngineeringModel.scanJodiFamilySequences(
+            past + future, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 3, 1), maximumWindowLength = 3
+        )
+        assertEquals(1, reports.size)
+        assertEquals(40, reports.single().acceptedRecords)
+        assertFalse(reports.single().windows.any {
+            it.sourceIds.contains("future-sequence-row")
+        })
+    }
+
+    @Test fun crossMarketSequenceModelEntryPointUsesOnlyEarlierDates() {
+        val past = row(Market.SRIDEVI, 1, open = "166", close = "277")
+        val future = row(Market.KALYAN, 100, open = "166", close = "277")
+        val sameDatePrior = past.copy(market = Market.KALYAN, sourceId = "kalyan-prior")
+        val result = ReverseEngineeringModel.scanCrossMarketAlignment(
+            listOf(past, sameDatePrior, future),
+            LocalDate.of(2026, 2, 1)
+        )
+        assertEquals(1, result.size)
+        assertTrue(result.single().jodiMatch)
+        assertFalse(result.any { it.sourceIds.contains(future.sourceId) })
+    }
+
 }
