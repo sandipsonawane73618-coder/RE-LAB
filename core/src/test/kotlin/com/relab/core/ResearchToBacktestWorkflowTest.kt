@@ -61,7 +61,8 @@ class ResearchToBacktestWorkflowTest {
             ),
             LocalDate.of(2026, 1, 1).plusDays(120), minimumEvaluations = 20
         )
-        assertEquals(0, exact.evaluatedOccurrences)
+        assertEquals(19, exact.evaluatedOccurrences)
+        assertEquals(ResearchVerificationStatus.UNCERTAIN, exact.status)
         assertEquals(39, family.evaluatedOccurrences)
         assertEquals(39, family.hits)
         assertEquals(ResearchVerificationStatus.VERIFIED, family.status)
