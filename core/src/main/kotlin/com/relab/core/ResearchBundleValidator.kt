@@ -20,6 +20,7 @@ object ResearchBundleValidator {
         "historical-coverage-audit.csv",
         "family-movement-walk-forward.csv",
         "research-to-backtest.csv",
+        "research-pattern-evidence.csv",
         "research-to-backtest-report.txt",
         "source-publication-timing.csv",
         "reverse-model-panna-rankings.csv",
