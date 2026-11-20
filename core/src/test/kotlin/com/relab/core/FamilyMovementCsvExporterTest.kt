@@ -8,9 +8,9 @@ class FamilyMovementCsvExporterTest {
     @Test fun exportsChronologicalFamilyAndExactBaselineMetrics() {
         val records = listOf(
             ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-01"), "001", "17", "025", "a"),
-            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-02"), "006", "62", "016", "b"),
-            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-03"), "007", "71", "025", "c"),
-            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-04"), "002", "26", "016", "d")
+            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-02"), "006", "62", "002", "b"),
+            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-03"), "007", "71", "001", "c"),
+            ChartRecord(Market.SRIDEVI, LocalDate.parse("2026-01-04"), "002", "26", "006", "d")
         )
         val csv = FamilyMovementCsvExporter.export(records, LocalDate.parse("2026-02-01"), 3)
         assertTrue(csv.startsWith("target_date_exclusive,minimum_history,market"))
