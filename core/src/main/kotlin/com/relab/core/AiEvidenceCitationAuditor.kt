@@ -19,7 +19,7 @@ object AiEvidenceCitationAuditor {
 
     fun audit(evidence: String, aiOutput: String): AiCitationAudit {
         val supplied = suppliedRef.findAll(evidence).map { normalize(it.groupValues[1]) }.toSet()
-        val cited = citation.findAll(aiOutput).map { normalize(it.groupValues[1])) }
+        val cited = citation.findAll(aiOutput).map { normalize(it.groupValues[1]) }
             .filter { it.startsWith("SCANNER/") || it.count { ch -> ch == '/' } >= 3 }
             .distinct()
             .toList()
