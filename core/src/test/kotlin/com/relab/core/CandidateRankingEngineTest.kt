@@ -166,7 +166,7 @@ class CandidateRankingEngineTest {
         )
     }
     @Test fun familyMovementSupportIsVisibleButDoesNotChangeExactFrequencyScore() {
-        val pannas = listOf("277", "277", "277", "111", "111", "222")
+        val pannas = listOf("500", "500", "500", "111", "111", "222")
         val rows = pannas.flatMapIndexed { index, panna ->
             val date = LocalDate.of(2026, 10, 1).plusDays(index.toLong())
             val openAnk = panna.sumOf { it.digitToInt() } % 10
@@ -184,12 +184,14 @@ class CandidateRankingEngineTest {
             rows, Market.SRIDEVI, "main", LocalDate.of(2026, 10, 20),
             PannaSide.OPEN, limit = 100, minimumHistory = 5
         )
-        val original = ranked.candidates.single { it.panna == "277" }
-        val movementEquivalent = ranked.candidates.single { it.panna == "227" }
+        val original = ranked.candidates.single { it.panna == "500" }
+        // 055 is in the returned lexical zero-frequency window; 227 is not
+        // guaranteed to be present when the candidate limit is capped at 100.
+        val movementEquivalent = ranked.candidates.single { it.panna == "055" }
         assertEquals(3, original.exactHistoricalCount)
         assertEquals(0, movementEquivalent.exactHistoricalCount)
         assertEquals(3, movementEquivalent.familyMovementHistoricalCount)
-        assertEquals(FamilyMovementMath.key("277"), movementEquivalent.familyMovementClass)
+        assertEquals(FamilyMovementMath.key("500"), movementEquivalent.familyMovementClass)
         assertEquals(original.score, 100.0, 0.0)
         assertEquals(movementEquivalent.score, 0.0, 0.0)
     }
