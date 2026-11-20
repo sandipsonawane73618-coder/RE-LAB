@@ -892,8 +892,8 @@ private fun MarketPredictionSheet(
                 style = MaterialTheme.typography.titleMedium
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Open", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                Text("Jodi", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("Open · rank / score", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("Jodi · rank / score", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
             }
             val rowCount = maxOf(openCandidates.size, jodiCandidates.size)
             repeat(rowCount) { index ->
@@ -910,6 +910,7 @@ private fun MarketPredictionSheet(
                     }
                 }
             }
+            Text("Score is a relative evidence index, not a calibrated probability.", style = MaterialTheme.typography.labelSmall)
             Text(
                 when {
                     actual == null -> "Result pending · status will update after verified consensus"
