@@ -78,5 +78,25 @@ class WalkForwardBacktestTests(unittest.TestCase):
         self.assertEqual("main", rows["SRIDEVI"][0]["session_id"])
 
 
+    def test_feature_ablation_uses_same_held_out_targets_as_full_model(self):
+        rows = [
+            {
+                "date": date.fromordinal(date(2026, 1, 1).toordinal() + index),
+                "session_id": "main",
+                "open": f"{index % 10}{(index + 1) % 10}{(index + 2) % 10}",
+                "close": f"{(index + 3) % 10}{(index + 4) % 10}{(index + 5) % 10}",
+            }
+            for index in range(12)
+        ]
+        result = backtest.evaluate_market(rows, "SRIDEVI", minimum_history=5)["main:open"]
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["exact_only"]["tested_targets"])
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["family_only"]["tested_targets"])
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["no_exact"]["tested_targets"])
+        self.assertTrue(all(
+            0.0 <= item["top10_hit_rate"] <= 1.0
+            for item in result["feature_ablation_top10"].values()
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()
