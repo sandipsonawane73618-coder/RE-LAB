@@ -28,7 +28,7 @@ class CrossMarketLeadLagEvidenceEngineTest {
                 add(row(Market.KALYAN, i * 2 + 1, targetOutcomes[i]))
             }
         }
-        val evidence = CrossMarketLeadLagEvidenceEngine.analyze(
+        val evidence = ReverseEngineeringModel.analyzeCrossMarketLeadLag(
             records, LocalDate.of(2026, 2, 1), maxSourceAgeDays = 3
         )
         val signal = evidence.single {
