@@ -122,6 +122,42 @@ class CandidateRankingEngineTest {
         assertTrue(ranked.note.contains("unverified"))
     }
 
+    @Test fun exactHistoricalFrequencyRemainsPrimaryOverFamilySupport() {
+        val pannas = listOf(
+            "111", "111", "111",
+            "277", "277", "277", "277", "277", "277",
+            "222", "222"
+        )
+        val rows = pannas.flatMapIndexed { index, panna ->
+            val date = LocalDate.of(2026, 10, 1).plusDays(index.toLong())
+            val openAnk = panna.sumOf { it.digitToInt() } % 10
+            listOf("publisher-a", "publisher-b").map { source ->
+                SourceObservation(
+                    market = Market.SRIDEVI,
+                    sessionId = "main",
+                    date = date,
+                    sourceId = source,
+                    retrievedAt = Instant.parse("2026-11-17T10:00:00Z"),
+                    rawText = "$panna-${openAnk}0-000",
+                    normalizedResult = "$panna-${openAnk}0-000",
+                    status = ObservationStatus.PUBLISHED
+                )
+            }
+        }
+        val ranked = CandidateRankingEngine.rank(
+            rows, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 10, 20), PannaSide.OPEN,
+            limit = 1000, minimumHistory = 5
+        )
+        val position111 = ranked.candidates.indexOfFirst { it.panna == "111" }
+        val position222 = ranked.candidates.indexOfFirst { it.panna == "222" }
+        assertFalse(ranked.abstained)
+        assertEquals(3, ranked.candidates.first { it.panna == "111" }.exactHistoricalCount)
+        assertEquals(2, ranked.candidates.first { it.panna == "222" }.exactHistoricalCount)
+        assertEquals(8, ranked.candidates.first { it.panna == "222" }.familyHistoricalCount)
+        assertTrue("Exact frequency must outrank larger family support", position111 < position222)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun canonicalRankingRejectsMixedPublishers() {
         CandidateRankingEngine.rankCanonical(
