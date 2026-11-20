@@ -68,44 +68,14 @@ jobs:
       - name: Run Android launch and relaunch instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           emulator-boot-timeout: 600
-          script: |
-            set -euo pipefail
-            adb wait-for-device
-
-            # sys.boot_completed can become 1 before PackageManager is registered.
-            # Wait for the package service itself, then prove pm can enumerate packages
-            # before Gradle attempts to install the instrumentation APK.
-            package_ready=false
-            for attempt in $(seq 1 120); do
-              boot_completed="$(adb shell getprop sys.boot_completed | tr -d '\r')"
-              package_service="$(adb shell service check package 2>&1)"
-              package_list="$(adb shell pm list packages 2>&1)"
-              if [ "$boot_completed" = "1" ] \
-                && printf '%s' "$package_service" | grep -q 'found' \
-                && printf '%s' "$package_list" | grep -q '^package:'; then
-                package_ready=true
-                break
-              fi
-              sleep 2
-            done
-
-            if [ "$package_ready" != true ]; then
-              echo "Android PackageManager did not become ready after 240 seconds."
-              adb shell getprop sys.boot_completed
-              adb shell service check package
-              adb logcat -d -b all | tail -n 300
-              exit 1
-            fi
-
-            echo "Android PackageManager is ready; starting instrumentation tests."
-            gradle :app:connectedDebugAndroidTest
+          script: gradle :app:connectedDebugAndroidTest
       - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
