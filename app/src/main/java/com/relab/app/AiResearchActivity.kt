@@ -57,9 +57,11 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiResearchResult?>(null) }
-    var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }\n    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
+    var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }
+    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
     LaunchedEffect(Unit) {
-        history = withContext(Dispatchers.IO) { store.latest() }\n        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
+        history = withContext(Dispatchers.IO) { store.latest() }
+        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
         keyStatus = "Gemini: " + (if (vault.hasKey(AiKeyVault.GEMINI)) "saved securely" else "not configured")
         keyStatus += " · Groq: " + (if (vault.hasKey(AiKeyVault.GROQ)) "saved securely" else "not configured")
     }
