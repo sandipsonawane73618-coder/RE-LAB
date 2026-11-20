@@ -148,7 +148,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                 backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
                 status = "Backtest completed. Only statistical evidence can change a proposal's verification status."
             } catch (error: Exception) {
-                backtestReport = "Backtest not completed: \${error.message ?: "unknown error"}"
+                backtestReport = "Backtest not completed: ${error.message ?: "unknown error"}"
                 status = "No proposal was marked verified."
             } finally { busy = false }
         }
@@ -245,7 +245,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         backtestReport?.let {
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Chronological verification · cutoff \${targetDate} (exclusive)", style = MaterialTheme.typography.titleMedium)
+                                    Text("Chronological verification · cutoff ${targetDate} (exclusive)", style = MaterialTheme.typography.titleMedium)
                                     Text(it)
                                 }
                             }
