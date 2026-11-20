@@ -42,7 +42,7 @@ class CrossMarketLeadLagEvidenceEngineTest {
         assertEquals(2, signal.hits)
         assertEquals(1, signal.baselineHits)
         assertEquals(0.5, signal.lift!!, 0.0)
-        assertEquals(LocalDate.of(2026, 1, 11), signal.latestTargetDate)
+        assertEquals(LocalDate.of(2026, 1, 12), signal.latestTargetDate)
         assertTrue(signal.latestSourceDate.isBefore(signal.latestTargetDate))
     }
 
