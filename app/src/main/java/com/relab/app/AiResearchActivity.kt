@@ -48,7 +48,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     val scope = rememberCoroutineScope()
     val vault = remember { AiKeyVault(context) }
     val store = remember { AiResearchMemoryStore(context) }
-    val engine = remember { AiResearchEngine() }
+    val engine = remember { AiResearchEngine() }\n    val loopEngine = remember { AiResearchLoopEngine() }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
     var question by remember { mutableStateOf("Find reproducible logic patterns, challenge assumptions, and propose leakage-free tests. Treat predictions as experimental.") }
@@ -58,10 +58,10 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiResearchResult?>(null) }
     var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }
-    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
+    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }\n    var pendingLoop by remember { mutableStateOf<AiResearchLoopSession?>(null) }\n    var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
     LaunchedEffect(Unit) {
         history = withContext(Dispatchers.IO) { store.latest() }
-        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
+        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }\n        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
         keyStatus = "Gemini: " + (if (vault.hasKey(AiKeyVault.GEMINI)) "saved securely" else "not configured")
         keyStatus += " · Groq: " + (if (vault.hasKey(AiKeyVault.GROQ)) "saved securely" else "not configured")
     }
@@ -82,6 +82,30 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
                 withContext(Dispatchers.IO) { store.markInterrupted(session.id, e.message ?: "Network or provider error") }
                 pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
                 status = "Research paused safely. Completed stages are saved; tap Resume research to continue."
+            } finally { busy = false }
+        }
+    }
+    fun launchAutoLoop(session: AiResearchLoopSession) {
+        scope.launch {
+            busy = true; result = null; loopResult = null
+            status = "Auto Research Loop running — Researcher → Auditor → improvement…"
+            try {
+                val keys = withContext(Dispatchers.IO) { vault.read(AiKeyVault.GEMINI) to vault.read(AiKeyVault.GROQ) }
+                val completed = withContext(Dispatchers.IO) {
+                    loopEngine.run(
+                        keys.first.orEmpty(), keys.second.orEmpty(), session.question, session.evidence,
+                        session.priorMemory, session.maxRounds, session.checkpoint()
+                    ) { round, stage, output -> store.saveLoopStage(session.id, round, stage, output) }
+                }
+                withContext(Dispatchers.IO) { store.markLoopCompleted(session.id, completed) }
+                loopResult = completed
+                history = withContext(Dispatchers.IO) { store.latest() }
+                pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+                status = "Auto Research Loop complete. Results remain UNVERIFIED until independently tested."
+            } catch (e: Exception) {
+                withContext(Dispatchers.IO) { store.markLoopInterrupted(session.id, e.message ?: "Network or provider error") }
+                pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+                status = "Auto loop paused safely. Completed round stages are saved; tap Resume auto loop to continue."
             } finally { busy = false }
         }
     }
@@ -144,6 +168,28 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
                                 Text("Resume research from saved stage")
                             }
                         }
+                        Button(enabled = !busy && question.isNotBlank() && evidence.isNotBlank(), onClick = {
+                            scope.launch {
+                                try {
+                                    val prior = history.take(3).joinToString("\\n\\n") {
+                                        "Earlier note (UNVERIFIED): " + it.question.take(250) + "\\n" + it.finalSynthesis.take(800)
+                                    }
+                                    val session = withContext(Dispatchers.IO) {
+                                        store.createLoopSession(question, evidence, prior, AiResearchLoopEngine.DEFAULT_MAX_ROUNDS)
+                                    }
+                                    pendingLoop = session
+                                    launchAutoLoop(session)
+                                } catch (e: Exception) { status = "Could not start auto loop: " + (e.message ?: "unknown error") }
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Start Auto Research Loop · 3 rounds") }
+                        pendingLoop?.let { session ->
+                            Text("Saved auto loop: " + session.state + " · " + session.rounds.count { it.checkpoint.finalSynthesis.isNotBlank() } +
+                                "/" + session.maxRounds + " rounds fully checkpointed", style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(enabled = !busy, onClick = { launchAutoLoop(session) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Resume auto loop from saved stage")
+                            }
+                        }
+                        loopResult?.let { Text(it.report()) }
                         if (busy) Text("Each completed AI stage is saved locally. If the app closes or network drops, reopen and resume.")
                         status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
