@@ -32,7 +32,8 @@ data class ProposedPatternBacktest(
     val wilsonUpperBound: Double?,
     val baselineWilsonLowerBound: Double?,
     val baselineWilsonUpperBound: Double?,
-    val status: ResearchVerificationStatus
+    val status: ResearchVerificationStatus,
+    val rejectionReason: String? = null
 )
 
 /**
@@ -225,9 +226,30 @@ object ResearchToBacktestWorkflow {
         val rankedExact = PatternEvidenceRanking.rank(exactEvidence)
         val rankedFamily = PatternEvidenceRanking.rank(familyEvidence)
         val assessments = proposals.map { proposal ->
-            ProposedPatternBacktester.evaluate(
-                eligible, proposal, targetDateExclusive, minimumEvaluations, minimumLift
-            )
+            try {
+                ProposedPatternBacktester.evaluate(
+                    eligible, proposal, targetDateExclusive, minimumEvaluations, minimumLift
+                )
+            } catch (error: IllegalArgumentException) {
+                ProposedPatternBacktest(
+                    proposal = proposal,
+                    supportOccurrences = 0,
+                    evaluatedOccurrences = 0,
+                    abstainedOccurrences = 0,
+                    hits = 0,
+                    misses = 0,
+                    baselineHits = 0,
+                    hitRate = null,
+                    baselineHitRate = null,
+                    lift = null,
+                    wilsonLowerBound = null,
+                    wilsonUpperBound = null,
+                    baselineWilsonLowerBound = null,
+                    baselineWilsonUpperBound = null,
+                    status = ResearchVerificationStatus.REJECTED,
+                    rejectionReason = error.message ?: "Invalid proposal"
+                )
+            }
         }.sortedWith(compareBy<ProposedPatternBacktest> { it.status.ordinal }
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id })
@@ -244,7 +266,7 @@ object ResearchToBacktestCsvExporter {
             "proposal_id", "source", "market", "session", "channel", "pattern", "outcome_mode",
             "support_occurrences", "evaluated_occurrences", "abstained_occurrences", "hits", "misses",
             "baseline_hits", "hit_rate", "baseline_hit_rate", "lift", "wilson_lower_95",
-            "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "rationale"
+            "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "rejection_reason", "rationale"
         )
         val rows = report.assessments.map { result ->
             val p = result.proposal
@@ -255,7 +277,7 @@ object ResearchToBacktestCsvExporter {
                 result.baselineHits.toString(), result.hitRate.csvRate(), result.baselineHitRate.csvRate(),
                 result.lift.csvRate(), result.wilsonLowerBound.csvRate(), result.wilsonUpperBound.csvRate(),
                 result.baselineWilsonLowerBound.csvRate(), result.baselineWilsonUpperBound.csvRate(),
-                result.status.name, p.rationale
+                result.status.name, result.rejectionReason.orEmpty(), p.rationale
             )
         }
         return (listOf(header) + rows).joinToString("\n") { row -> row.joinToString(",") { it.csvEscape() } }
