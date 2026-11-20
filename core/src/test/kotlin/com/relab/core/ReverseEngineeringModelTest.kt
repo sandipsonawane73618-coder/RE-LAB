@@ -35,15 +35,12 @@ class ReverseEngineeringModelTest {
         )
         assertTrue(result.abstained)
         assertTrue(result.candidates.isEmpty())
-        try {
-            ReverseEngineeringModel.rank(
-                listOf(row(Market.MILAN_DAY, 1)), Market.MILAN_DAY, "main",
-                LocalDate.of(2026, 2, 1), ReverseEngineeringSide.OPEN
-            )
-            fail("Disabled market must not be ranked")
-        } catch (expected: IllegalArgumentException) {
-            fail("All nine declared markets must be rankable")
-        }
+        val milan = ReverseEngineeringModel.rank(
+            listOf(row(Market.MILAN_DAY, 1)), Market.MILAN_DAY, "main",
+            LocalDate.of(2026, 2, 1), ReverseEngineeringSide.OPEN
+        )
+        assertTrue("Milan Day must be supported and abstain on insufficient history", milan.abstained)
+        assertEquals(1, milan.trainingRecords)
     }
 
     @Test fun exactAndFamilyEvidenceRankRepeatedPannaFirst() {
