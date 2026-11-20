@@ -117,6 +117,23 @@ class WalkForwardBacktestTests(unittest.TestCase):
         self.assertEqual(6, len(result["feature_ablation_top10"]))
         self.assertIn("balanced_default", result["feature_ablation_top10"])
 
+    def test_exact_primary_tiebreak_preserves_frequency_priority_and_uses_secondary_evidence(self):
+        exact = backtest.Counter()
+        families = backtest.Counter({"111": 5})
+        weekdays = backtest.Counter()
+        transitions = backtest.Counter()
+        _, baseline_rank = backtest.rank_exact_frequency(exact, "111"), None
+        _, lexical_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "111",
+            weights=(0.0, 0.0, 0.0, 0.0), lexical_tiebreak=True,
+        )
+        _, secondary_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "111",
+            weights=(0.0, 1.0, 0.0, 0.0), exact_primary_tiebreak=True,
+        )
+        self.assertEqual(backtest.rank_exact_frequency(exact, "111"), lexical_rank)
+        self.assertLess(secondary_rank, lexical_rank)
+
     def test_ablation_lexical_tiebreak_does_not_reintroduce_excluded_features(self):
         exact = backtest.Counter()
         families = backtest.Counter({"111": 10})
