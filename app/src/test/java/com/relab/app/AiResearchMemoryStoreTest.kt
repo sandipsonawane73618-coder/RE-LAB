@@ -50,6 +50,31 @@ class AiResearchMemoryStoreTest {
         reopenedStore.close()
     }
 
+
+    @Test fun refusesToCompleteLoopWhenAnyRoundOrCheckpointStageIsMissing() {
+        val store = AiResearchMemoryStore(context)
+        val session = store.createLoopSession("Question", "evidence", "", 2)
+        store.saveLoopStage(session.id, 1, "GEMINI_ANALYSIS", "Gemini round one")
+        store.saveLoopStage(session.id, 1, "GROQ_REVIEW", "Groq round one")
+        store.saveLoopStage(session.id, 1, "FINAL_SYNTHESIS", "Synthesis round one")
+
+        val incomplete = AiResearchLoopResult(
+            listOf(AiResearchLoopRoundResult(1, AiResearchResult("Gemini", "Groq", "Synthesis")))
+        )
+        try {
+            store.markLoopCompleted(session.id, incomplete)
+            fail("A two-round loop must not complete with only one round")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("every configured round"))
+        }
+
+        val resumable = store.latestResumableLoop()
+        assertNotNull(resumable)
+        assertEquals("PENDING", resumable!!.state)
+        assertEquals(2, resumable.maxRounds)
+        store.close()
+    }
+
     @Test fun completedLoopIsSavedAsUnverifiedHistoryAndIsNotOfferedForResume() {
         val store = AiResearchMemoryStore(context)
         val session = store.createLoopSession("Question", "evidence", "", 1)
