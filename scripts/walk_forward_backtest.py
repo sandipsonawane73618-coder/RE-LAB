@@ -10,6 +10,7 @@ import argparse
 import csv
 import heapq
 import json
+import re
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -34,15 +35,25 @@ def read_eligible(path: Path) -> dict[str, list[dict]]:
             market = row["market"].strip().upper()
             if market not in grouped:
                 raise ValueError(f"Unknown market in eligible CSV: {market}")
-            if row["status"].upper() != "PUBLISHED":
+            if row["status"].strip().upper() != "PUBLISHED":
                 raise ValueError("Eligible CSV contains a non-published row")
-            result = row["result"].split("-")
-            if len(result) != 3:
-                raise ValueError(f"Invalid result for {market} {row['date']}")
+            session_id = row["session_id"].strip()
+            if not session_id:
+                raise ValueError(f"Missing session ID for {market} {row['date']}")
+            result = [part.strip() for part in row["result"].strip().split("-")]
+            if (
+                len(result) != 3
+                or re.fullmatch(r"[0-9]{3}", result[0]) is None
+                or re.fullmatch(r"[0-9]{2}", result[1]) is None
+                or re.fullmatch(r"[0-9]{3}", result[2]) is None
+            ):
+                raise ValueError(
+                    f"Invalid result for {market} {row['date']}: expected NNN-NN-NNN"
+                )
             day = date.fromisoformat(row["date"])
             grouped[market].append({
                 "date": day,
-                "session_id": row["session_id"],
+                "session_id": session_id,
                 "open": result[0],
                 "close": result[2],
             })
