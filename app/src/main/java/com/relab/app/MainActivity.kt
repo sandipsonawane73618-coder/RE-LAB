@@ -684,7 +684,7 @@ private fun RelabHome(
                     enabled = !linkBusy,
                     onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text(if (linkBusy) "Fetching 5 markets…" else "Fetch / Refresh All 5 Markets") }
+                ) { Text(if (linkBusy) "Fetching 9 markets…" else "Fetch / Refresh All 9 Markets") }
                 Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
                 OutlinedTextField(
                     value = chartUrl,
@@ -1424,13 +1424,17 @@ private suspend fun importAllCanonicalCharts(
         "https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php",
         "https://sattamatkajodi.com/record/kalyan-penal-chart.php",
         "https://sattamatkajodi.com/main-bazar-panel-chart.php",
-        "https://sattamatkajodi.com/time-bazar-panel-chart.php"
+        "https://sattamatkajodi.com/time-bazar-panel-chart.php",
+        "https://sattamatkajodi.com/record/milan-day-penal-chart.php",
+        "https://sattamatkajodi.com/record/milan-night-penal-chart.php",
+        "https://sattamatkajodi.com/record/rajdhani-day-penal-chart.php",
+        "https://sattamatkajodi.com/record/rajdhani-night-penal-chart.php"
     )
     val outcomes = mutableListOf<String>()
     var latestSaved: List<com.relab.core.SourceObservation>? = null
     var importedCount = 0
     updateBusy(true)
-    updateMessage("Fetching historical charts for all 5 enabled markets…")
+    updateMessage("Fetching historical charts for all 9 enabled markets…")
     try {
         for (sourceUrl in sources) {
             currentCoroutineContext().ensureActive()
@@ -1494,12 +1498,12 @@ private suspend fun importAllCanonicalCharts(
         latestSaved?.let(updateObservations)
         if (importedCount == 0) {
             updateMessage(
-                "No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " +
+                "No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 9 Markets. " +
                     outcomes.joinToString(" | ")
             )
         } else {
             updateMessage(
-                "Automatic 5-market fetch complete. Imported $importedCount observations; saved total " +
+                "Automatic 9-market fetch complete. Imported $importedCount observations; saved total " +
                     "${latestSaved?.size ?: 0}. " + outcomes.joinToString(" | ")
             )
         }
