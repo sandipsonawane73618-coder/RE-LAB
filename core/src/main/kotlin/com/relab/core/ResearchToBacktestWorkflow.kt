@@ -190,6 +190,7 @@ data class ResearchToBacktestReport(
         appendLine("Family evidence ranking: OUTPERFORMS=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.OUTPERFORMS_BASELINE } + " | BELOW=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.BELOW_BASELINE } + " | INCONCLUSIVE=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INCONCLUSIVE } + " | INSUFFICIENT=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE })
         rankedFamilyPatternEvidence.take(5).forEach { appendLine("  " + it.evidence.market + "/" + it.evidence.sessionId + " " + it.evidence.channel + " " + it.evidence.pattern + " | " + it.assessment + " | score=" + rate(it.rankScore) + " | n=" + it.evidence.evaluatedOccurrences) }
         appendLine("AI proposals tested: " + assessments.size)
+        if (assessments.isEmpty()) appendLine("No executable AI proposals were supplied; scanner and Pattern Evidence DB results remain available for review.")
         ResearchVerificationStatus.entries.forEach { status ->
             appendLine("$status: ${assessments.count { it.status == status }}")
         }
