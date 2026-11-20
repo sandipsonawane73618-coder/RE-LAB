@@ -190,6 +190,7 @@ private data class DashboardAnalysisSnapshot(
     val patternAnalyses: List<com.relab.core.MarketAnalysis>,
     val intelligenceReports: List<com.relab.core.MarketIntelligenceReport>,
     val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
+    val crossMarketLeadLagEvidence: List<com.relab.core.CrossMarketLeadLagEvidence>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
     val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
@@ -212,6 +213,9 @@ private fun buildDashboardAnalysisSnapshot(
     val patternAnalyses = com.relab.core.PatternAnalysis.analyze(researchRecords)
     val intelligenceReports = com.relab.core.MarketIntelligence.analyze(researchRecords)
     val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
+    val crossMarketLeadLagEvidence = com.relab.core.ReverseEngineeringModel.analyzeCrossMarketLeadLag(
+        researchRecords, targetDate, maxSourceAgeDays = 7
+    )
     val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
         .sortedWith(compareBy({ it.first.name }, { it.second }))
     val candidateSets = marketSessions.map { (market, sessionId) ->
@@ -264,7 +268,7 @@ private fun buildDashboardAnalysisSnapshot(
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
+        crossMarketReports, crossMarketLeadLagEvidence, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
         com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
     )
 }
@@ -428,6 +432,7 @@ private fun RelabHome(
     val patternAnalyses = snapshot?.patternAnalyses.orEmpty()
     val intelligenceReports = snapshot?.intelligenceReports.orEmpty()
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
+    val crossMarketLeadLagEvidence = snapshot?.crossMarketLeadLagEvidence.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
@@ -788,15 +793,52 @@ private fun RelabHome(
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
-                Text("Cross-Market Reverse Engineering · five enabled markets", style = MaterialTheme.typography.titleLarge)
+                Text("Cross-Market Reverse Engineering · nine enabled markets", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Compares matching dates and sessions across Sridevi, Sridevi Night, Kalyan, Main Bazar and Time Bazar. Historical co-occurrence only; not a prediction or causal claim.",
+                    "Compares matching dates and sessions across all nine enabled markets. Historical co-occurrence only; not a prediction or causal claim.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (crossMarketReports.isEmpty()) {
                     Text(if (snapshot == null) "Analysing same-date cross-market relationships…" else "Cross-market comparison will appear when at least two enabled markets have valid records for the same date and session.")
                 } else {
                     crossMarketReports.forEach { CrossMarketResearchCard(it) }
+                }
+                Text("Cross-Market Lead/Lag Evidence · prior published results only", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "For each target result, uses only the latest source-market row published on an earlier chart date (maximum age 7 days). Pattern hit-rate is compared with the target market's prior global-frequency baseline. Same-day values and future rows are excluded. This is cross-market association from one canonical publisher, not independent-source confirmation or a causal claim.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                val qualifiedLeadLag = crossMarketLeadLagEvidence
+                    .filter { it.evaluatedOccurrences >= 3 && it.lift != null }
+                    .groupBy { it.targetMarket }
+                if (qualifiedLeadLag.isEmpty()) {
+                    Text(if (snapshot == null) "Checking earlier-date cross-market signals…" else "No repeated cross-market signal has enough scored observations yet; the engine abstains rather than promoting weak evidence.")
+                } else {
+                    qualifiedLeadLag.toSortedMap(compareBy { it.name }).forEach { (targetMarket, evidenceRows) ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Target: $targetMarket", style = MaterialTheme.typography.titleSmall)
+                                evidenceRows.sortedWith(
+                                    compareByDescending<com.relab.core.CrossMarketLeadLagEvidence> { it.lift }
+                                        .thenByDescending { it.evaluatedOccurrences }
+                                        .thenBy { it.sourceMarket.name }
+                                ).take(5).forEach { item ->
+                                    Text(
+                                        "${item.sourceMarket} → ${item.targetMarket} · ${item.channel} · signal ${item.sourceSignal}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        "Hit ${item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} vs baseline ${item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · lift ${item.lift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"} · n=${item.evaluatedOccurrences}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Latest source ${item.latestSourceDate} → target ${item.latestTargetDate} · source age ${item.latestSourceAgeDays} days · distinct source rows ${item.distinctSourceCount}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 Text("Market Intelligence · market-specific behaviour", style = MaterialTheme.typography.titleLarge)
                 Text(
