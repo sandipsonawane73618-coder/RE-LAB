@@ -46,7 +46,8 @@ object AiResearchContextBuilder {
         line("IMPORTANT: raw source observations below are not independent confirmations. Derived records are exploratory and may include single-source/conflicting groups; inspect provenance before treating as truth.")
         line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}.")
         line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use history strictly before target date.")
-        val marketBudget = ((maxChars - output.length) / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
+        val truncationSuffix = "\n[Evidence pack reached configured character limit; per-market character budgets preserve coverage across markets.]"
+        val marketBudget = ((maxChars - output.length - truncationSuffix.length) / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
         for (market in ReverseEngineeringModel.enabledMarkets.sortedBy { it.name }) {
             val marketStart = output.length
             val marketLimit = minOf(maxChars, marketStart + marketBudget)
@@ -98,9 +99,8 @@ object AiResearchContextBuilder {
                 }
             }
         }
-        if (output.length >= maxChars) {
-            val suffix = "\n[Evidence pack reached configured character limit; per-market character budgets preserve coverage across markets.]"
-            return output.substring(0, (maxChars - suffix.length).coerceAtLeast(0)) + suffix
+        if (output.length >= maxChars - truncationSuffix.length) {
+            return output.substring(0, (maxChars - truncationSuffix.length).coerceAtLeast(0)) + truncationSuffix
         }
         return output.toString().trimEnd()
     }
