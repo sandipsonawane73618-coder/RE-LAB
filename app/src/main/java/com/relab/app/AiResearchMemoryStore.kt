@@ -149,17 +149,41 @@ class AiResearchMemoryStore(context: Context) : SQLiteOpenHelper(context.applica
     }
 
     fun markLoopCompleted(id: String, result: AiResearchLoopResult) {
-        require(result.rounds.isNotEmpty()) { "Cannot complete an empty research loop" }
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val loop = db.query("ai_research_loops", arrayOf("question"), "id=?", arrayOf(id), null, null, null).use { c ->
-                check(c.moveToFirst()) { "Auto-loop session not found" }; c.getString(0)
+            val loop = db.query("ai_research_loops", arrayOf("question", "max_rounds", "state"),
+                "id=?", arrayOf(id), null, null, null).use { c ->
+                check(c.moveToFirst()) { "Auto-loop session not found" }
+                Triple(c.getString(0), c.getInt(1), c.getString(2))
             }
+            require(loop.third != "COMPLETED") { "Auto-loop session is already completed" }
+            require(result.rounds.map { it.roundNumber } == (1..loop.second).toList()) {
+                "Cannot complete an auto loop until every configured round has finished"
+            }
+            require(result.rounds.all {
+                it.result.geminiAnalysis.isNotBlank() &&
+                    it.result.groqReview.isNotBlank() &&
+                    it.result.finalSynthesis.isNotBlank()
+            }) { "Cannot complete an auto loop with an empty AI stage" }
+            db.query("ai_research_loop_rounds",
+                arrayOf("round_number", "gemini_analysis", "groq_review", "final_synthesis"),
+                "loop_id=?", arrayOf(id), null, null, "round_number ASC").use { c ->
+                var expectedRound = 1
+                while (c.moveToNext()) {
+                    check(c.getInt(0) == expectedRound) { "Auto-loop checkpoint rounds are incomplete" }
+                    check((1..3).all { column -> !c.isNull(column) && c.getString(column).isNotBlank() }) {
+                        "Auto-loop cannot complete before all round stages are checkpointed"
+                    }
+                    expectedRound++
+                }
+                check(expectedRound == loop.second + 1) { "Auto-loop checkpoint rounds are incomplete" }
+            }
+            val question = loop.first
             val gemini = result.rounds.joinToString("\n\n") { "ROUND ${it.roundNumber}\n${it.result.geminiAnalysis}" }
             val groq = result.rounds.joinToString("\n\n") { "ROUND ${it.roundNumber}\n${it.result.groqReview}" }
             val values = ContentValues().apply {
-                put("created_at", Instant.now().toString()); put("question", loop)
+                put("created_at", Instant.now().toString()); put("question", question)
                 put("gemini_analysis", gemini); put("groq_review", groq)
                 put("final_synthesis", result.report()); put("verification_state", "UNVERIFIED")
             }
