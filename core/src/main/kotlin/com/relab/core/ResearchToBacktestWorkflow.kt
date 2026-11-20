@@ -162,6 +162,8 @@ data class ResearchToBacktestReport(
     val scannerRankings: List<ReverseEngineeringRanking>,
     val exactPatternEvidence: List<PatternEvidenceRecord>,
     val familyPatternEvidence: List<PatternEvidenceRecord>,
+    val rankedExactPatternEvidence: List<RankedPatternEvidence>,
+    val rankedFamilyPatternEvidence: List<RankedPatternEvidence>,
     val assessments: List<ProposedPatternBacktest>
 ) {
     fun compactSummary(): String = buildString {
@@ -169,8 +171,12 @@ data class ResearchToBacktestReport(
         appendLine("Target cutoff (exclusive): $targetDateExclusive")
         appendLine("Scanner rankings: ${scannerRankings.size}")
         appendLine("Exact pattern evidence rows: ${exactPatternEvidence.size}")
-        appendLine("Family-movement evidence rows: ${familyPatternEvidence.size}")
-        appendLine("AI proposals tested: ${assessments.size}")
+        appendLine("Family-movement evidence rows: " + familyPatternEvidence.size)
+        appendLine("Exact evidence ranking: OUTPERFORMS=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.OUTPERFORMS_BASELINE } + " | BELOW=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.BELOW_BASELINE } + " | INCONCLUSIVE=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INCONCLUSIVE } + " | INSUFFICIENT=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE })
+        rankedExactPatternEvidence.take(5).forEach { appendLine("  " + it.evidence.market + "/" + it.evidence.sessionId + " " + it.evidence.channel + " " + it.evidence.pattern + " | " + it.assessment + " | score=" + rate(it.rankScore) + " | n=" + it.evidence.evaluatedOccurrences) }
+        appendLine("Family evidence ranking: OUTPERFORMS=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.OUTPERFORMS_BASELINE } + " | BELOW=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.BELOW_BASELINE } + " | INCONCLUSIVE=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INCONCLUSIVE } + " | INSUFFICIENT=" + rankedFamilyPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE })
+        rankedFamilyPatternEvidence.take(5).forEach { appendLine("  " + it.evidence.market + "/" + it.evidence.sessionId + " " + it.evidence.channel + " " + it.evidence.pattern + " | " + it.assessment + " | score=" + rate(it.rankScore) + " | n=" + it.evidence.evaluatedOccurrences) }
+        appendLine("AI proposals tested: " + assessments.size)
         ResearchVerificationStatus.entries.forEach { status ->
             appendLine("$status: ${assessments.count { it.status == status }}")
         }
@@ -202,6 +208,8 @@ object ResearchToBacktestWorkflow {
         val familyEvidence = PatternEvidenceDatabase.analyze(
             eligible, targetDateExclusive, outcomeMode = PatternOutcomeMode.FAMILY_MOVEMENT
         )
+        val rankedExact = PatternEvidenceRanking.rank(exactEvidence)
+        val rankedFamily = PatternEvidenceRanking.rank(familyEvidence)
         val assessments = proposals.map { proposal ->
             ProposedPatternBacktester.evaluate(
                 eligible, proposal, targetDateExclusive, minimumEvaluations, minimumLift
@@ -210,7 +218,8 @@ object ResearchToBacktestWorkflow {
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id })
         return ResearchToBacktestReport(
-            targetDateExclusive, scannerRankings.toList(), exactEvidence, familyEvidence, assessments
+            targetDateExclusive, scannerRankings.toList(), exactEvidence, familyEvidence,
+            rankedExact, rankedFamily, assessments
         )
     }
 }
