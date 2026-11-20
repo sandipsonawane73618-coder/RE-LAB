@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -30,6 +31,9 @@ object ResearchBundleExporter {
             "derived-consensus-research.csv" to DerivedChartCsvExporter.export(consensusRecords),
             "walk-forward-audit.csv" to WalkForwardCsvExporter.export(analyses),
             "historical-coverage-audit.csv" to CoverageCsvExporter.export(coverageReports),
+            "family-movement-walk-forward.csv" to FamilyMovementCsvExporter.export(
+                consensusRecords, generatedAt.atZone(ZoneOffset.UTC).toLocalDate()
+            ),
             "source-publication-timing.csv" to SourceTimingAnalytics.exportCsv(observations),
             "research-manifest.json" to ResearchManifestExporter.export(
                 observations, consensusRecords, analyses, generatedAt
@@ -88,12 +92,14 @@ object ResearchBundleExporter {
         appendLine("- reverse-model-family-rankings.csv: separate 125-state family-sequence rankings")
         appendLine("- reverse-model-jodi-rankings.csv: Jodi candidates derived from open/close panna rankings")
         appendLine("- reverse-model-walk-forward.csv: chronological top-1/top-10 exact, Ank and family hit rates")
+        appendLine("- family-movement-walk-forward.csv: chronological Jodi and Panna family/reversal coverage vs exact-value baseline")
         appendLine("- research-manifest.json: dataset checksum, reconciliation and timing metadata")
         appendLine("- bundle-index.json: SHA-256 and byte size for every other artifact")
         appendLine()
         appendLine("Important: single-source and conflicting records are retained in the source ledger but excluded from consensus research.")
         appendLine("Missing source rows are not evidence of a holiday. Publication times are never inferred.")
         appendLine("Walk-forward outputs are historical baseline evaluations, not guaranteed predictions.")
+        appendLine("Family movement equivalence is a research hypothesis; only earlier rows are used and low-history sessions abstain.")
     }
 
     private fun sha256(bytes: ByteArray): String =
