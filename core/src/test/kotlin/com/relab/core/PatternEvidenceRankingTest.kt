@@ -74,4 +74,20 @@ class PatternEvidenceRankingTest {
         assertTrue(ranked.all { it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE })
         assertTrue(ranked.all { it.rankScore == -101.0 })
     }
+    @Test fun inconsistentStoredRatesOrHitMissTotalsAreInsufficient() {
+        val valid = evidence("A>B", hits = 8, baselineHits = 2, evaluated = 10)
+        val mismatchedPatternRate = valid.copy(hitRate = 0.2)
+        val mismatchedBaselineRate = valid.copy(baselineHitRate = 0.9)
+        val mismatchedTotals = valid.copy(misses = 1)
+
+        val ranked = PatternEvidenceRanking.rank(
+            listOf(mismatchedPatternRate, mismatchedBaselineRate, mismatchedTotals)
+        )
+        assertTrue(ranked.all {
+            it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE
+        })
+        assertTrue(ranked.all { it.rankScore == -101.0 })
+        assertTrue(ranked.all { it.hitRateLower95 == null && it.baselineUpper95 == null })
+    }
+
 }
