@@ -70,6 +70,17 @@ object CrossMarketLeadLagEvidenceEngine {
                             .map { ChartMath.family(it.digitToInt()).toString() }.joinToString("")
                         CrossMarketEvidenceChannel.JODI -> row.jodi
                     }
+                    val baselineByTargetDate = mutableMapOf<LocalDate, String>()
+                    val globalTargetCounts = linkedMapOf<String, Int>()
+                    targetRows.forEach { target ->
+                        if (globalTargetCounts.isNotEmpty()) {
+                            baselineByTargetDate[target.date] = globalTargetCounts.entries
+                                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                                .first().key
+                        }
+                        val targetValue = value(target)
+                        globalTargetCounts[targetValue] = (globalTargetCounts[targetValue] ?: 0) + 1
+                    }
                     val events = mutableListOf<Triple<ChartRecord, ChartRecord, String>>()
                     var sourceIndex = -1
                     targetRows.forEach { target ->
@@ -93,12 +104,7 @@ object CrossMarketLeadLagEvidenceEngine {
                                     .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
                                     .first().key
                                 if (predicted == outcome) hits++ else misses++
-                                val allPriorTargetOutcomes = targetRows.asSequence()
-                                    .filter { it.date.isBefore(target.date) }
-                                    .map(::value).toList()
-                                val baselinePrediction = allPriorTargetOutcomes.groupingBy { it }.eachCount().entries
-                                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-                                    .first().key
+                                val baselinePrediction = baselineByTargetDate[target.date]
                                 if (baselinePrediction == outcome) baselineHits++
                             }
                             priorOutcomes += outcome
