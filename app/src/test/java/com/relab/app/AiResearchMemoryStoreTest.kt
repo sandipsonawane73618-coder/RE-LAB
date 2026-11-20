@@ -47,6 +47,7 @@ class AiResearchMemoryStoreTest {
         assertEquals("research round two", resumed.rounds[1].checkpoint.geminiAnalysis)
         assertEquals("", resumed.rounds[1].checkpoint.groqReview)
         assertEquals("", resumed.rounds[2].checkpoint.finalSynthesis)
+        reopenedStore.close()
     }
 
     @Test fun completedLoopIsSavedAsUnverifiedHistoryAndIsNotOfferedForResume() {
@@ -65,5 +66,6 @@ class AiResearchMemoryStoreTest {
         assertEquals(1, history.size)
         assertTrue(history.single().finalSynthesis.contains("Verification state: UNVERIFIED"))
         assertTrue(history.single().finalSynthesis.contains("No chart records were modified."))
+        store.close()
     }
 }
