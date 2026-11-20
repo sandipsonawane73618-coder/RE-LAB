@@ -58,6 +58,36 @@ class AiResearchContextBuilderTest {
         assertFalse(context.contains("2026-01-01 |"))
     }
 
+
+    @Test fun includesOnlyScannerRankingsForTheRequestedTargetDate() {
+        val targetDate = LocalDate.of(2026, 2, 1)
+        val candidate = ReverseEngineeringCandidate(
+            panna = "123", familySequence = "012", pannaType = ChartMath.pannaType("123"), ank = 6,
+            score = 91.0, exactPannaEvidence = 0.01, familyEvidence = 0.2, ankEvidence = 0.1,
+            positionEvidence = 0.3, pannaTypeEvidence = 0.4, reversePannaEvidence = 0.05,
+            weekdayEvidence = null, previousTransitionEvidence = 0.02,
+            openCloseConditionalEvidence = null, crossMarketConditionalEvidence = 0.03
+        )
+        val ranking = ReverseEngineeringRanking(
+            market = Market.SRIDEVI, sessionId = "main", side = ReverseEngineeringSide.OPEN,
+            targetDate = targetDate, trainingRecords = 40, minimumHistoryRequired = 30,
+            abstained = false, candidates = listOf(candidate),
+            familyCandidates = listOf(ReverseEngineeringFamilyCandidate("012", 88.0, 4, null, 2, null, 1)),
+            activeEvidenceLayers = listOf("Digit-family sequence", "Previous-state transition"),
+            note = "Relative evidence index only."
+        )
+        val context = AiResearchContextBuilder.build(
+            emptyList(), emptyList(), targetDate,
+            scannerRankings = listOf(ranking, ranking.copy(targetDate = targetDate.plusDays(1)))
+        )
+        assertTrue(context.contains("SCANNER OPEN"))
+        assertTrue(context.contains("training rows=40"))
+        assertTrue(context.contains("Digit-family sequence"))
+        assertTrue(context.contains("123 | 012 | 91.0000"))
+        assertTrue(context.contains("NOT calibrated probabilities"))
+        assertFalse(context.contains("target=2026-02-02"))
+    }
+
     @Test fun enforcesCharacterLimit() {
         val observations = ReverseEngineeringModel.enabledMarkets.flatMap { market ->
             (0..30).map { observation(market, it) }
