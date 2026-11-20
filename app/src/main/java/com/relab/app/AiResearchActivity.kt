@@ -130,9 +130,6 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             status = "Extracting structured AI proposals and running chronological backtests…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
-                require(parsed.proposals.isNotEmpty()) {
-                    parsed.issues.joinToString("; ").ifBlank { "AI supplied no executable pattern proposals" }
-                }
                 val report = withContext(Dispatchers.IO) {
                     val observations = LocalObservationDatabase(context).loadObservations()
                     // Verification uses only multi-source consensus rows. Exploratory/single-source
@@ -148,7 +145,12 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     ResearchToBacktestWorkflow.run(records, scannerRankings, parsed.proposals, targetDate)
                 }
                 backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
-                status = "Backtest completed. Only statistical evidence can change a proposal's verification status."
+                status = if (parsed.proposals.isEmpty()) {
+                    "Research report completed; AI supplied no executable patterns. Scanner and Pattern Evidence DB results are still available. " +
+                        parsed.issues.joinToString("; ")
+                } else {
+                    "Backtest completed. Only statistical evidence can change a proposal's verification status."
+                }
             } catch (error: Exception) {
                 backtestReport = "Backtest not completed: ${error.message ?: "unknown error"}"
                 status = "No proposal was marked verified."
