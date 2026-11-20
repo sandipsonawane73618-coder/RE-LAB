@@ -98,6 +98,25 @@ class WalkForwardBacktestTests(unittest.TestCase):
         ))
 
 
+    def test_weight_tuning_uses_disjoint_chronological_validation_and_test_windows(self):
+        rows = [
+            {
+                "date": date.fromordinal(date(2026, 1, 1).toordinal() + index),
+                "session_id": "main",
+                "open": f"{index % 10}{(index + 1) % 10}{(index + 2) % 10}",
+                "close": f"{(index + 3) % 10}{(index + 4) % 10}{(index + 5) % 10}",
+            }
+            for index in range(100)
+        ]
+        result = backtest.evaluate_market(rows, "SRIDEVI", minimum_history=5)["main:open"]
+        validation = result["tuning_validation"]["balanced_default"]
+        held_out = result["tuning_test"]["balanced_default"]
+        self.assertEqual(15, validation["tested_targets"])
+        self.assertEqual(15, held_out["tested_targets"])
+        self.assertEqual(15, result["tuning_test_baseline"]["tested_targets"])
+        self.assertEqual(6, len(result["feature_ablation_top10"]))
+        self.assertIn("balanced_default", result["feature_ablation_top10"])
+
     def test_ablation_lexical_tiebreak_does_not_reintroduce_excluded_features(self):
         exact = backtest.Counter()
         families = backtest.Counter({"111": 10})
