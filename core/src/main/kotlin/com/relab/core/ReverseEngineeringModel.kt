@@ -388,6 +388,31 @@ object ReverseEngineeringModel {
         )
     }
 
+    /**
+     * Returns directional pattern evidence using only valid rows before targetDate.
+     * This keeps the scanner aligned with the model's strict historical cutoff.
+     */
+    fun scanDirectionalPatterns(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        side: ReverseEngineeringSide,
+        minimumLength: Int = 3,
+        maximumStep: Int = 2
+    ): List<DirectionalPatternReport> {
+        require(market in enabledMarkets) { "Market is not enabled for directional scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        val scannerSide = when (side) {
+            ReverseEngineeringSide.OPEN -> ChartPatternSide.OPEN_PANNA
+            ReverseEngineeringSide.CLOSE -> ChartPatternSide.CLOSE_PANNA
+        }
+        return ChartPatternGridScanner.scan(earlierRows, scannerSide, minimumLength, maximumStep)
+    }
+
     fun deriveJodiCandidates(
         openCandidates: List<ReverseEngineeringCandidate>,
         closeCandidates: List<ReverseEngineeringCandidate>,
