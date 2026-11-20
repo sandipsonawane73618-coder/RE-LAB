@@ -783,7 +783,7 @@ private fun RelabHome(
                     }
                 }
                 Text("Pattern research · exploratory + verified", style = MaterialTheme.typography.titleLarge)
-                Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar. Other legacy market rows are excluded from analysis.", style = MaterialTheme.typography.bodySmall)
+                Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar · Milan Day · Milan Night · Rajdhani Day · Rajdhani Night.", style = MaterialTheme.typography.bodySmall)
                 Text(
                     "Analysis input: ${researchRecords.size} valid historical rows (${chartBuild.records.size} consensus + ${chartBuild.singleSourceUnverifiedGroups.size} single-source groups) · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
                     style = MaterialTheme.typography.bodySmall
