@@ -31,7 +31,7 @@ class PatternEvidenceDatabaseTest {
             it.channel == PatternEvidenceChannel.OPEN_PANNA && it.pattern == "111>222"
         }
         assertEquals(3, repeated.occurrences)
-        assertEquals(1, repeated.evaluatedOccurrences)
+        assertEquals(2, repeated.evaluatedOccurrences)
         assertEquals(1, repeated.hits)
         assertEquals(1, repeated.misses)
         assertEquals(0.5, repeated.hitRate!!, 0.0)
