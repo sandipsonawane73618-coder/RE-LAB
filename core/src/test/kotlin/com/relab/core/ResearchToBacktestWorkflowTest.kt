@@ -59,7 +59,7 @@ class ResearchToBacktestWorkflowTest {
                 "family", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA,
                 "111>222", PatternOutcomeMode.FAMILY_MOVEMENT
             ),
-            LocalDate.of(2026, 1, 7), minimumEvaluations = 1
+            LocalDate.of(2026, 1, 1).plusDays(120), minimumEvaluations = 20
         )
         assertEquals(0, exact.evaluatedOccurrences)
         assertEquals(39, family.evaluatedOccurrences)
