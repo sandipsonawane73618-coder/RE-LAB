@@ -24,7 +24,11 @@ object AiEvidenceCitationAuditor {
             .map(::normalize)
             .toSet()
         val cited = citation.findAll(aiOutput).map { normalize(it.groupValues[1]) }
-            .filter { token -> token.startsWith("SCANNER/") || marketPrefixes.any(token::startsWith) }
+            .filter { token ->
+                token.startsWith("SCANNER/") ||
+                    marketPrefixes.any(token::startsWith) ||
+                    token.count { it == '/' } >= 3
+            }
             .distinct()
             .toList()
         val verified = cited.filter { it in supplied }
