@@ -457,6 +457,14 @@ object ReverseEngineeringModel {
         return JodiFamilySequenceScanner.crossMarketAlignment(earlier)
     }
 
+    /** Cross-market lead/lag evidence; every source observation must predate its target result. */
+    fun analyzeCrossMarketLeadLag(
+        records: List<ChartRecord>,
+        targetDateExclusive: LocalDate,
+        maxSourceAgeDays: Long = 7
+    ): List<CrossMarketLeadLagEvidence> =
+        CrossMarketLeadLagEvidenceEngine.analyze(records, targetDateExclusive, maxSourceAgeDays)
+
     /** Pattern-level evidence for one market/session, using strictly earlier valid rows. */
     fun rankPatternEvidence(
         records: List<ChartRecord>,
