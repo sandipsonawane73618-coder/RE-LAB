@@ -82,6 +82,7 @@ class AiResearchContextBuilderTest {
             scannerRankings = listOf(ranking, ranking.copy(targetDate = targetDate.plusDays(1)))
         )
         assertTrue(context.contains("SCANNER OPEN"))
+        assertTrue(context.contains("SCANNER_REF=[SCANNER/SRIDEVI/main/OPEN/2026-02-01]"))
         assertTrue(context.contains("training rows=40"))
         assertTrue(context.contains("Digit-family sequence"))
         assertTrue(context.contains("123 | 012 | 91.0000"))
