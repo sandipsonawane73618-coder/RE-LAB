@@ -16,7 +16,9 @@ object ResearchBundleExporter {
         analyses: List<MarketAnalysis>,
         coverageReports: List<CoverageReport>,
         generatedAt: Instant,
-        reverseModelArtifacts: Map<String, String> = emptyMap()
+        reverseModelArtifacts: Map<String, String> = emptyMap(),
+        scannerRankings: List<ReverseEngineeringRanking> = emptyList(),
+        aiProposals: List<ResearchPatternProposal> = emptyList()
     ): ByteArray {
         val modelFiles = if (reverseModelArtifacts.isEmpty()) {
             ReverseEngineeringCsvExporter.exportAll(emptyList(), emptyList(), emptyList())
@@ -26,14 +28,20 @@ object ResearchBundleExporter {
                 "Unexpected reverse model artifact name: $name"
             }
         }
+        val targetDateExclusive = generatedAt.atZone(ZoneOffset.UTC).toLocalDate()
+        val integratedReport = ResearchToBacktestWorkflow.run(
+            consensusRecords, scannerRankings, aiProposals, targetDateExclusive
+        )
         val artifacts = linkedMapOf(
             "source-observations.csv" to SourceCsvExporter.export(observations),
             "derived-consensus-research.csv" to DerivedChartCsvExporter.export(consensusRecords),
             "walk-forward-audit.csv" to WalkForwardCsvExporter.export(analyses),
             "historical-coverage-audit.csv" to CoverageCsvExporter.export(coverageReports),
             "family-movement-walk-forward.csv" to FamilyMovementCsvExporter.export(
-                consensusRecords, generatedAt.atZone(ZoneOffset.UTC).toLocalDate()
+                consensusRecords, targetDateExclusive
             ),
+            "research-to-backtest.csv" to ResearchToBacktestCsvExporter.export(integratedReport),
+            "research-to-backtest-report.txt" to integratedReport.compactSummary(),
             "source-publication-timing.csv" to SourceTimingAnalytics.exportCsv(observations),
             "research-manifest.json" to ResearchManifestExporter.export(
                 observations, consensusRecords, analyses, generatedAt
@@ -93,6 +101,8 @@ object ResearchBundleExporter {
         appendLine("- reverse-model-jodi-rankings.csv: Jodi candidates derived from open/close panna rankings")
         appendLine("- reverse-model-walk-forward.csv: chronological top-1/top-10 exact, Ank and family hit rates")
         appendLine("- family-movement-walk-forward.csv: chronological Jodi and Panna family/reversal coverage vs exact-value baseline")
+        appendLine("- research-to-backtest.csv: AI-proposed patterns tested chronologically against a prior-only baseline, with Wilson confidence bounds and verification status")
+        appendLine("- research-to-backtest-report.txt: compact verified/uncertain/rejected research summary")
         appendLine("- research-manifest.json: dataset checksum, reconciliation and timing metadata")
         appendLine("- bundle-index.json: SHA-256 and byte size for every other artifact")
         appendLine()
