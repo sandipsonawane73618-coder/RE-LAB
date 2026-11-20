@@ -85,4 +85,28 @@ class CrossMarketLeadLagEvidenceEngineTest {
             assertTrue(expected.message!!.contains("Duplicate rows"))
         }
     }
+    @Test fun baselineUsesOnlyTargetRowsWithEligibleEarlierSourceSignals() {
+        val records = listOf(
+            row(Market.SRIDEVI, 0, "111"),
+            row(Market.KALYAN, 1, "222"),
+            row(Market.KALYAN, 2, "333"),
+            row(Market.KALYAN, 3, "333"),
+            row(Market.SRIDEVI, 4, "111"),
+            row(Market.KALYAN, 5, "222")
+        )
+        val signal = CrossMarketLeadLagEvidenceEngine.analyze(
+            records, LocalDate.of(2026, 2, 1), maxSourceAgeDays = 1
+        ).single {
+            it.sourceMarket == Market.SRIDEVI &&
+                it.targetMarket == Market.KALYAN &&
+                it.channel == CrossMarketEvidenceChannel.OPEN_PANNA_FAMILY &&
+                it.sourceSignal == "111"
+        }
+        assertEquals(2, signal.occurrences)
+        assertEquals(1, signal.evaluatedOccurrences)
+        assertEquals(1, signal.hits)
+        assertEquals(1, signal.baselineHits)
+        assertEquals(0.0, signal.lift!!, 0.0)
+    }
+
 }
