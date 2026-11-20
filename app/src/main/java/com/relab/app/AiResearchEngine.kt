@@ -5,15 +5,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class AiResearchResult(val geminiAnalysis: String, val groqReview: String, val finalSynthesis: String)
+data class AiResearchCheckpoint(val geminiAnalysis: String = "", val groqReview: String = "", val finalSynthesis: String = "")
 
-/** Gemini proposes; Groq independently challenges; Gemini reconciles. */
+/** Gemini proposes; Groq independently challenges; Gemini reconciles. Each finished stage can be persisted. */
 class AiResearchEngine {
-    fun runCrossReview(geminiKey: String, groqKey: String, question: String, context: String, priorMemory: String): AiResearchResult {
+    fun runCrossReview(
+        geminiKey: String, groqKey: String, question: String, context: String, priorMemory: String,
+        checkpoint: AiResearchCheckpoint = AiResearchCheckpoint(),
+        onCheckpoint: (stage: String, output: String) -> Unit = { _, _ -> }
+    ): AiResearchResult {
         require(geminiKey.isNotBlank() && groqKey.isNotBlank()) { "Save both Gemini and Groq API keys first" }
         require(question.isNotBlank()) { "Enter a research question" }
-        val evidence = context.take(16_000)
-        val memory = priorMemory.take(5_000)
-        val q = question.take(3_000)
+        val evidence = context.take(16_000); val memory = priorMemory.take(5_000); val q = question.take(3_000)
         val firstPrompt = """
             Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
             Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
@@ -22,7 +25,7 @@ class AiResearchEngine {
             EVIDENCE: $evidence
             PRIOR AI NOTES (UNVERIFIED; never treat as facts): $memory
         """.trimIndent()
-        val first = callGemini(geminiKey, firstPrompt)
+        val first = checkpoint.geminiAnalysis.ifBlank { callGemini(geminiKey, firstPrompt).also { onCheckpoint("GEMINI_ANALYSIS", it) } }
         val critiquePrompt = """
             Act as an independent reverse-engineering and statistical reviewer. Analyse original evidence independently,
             then challenge Gemini. Find unsupported claims, confounders, leakage, duplicated or derived signals,
@@ -31,7 +34,7 @@ class AiResearchEngine {
             ORIGINAL EVIDENCE: $evidence
             GEMINI ANALYSIS TO AUDIT:
         """.trimIndent() + first.take(12_000)
-        val critique = callGroq(groqKey, critiquePrompt)
+        val critique = checkpoint.groqReview.ifBlank { callGroq(groqKey, critiquePrompt).also { onCheckpoint("GROQ_REVIEW", it) } }
         val synthesisPrompt = """
             Reconcile both independent reviews. Preserve unresolved disagreements. Label items OBSERVED,
             HYPOTHESIS or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
@@ -40,7 +43,7 @@ class AiResearchEngine {
             EVIDENCE: $evidence
             GEMINI:
         """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
-        val synthesis = callGemini(geminiKey, synthesisPrompt)
+        val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
         return AiResearchResult(first, critique, synthesis)
     }
     private fun callGemini(key: String, prompt: String): String {
@@ -66,8 +69,7 @@ class AiResearchEngine {
     private fun post(endpoint: String, headers: Map<String, String>, body: String): String {
         val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 20_000; readTimeout = 60_000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json")
             headers.forEach { (name, value) -> setRequestProperty(name, value) }
         }
         try {

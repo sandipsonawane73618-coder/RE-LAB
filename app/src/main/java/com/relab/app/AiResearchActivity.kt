@@ -57,11 +57,31 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiResearchResult?>(null) }
-    var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }
+    var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }\n    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
     LaunchedEffect(Unit) {
-        history = withContext(Dispatchers.IO) { store.latest() }
+        history = withContext(Dispatchers.IO) { store.latest() }\n        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
         keyStatus = "Gemini: " + (if (vault.hasKey(AiKeyVault.GEMINI)) "saved securely" else "not configured")
         keyStatus += " · Groq: " + (if (vault.hasKey(AiKeyVault.GROQ)) "saved securely" else "not configured")
+    }
+    fun launchResearch(session: AiResearchSession) {
+        scope.launch {
+            busy = true; result = null; status = "Resuming from last saved stage…"
+            try {
+                val keys = withContext(Dispatchers.IO) { vault.read(AiKeyVault.GEMINI) to vault.read(AiKeyVault.GROQ) }
+                val completed = withContext(Dispatchers.IO) {
+                    engine.runCrossReview(keys.first.orEmpty(), keys.second.orEmpty(), session.question, session.evidence,
+                        session.priorMemory, session.checkpoint()) { stage, output -> store.saveStage(session.id, stage, output) }
+                }
+                withContext(Dispatchers.IO) { store.markCompleted(session.id, session.question, completed) }
+                result = completed; history = withContext(Dispatchers.IO) { store.latest() }
+                pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
+                status = "Cross-review complete. New note saved as UNVERIFIED."
+            } catch (e: Exception) {
+                withContext(Dispatchers.IO) { store.markInterrupted(session.id, e.message ?: "Network or provider error") }
+                pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
+                status = "Research paused safely. Completed stages are saved; tap Resume research to continue."
+            } finally { busy = false }
+        }
     }
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -104,25 +124,25 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
                         OutlinedTextField(evidence, { evidence = it }, label = { Text("Evidence / dataset context") }, minLines = 5, modifier = Modifier.fillMaxWidth())
                         Button(enabled = !busy && question.isNotBlank(), onClick = {
                             scope.launch {
-                                busy = true; result = null
-                                status = "Gemini → Groq independent review → Gemini synthesis…"
                                 try {
-                                    val keys = withContext(Dispatchers.IO) { vault.read(AiKeyVault.GEMINI) to vault.read(AiKeyVault.GROQ) }
                                     val prior = history.take(3).joinToString("\n\n") {
                                         "Earlier note (UNVERIFIED): " + it.question.take(250) + "\n" + it.finalSynthesis.take(800)
                                     }
-                                    val completed = withContext(Dispatchers.IO) {
-                                        engine.runCrossReview(keys.first.orEmpty(), keys.second.orEmpty(), question, evidence, prior)
-                                            .also { store.save(question, it) }
-                                    }
-                                    result = completed
-                                    history = withContext(Dispatchers.IO) { store.latest() }
-                                    status = "Cross-review complete. New note saved as UNVERIFIED."
-                                } catch (e: Exception) { status = "Research failed: " + (e.message ?: "unknown error") }
-                                finally { busy = false }
+                                    val session = withContext(Dispatchers.IO) { store.createSession(question, evidence, prior) }
+                                    pendingSession = session
+                                    launchResearch(session)
+                                } catch (e: Exception) { status = "Could not start research: " + (e.message ?: "unknown error") }
                             }
-                        }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Research running…" else "Run 2-AI cross-review") }
-                        if (busy) Text("Three API calls are running. Keep the app open until completion.")
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Run 2-AI cross-review") }
+                        pendingSession?.let { session ->
+                            Text("Saved research session: " + session.state + " · " +
+                                (if (session.finalSynthesis.isNotBlank()) "final synthesis saved" else if (session.groqReview.isNotBlank()) "Groq review saved" else if (session.geminiAnalysis.isNotBlank()) "Gemini analysis saved" else "waiting for first stage"),
+                                style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(enabled = !busy, onClick = { launchResearch(session) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Resume research from saved stage")
+                            }
+                        }
+                        if (busy) Text("Each completed AI stage is saved locally. If the app closes or network drops, reopen and resume.")
                         status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
