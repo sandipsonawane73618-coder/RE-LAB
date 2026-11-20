@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -33,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -911,13 +913,13 @@ private fun MarketPredictionSheet(
             ) {
                 cells.forEach { cell ->
                     val background = when (cell.passed) {
-                        true -> MaterialTheme.colorScheme.primaryContainer
-                        false -> MaterialTheme.colorScheme.errorContainer
+                        true -> Color(0xFF1B5E20)
+                        false -> Color(0xFFB71C1C)
                         null -> MaterialTheme.colorScheme.surfaceVariant
                     }
                     val foreground = when (cell.passed) {
-                        true -> MaterialTheme.colorScheme.onPrimaryContainer
-                        false -> MaterialTheme.colorScheme.onErrorContainer
+                        true, false -> Color.White
+                        
                         null -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     Card(
