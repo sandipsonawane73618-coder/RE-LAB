@@ -17,10 +17,22 @@ class AiResearchEngine {
         require(geminiKey.isNotBlank() && groqKey.isNotBlank()) { "Save both Gemini and Groq API keys first" }
         require(question.isNotBlank()) { "Enter a research question" }
         val evidence = context.take(20_000); val memory = priorMemory.take(5_000); val q = question.take(3_000)
+        val evidenceRules = """
+            EVIDENCE TRACEABILITY RULES:
+            - Cite factual chart-history claims with exact supplied rows as [market/session/date/source-id].
+            - Cite aggregate scanner metrics as [SCANNER market/session/side/target-date], and label them aggregate evidence.
+            - Never invent citations, sources, chart values or sample counts. Unsupported claims must be labelled UNSUPPORTED.
+            - Distinguish PUBLISHED, PENDING, CONFLICTING and exploratory/derived records.
+            - A source ID is provenance, not proof of publisher independence.
+            - Scanner scores are relative indices, never probabilities.
+            - Report missing markets/sessions, abstentions, sample sizes and evidence-pack truncation.
+            - Separate OBSERVED, HYPOTHESIS, UNSUPPORTED and NEEDS-TEST.
+        """.trimIndent()
         val firstPrompt = """
             Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
             Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
             Recommend chronological walk-forward validation and baselines. No certainty or guaranteed predictions.
+            $evidenceRules
             QUESTION: $q
             EVIDENCE: $evidence
             PRIOR AI NOTES (UNVERIFIED; never treat as facts): $memory
@@ -30,6 +42,9 @@ class AiResearchEngine {
             Act as an independent reverse-engineering and statistical reviewer. Analyse original evidence independently,
             then challenge Gemini. Find unsupported claims, confounders, leakage, duplicated or derived signals,
             small-sample problems and alternative explanations. Do not invent data.
+            $evidenceRules
+            For every Gemini claim, mark SUPPORTED with an exact evidence citation, PARTIALLY SUPPORTED, or UNSUPPORTED.
+            Explicitly identify disagreements and alternative explanations.
             QUESTION: $q
             ORIGINAL EVIDENCE: $evidence
             GEMINI ANALYSIS TO AUDIT:
@@ -39,6 +54,10 @@ class AiResearchEngine {
             Reconcile both independent reviews. Preserve unresolved disagreements. Label items OBSERVED,
             HYPOTHESIS or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
             Never convert speculation into fact or claim model-weight learning or certain predictions.
+            Include a claim-audit table: claim | Gemini view | Groq view | evidence citation | status.
+            Preserve unresolved disagreements and uncertainty.
+            Finish with the next 3 reproducible tests and the minimum data each test requires.
+            $evidenceRules
             QUESTION: $q
             EVIDENCE: $evidence
             GEMINI:
