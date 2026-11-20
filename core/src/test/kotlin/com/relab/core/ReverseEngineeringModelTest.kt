@@ -196,4 +196,24 @@ class ReverseEngineeringModelTest {
         assertFalse(result.any { it.sourceIds.contains(future.sourceId) })
     }
 
+
+    @Test fun directionalJodiScanUsesOnlyEarlierChartRows() {
+        val past = listOf(
+            row(Market.SRIDEVI, 1, open = "001", close = "002"),
+            row(Market.SRIDEVI, 2, open = "003", close = "004"),
+            row(Market.SRIDEVI, 3, open = "005", close = "006")
+        )
+        val future = row(Market.SRIDEVI, 100, open = "007", close = "008")
+            .copy(sourceId = "future-jodi")
+        val reports = ReverseEngineeringModel.scanDirectionalJodiPatterns(
+            past + future, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 1, 5), minimumLength = 2, maximumStep = 1
+        )
+        assertEquals(1, reports.size)
+        assertEquals(3, reports.single().acceptedRecords)
+        assertFalse(reports.single().occurrences.any {
+            it.sourceIds.contains("future-jodi")
+        })
+    }
+
 }
