@@ -112,9 +112,9 @@ class ChartPatternGridScannerTest {
 
     @Test fun scansClosePannaWhenRequested() {
         val rows = listOf(
-            row(1, "000").copy(closePanna = "123", jodi = "60"),
-            row(2, "000").copy(closePanna = "456", jodi = "50"),
-            row(3, "000").copy(closePanna = "789", jodi = "40")
+            row(1, "000").copy(closePanna = "123", jodi = "06"),
+            row(2, "000").copy(closePanna = "456", jodi = "05"),
+            row(3, "000").copy(closePanna = "789", jodi = "04")
         )
         val report = ChartPatternGridScanner.scan(
             rows, ChartPatternSide.CLOSE_PANNA, maximumStep = 1
