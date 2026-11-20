@@ -52,7 +52,7 @@ class AiResearchEngine {
         val critique = checkpoint.groqReview.ifBlank { callGroq(groqKey, critiquePrompt).also { onCheckpoint("GROQ_REVIEW", it) } }
         val synthesisPrompt = """
             Reconcile both independent reviews. Preserve unresolved disagreements. Label items OBSERVED,
-            HYPOTHESIS or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
+            HYPOTHESIS, UNSUPPORTED or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
             Never convert speculation into fact or claim model-weight learning or certain predictions.
             Include a claim-audit table: claim | Gemini view | Groq view | evidence citation | status.
             Preserve unresolved disagreements and uncertainty.
