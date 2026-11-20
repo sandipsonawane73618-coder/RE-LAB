@@ -30,6 +30,8 @@ data class ProposedPatternBacktest(
     val lift: Double?,
     val wilsonLowerBound: Double?,
     val wilsonUpperBound: Double?,
+    val baselineWilsonLowerBound: Double?,
+    val baselineWilsonUpperBound: Double?,
     val status: ResearchVerificationStatus
 )
 
@@ -113,10 +115,11 @@ object ProposedPatternBacktester {
         val hitRate = evaluated.takeIf { it > 0 }?.let { hits.toDouble() / it }
         val baselineRate = evaluated.takeIf { it > 0 }?.let { baselineHits.toDouble() / it }
         val bounds = hitRate?.let { wilson(hits, evaluated) }
+        val baselineBounds = baselineRate?.let { wilson(baselineHits, evaluated) }
         val status = when {
             evaluated < minimumEvaluations -> ResearchVerificationStatus.UNCERTAIN
-            bounds!!.first > baselineRate!! + minimumLift -> ResearchVerificationStatus.VERIFIED
-            bounds.second < baselineRate -> ResearchVerificationStatus.REJECTED
+            bounds!!.first > baselineBounds!!.second + minimumLift -> ResearchVerificationStatus.VERIFIED
+            bounds.second < baselineBounds.first -> ResearchVerificationStatus.REJECTED
             else -> ResearchVerificationStatus.UNCERTAIN
         }
         return ProposedPatternBacktest(
@@ -132,6 +135,8 @@ object ProposedPatternBacktester {
             lift = if (hitRate != null && baselineRate != null) hitRate - baselineRate else null,
             wilsonLowerBound = bounds?.first,
             wilsonUpperBound = bounds?.second,
+            baselineWilsonLowerBound = baselineBounds?.first,
+            baselineWilsonUpperBound = baselineBounds?.second,
             status = status
         )
     }
@@ -174,7 +179,7 @@ data class ResearchToBacktestReport(
             .thenBy { it.proposal.id }).forEach { result ->
             val proposal = result.proposal
             fun rate(value: Double?) = value?.let { String.format(Locale.ROOT, "%.3f", it) } ?: "n/a"
-            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)}")
+            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)}")
         }
         appendLine("Verification is historical evidence only, not a guarantee or calibrated future probability.")
     }
@@ -216,7 +221,7 @@ object ResearchToBacktestCsvExporter {
             "proposal_id", "source", "market", "session", "channel", "pattern", "outcome_mode",
             "support_occurrences", "evaluated_occurrences", "abstained_occurrences", "hits", "misses",
             "baseline_hits", "hit_rate", "baseline_hit_rate", "lift", "wilson_lower_95",
-            "wilson_upper_95", "verification_status", "rationale"
+            "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "rationale"
         )
         val rows = report.assessments.map { result ->
             val p = result.proposal
