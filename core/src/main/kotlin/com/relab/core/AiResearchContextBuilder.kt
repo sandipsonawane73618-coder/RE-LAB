@@ -39,8 +39,11 @@ object AiResearchContextBuilder {
         line("IMPORTANT: raw source observations below are not independent confirmations. Derived records are exploratory and may include single-source/conflicting groups; inspect provenance before treating as truth.")
         line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}.")
         line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use history strictly before target date.")
+        val marketBudget = (maxChars / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
         for (market in ReverseEngineeringModel.enabledMarkets.sortedBy { it.name }) {
-            if (output.length >= maxChars) break
+            val marketStart = output.length
+            val marketLimit = minOf(maxChars, marketStart + marketBudget)
+            if (output.length >= marketLimit) break
             val sessions = (observationGroups.keys + recordGroups.keys + eligibleRankings.keys)
                 .filter { it.first == market }
                 .map { it.second }.distinct().sorted()
@@ -51,7 +54,7 @@ object AiResearchContextBuilder {
                 continue
             }
             for (session in sessions) {
-                if (output.length >= maxChars) break
+                if (output.length >= marketLimit) break
                 val sourceRows = observationGroups[market to session].orEmpty().sortedByDescending { it.date }
                 val records = recordGroups[market to session].orEmpty().sortedByDescending { it.date }
                 line("SESSION: $session | source observations=${sourceRows.size} | exploratory records=${records.size}")
@@ -88,7 +91,7 @@ object AiResearchContextBuilder {
             }
         }
         if (output.length >= maxChars) {
-            val suffix = "\n[Evidence pack reached configured character limit; per-market quotas keep coverage balanced.]"
+            val suffix = "\n[Evidence pack reached configured character limit; per-market character budgets preserve coverage across markets.]"
             return output.substring(0, (maxChars - suffix.length).coerceAtLeast(0)) + suffix
         }
         return output.toString().trimEnd()
