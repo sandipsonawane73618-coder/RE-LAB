@@ -668,19 +668,14 @@ private fun RelabHome(
                 if (showResearchTools) {
                 Button(
                     onClick = {
-                        val contextSummary = buildString {
-                            appendLine("RE-LAB dataset snapshot")
-                            appendLine("Total source observations: " + observations.size)
-                            appendLine("Published source rows: " + published)
-                            appendLine("Consensus chart records: " + chartBuild.records.size)
-                            appendLine("Conflicting reconciliation groups: " + conflicts)
-                            appendLine("Research records: " + researchRecords.size)
-                            activeObservations.groupBy { it.market.name + "/" + it.sessionId }
-                                .toSortedMap().forEach { (session, rows) ->
-                                    appendLine(session + ": " + rows.size + " source observations")
-                                }
-                            appendLine("Only this compact summary is prefilled; add specific evidence manually before sending it to external AI providers.")
-                        }
+                        val contextSummary = com.relab.core.AiResearchContextBuilder.build(
+                            observations = activeObservations,
+                            exploratoryRecords = researchRecords,
+                            targetDateExclusive = selectedDate,
+                            maxRecordsPerMarketSession = 6,
+                            maxObservationsPerMarketSession = 6,
+                            maxChars = 14_000
+                        )
                         context.startActivity(
                             Intent(context, AiResearchActivity::class.java)
                                 .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
