@@ -41,6 +41,7 @@ object ResearchBundleExporter {
                 consensusRecords, targetDateExclusive
             ),
             "research-to-backtest.csv" to ResearchToBacktestCsvExporter.export(integratedReport),
+            "research-pattern-evidence.csv" to ResearchToBacktestCsvExporter.exportEvidence(integratedReport),
             "research-to-backtest-report.txt" to integratedReport.compactSummary(),
             "source-publication-timing.csv" to SourceTimingAnalytics.exportCsv(observations),
             "research-manifest.json" to ResearchManifestExporter.export(
@@ -102,6 +103,7 @@ object ResearchBundleExporter {
         appendLine("- reverse-model-walk-forward.csv: chronological top-1/top-10 exact, Ank and family hit rates")
         appendLine("- family-movement-walk-forward.csv: chronological Jodi and Panna family/reversal coverage vs exact-value baseline")
         appendLine("- research-to-backtest.csv: AI-proposed patterns tested chronologically against a prior-only baseline, with Wilson confidence bounds and verification status")
+        appendLine("- research-pattern-evidence.csv: ranked exact and family pattern evidence with matched-baseline confidence intervals")
         appendLine("- research-to-backtest-report.txt: compact verified/uncertain/rejected research summary")
         appendLine("- research-manifest.json: dataset checksum, reconciliation and timing metadata")
         appendLine("- bundle-index.json: SHA-256 and byte size for every other artifact")
