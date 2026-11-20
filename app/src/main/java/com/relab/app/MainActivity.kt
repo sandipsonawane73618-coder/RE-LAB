@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -262,6 +263,7 @@ private fun RelabHome(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showResearchTools by remember { mutableStateOf(false) }
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
@@ -602,7 +604,22 @@ private fun RelabHome(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
-                Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
+                Text("Market Predictions", style = MaterialTheme.typography.titleMedium)
+                if (reverseModelSets.isEmpty()) {
+                    Text("Predictions will appear when enough verified history is available.")
+                } else {
+                    reverseModelSets.forEach { set ->
+                        val actual = chartBuild.records.firstOrNull {
+                            it.market == set.market && it.sessionId == set.sessionId && it.date == set.open.targetDate
+                        }
+                        MarketPredictionSheet(set, actual)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showResearchTools = !showResearchTools },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (showResearchTools) "Hide Research & Data Tools" else "Research & Data Tools") }
+                if (showResearchTools) {
                 Button(
                     onClick = {
                         val contextSummary = buildString {
@@ -820,7 +837,117 @@ private fun RelabHome(
                     }
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
+                }
             }
+        }
+    }
+}
+
+
+private data class PredictionDisplayCell(
+    val title: String,
+    val value: String,
+    val passed: Boolean?
+)
+
+@Composable
+private fun MarketPredictionSheet(
+    set: ReverseModelDashboardSet,
+    actual: com.relab.core.ChartRecord?
+) {
+    val openPanna = set.open.candidates.firstOrNull()?.panna
+    val closePanna = set.close.candidates.firstOrNull()?.panna
+    val openAnk = openPanna?.let { it.sumOf(Char::digitToInt) % 10 }
+    val closeAnk = closePanna?.let { it.sumOf(Char::digitToInt) % 10 }
+    val predictedJodi = set.jodi.firstOrNull()?.jodi
+
+    val actualOpenAnk = actual?.let { it.openPanna.sumOf(Char::digitToInt) % 10 }
+    val actualCloseAnk = actual?.let { it.closePanna.sumOf(Char::digitToInt) % 10 }
+    val cells = listOf(
+        PredictionDisplayCell(
+            "Open",
+            openAnk?.toString() ?: "—",
+            if (actual == null || openAnk == null) null else actualOpenAnk == openAnk
+        ),
+        PredictionDisplayCell(
+            "Jodi",
+            predictedJodi ?: "—",
+            if (actual == null || predictedJodi == null) null else actual.jodi == predictedJodi
+        ),
+        PredictionDisplayCell(
+            "Panna",
+            if (openPanna == null || closePanna == null) "—" else "O $openPanna · C $closePanna",
+            if (actual == null || openPanna == null || closePanna == null) null
+            else actual.openPanna == openPanna || actual.closePanna == closePanna
+        ),
+        PredictionDisplayCell(
+            "Half Sangam",
+            if (openPanna == null || closePanna == null || openAnk == null || closeAnk == null) "—"
+            else "$openPanna-$closeAnk / $openAnk-$closePanna",
+            if (actual == null || openPanna == null || closePanna == null || openAnk == null || closeAnk == null) null
+            else (actual.openPanna == openPanna && actualCloseAnk == closeAnk) ||
+                (actual.closePanna == closePanna && actualOpenAnk == openAnk)
+        ),
+        PredictionDisplayCell(
+            "Full Sangam",
+            if (openPanna == null || closePanna == null) "—" else "$openPanna-$closePanna",
+            if (actual == null || openPanna == null || closePanna == null) null
+            else actual.openPanna == openPanna && actual.closePanna == closePanna
+        )
+    )
+
+    Card {
+        Column(
+            Modifier.fillMaxWidth().padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                set.market.name.replace('_', ' ') + " · " + set.sessionId,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                cells.forEach { cell ->
+                    val background = when (cell.passed) {
+                        true -> MaterialTheme.colorScheme.primaryContainer
+                        false -> MaterialTheme.colorScheme.errorContainer
+                        null -> MaterialTheme.colorScheme.surfaceVariant
+                    }
+                    val foreground = when (cell.passed) {
+                        true -> MaterialTheme.colorScheme.onPrimaryContainer
+                        false -> MaterialTheme.colorScheme.onErrorContainer
+                        null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Card(
+                        modifier = Modifier.width(142.dp),
+                        colors = CardDefaults.cardColors(containerColor = background)
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(9.dp),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            Text(cell.title, style = MaterialTheme.typography.labelLarge, color = foreground)
+                            Text(cell.value, style = MaterialTheme.typography.titleMedium, color = foreground)
+                            Text(
+                                when (cell.passed) {
+                                    true -> "PASS"
+                                    false -> "FAIL"
+                                    null -> if (actual == null) "WAITING" else "NO PREDICTION"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = foreground
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                if (actual == null) "Result pending · colours update after a consensus result is published"
+                else "Checked against the multi-source consensus result for " + actual.date,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
