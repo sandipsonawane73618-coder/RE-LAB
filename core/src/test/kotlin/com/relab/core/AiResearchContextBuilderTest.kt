@@ -28,6 +28,8 @@ class AiResearchContextBuilderTest {
         val context = AiResearchContextBuilder.build(observations, records, LocalDate.of(2026, 2, 1))
         ReverseEngineeringModel.enabledMarkets.forEach { assertTrue("Missing ${it.name}", context.contains("=== MARKET: ${it.name} ===")) }
         assertTrue(context.contains("CHART RECORDS"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — EXACT MODE"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — FAMILY MOVEMENT MODE"))
         assertTrue(context.contains("FAMILY MOVEMENT HYPOTHESIS"))
         assertTrue(context.contains("Jodi 06 -> 06/51/60/15"))
         assertTrue(context.contains("Open panna 123 -> 123/678/321/876"))
