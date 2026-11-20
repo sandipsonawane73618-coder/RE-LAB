@@ -1,4 +1,5 @@
 package com.relab.app
+import com.relab.core.AiEvidenceCitationAuditor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -63,7 +64,20 @@ class AiResearchEngine {
             GEMINI:
         """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
         val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
-        return AiResearchResult(first, critique, synthesis)
+        val citationAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
+        val auditSummary = buildString {
+            append("DETERMINISTIC CITATION AUDIT (traceability only; verified references do not prove a claim is true):\\n")
+            append("Supplied evidence references: ${citationAudit.suppliedReferences}\\n")
+            append("Citations checked: ${citationAudit.citedReferences}\\n")
+            append("Verified citations: ${citationAudit.verifiedReferences.size}\\n")
+            append("Unsupported citations: ${citationAudit.unsupportedReferences.size}")
+            if (citationAudit.unsupportedReferences.isNotEmpty()) {
+                append("\\nUnsupported reference tokens: ")
+                append(citationAudit.unsupportedReferences.joinToString(", "))
+            }
+            if (citationAudit.citedReferences == 0) append("\\nNo machine-checkable chart/scanner citations were found.")
+        }
+        return AiResearchResult(first, critique, synthesis + "\\n\\n" + auditSummary)
     }
     private fun callGemini(key: String, prompt: String): String {
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user")
