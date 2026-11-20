@@ -149,4 +149,22 @@ class ReverseEngineeringModelTest {
             assertTrue(expected.message!!.contains("Duplicate dates"))
         }
     }
+
+    @Test fun directionalPatternScanUsesOnlyRowsBeforeTargetDate() {
+        val past = history()
+        val future = row(Market.SRIDEVI, 100, open = "123", close = "456")
+        val report = ReverseEngineeringModel.scanDirectionalPatterns(
+            past + future,
+            Market.SRIDEVI,
+            "main",
+            LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN,
+            maximumStep = 1
+        ).single()
+
+        assertEquals(40, report.acceptedRecords)
+        assertEquals(0, report.rejectedRecords)
+        assertFalse(report.occurrences.any { it.sourceIds.contains(future.sourceId) })
+    }
+
 }
