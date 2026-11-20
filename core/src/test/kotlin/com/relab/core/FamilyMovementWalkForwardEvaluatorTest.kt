@@ -33,6 +33,20 @@ class FamilyMovementWalkForwardEvaluatorTest {
         assertEquals(1, report.top10Hits)
     }
 
+    @Test fun pannaFamilySwapAndReverseAreScoredAsEquivalent() {
+        val records = listOf(
+            row(1, "12", "001", "002"),
+            row(2, "67", "556", "016"),
+            row(3, "12", "100", "002"),
+            row(4, "67", "655", "016")
+        )
+        val report = FamilyMovementWalkForwardEvaluator.evaluate(
+            records, LocalDate.of(2026, 2, 1), minimumHistory = 3
+        ).single { it.channel == FamilyMovementChannel.OPEN_PANNA }
+        assertEquals(1, report.evaluatedTargets)
+        assertEquals(1, report.top1Hits)
+    }
+
     @Test fun targetAndFutureRowsAreExcludedBeforeEvaluation() {
         val records = listOf(
             row(1, "17", "001", "025"),
