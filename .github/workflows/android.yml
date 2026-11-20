@@ -50,30 +50,3 @@ jobs:
         with:
           name: relab-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-
-  capture-canonical-charts:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Capture nine canonical chart pages
-        run: python scripts/capture_canonical_charts.py --output-dir data/captures
-      - name: Extract captured weekly charts into source CSV
-        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
-      - name: Audit extracted market CSV
-        run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/canonical_audit.json --eligible-output data/derived/canonical_eligible_observations.csv
-      - name: Run chronological walk-forward evaluation
-        run: python scripts/walk_forward_backtest.py data/derived/canonical_eligible_observations.csv --minimum-history 30 --output data/derived/walk_forward_report.json
-      - name: Upload immutable HTML snapshots and metadata
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: relab-canonical-chart-captures
-          path: |
-            data/captures/
-            data/derived/
-          if-no-files-found: warn
