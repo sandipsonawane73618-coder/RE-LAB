@@ -52,7 +52,9 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
   android-instrumentation:
-    runs-on: ubuntu-latest
+    # Pin a supported LTS runner; ubuntu-latest moved to 26.04 and the
+    # hosted emulator repeatedly disappeared from ADB before boot completed.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -70,8 +72,20 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest
-      - name: Upload instrumentation test reports
+          emulator-boot-timeout: 360
+          verbose: true
+          script: |
+            # Separate Gradle/instrumentation sessions with an explicit app force-stop
+            # between them exercise real cold process relaunches with the same DB.
+            for pass in 1 2 3; do
+              echo "Cold-process startup pass $pass/3"
+              gradle --rerun-tasks :app:connectedDebugAndroidTest
+              if [ "$pass" -lt 3 ]; then
+                adb shell am force-stop com.relab.app
+                sleep 2
+              fi
+            done
+      - name: Capture emulator diagnostics\n        if: always()\n        continue-on-error: true\n        run: |\n          echo "=== Runner / disk ==="\n          uname -a\n          df -h\n          echo "=== KVM ==="\n          if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo "/dev/kvm unavailable"; fi\n          echo "=== ADB devices ==="\n          adb devices -l\n          echo "=== Emulator processes ==="\n          ps -ef\n      - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
