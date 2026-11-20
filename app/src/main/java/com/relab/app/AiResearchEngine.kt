@@ -1,7 +1,9 @@
 package com.relab.app
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.relab.core.AiEvidenceCitationAuditor
 import com.relab.core.AiCitationAudit
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -94,23 +96,36 @@ class AiResearchEngine internal constructor(
     }
 
     private fun callGemini(key: String, prompt: String): String {
-        val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user")
-            .put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
-            .put("generationConfig", JSONObject().put("temperature", 0.2).put("maxOutputTokens", 1400))
-        val json = JSONObject(postRequest("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-            mapOf("x-goog-api-key" to key), body.toString()))
-        val parts = json.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-            ?: error("Gemini returned no text")
-        return (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.optString("text") }
+        val part = JsonObject().apply { addProperty("text", prompt) }
+        val parts = JsonArray().apply { add(part) }
+        val content = JsonObject().apply { addProperty("role", "user"); add("parts", parts) }
+        val contents = JsonArray().apply { add(content) }
+        val generationConfig = JsonObject().apply { addProperty("temperature", 0.2); addProperty("maxOutputTokens", 1400) }
+        val body = JsonObject().apply { add("contents", contents); add("generationConfig", generationConfig) }
+        val json = JsonParser.parseString(postRequest(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+            mapOf("x-goog-api-key" to key), body.toString()
+        )).asJsonObject
+        val partsResponse = json.getAsJsonArray("candidates")?.get(0)?.asJsonObject
+            ?.getAsJsonObject("content")?.getAsJsonArray("parts") ?: error("Gemini returned no text")
+        return partsResponse.mapNotNull { it.asJsonObject.get("text")?.takeUnless { value -> value.isJsonNull }?.asString }
             .filter { it.isNotBlank() }.joinToString("\n").ifBlank { error("Gemini returned an empty response") }
     }
+
     private fun callGroq(key: String, prompt: String): String {
-        val body = JSONObject().put("model", GROQ_MODEL).put("temperature", 0.2).put("max_tokens", 1400)
-            .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", "You are a rigorous independent evidence reviewer."))
-                .put(JSONObject().put("role", "user").put("content", prompt)))
-        val json = JSONObject(postRequest("https://api.groq.com/openai/v1/chat/completions",
-            mapOf("Authorization" to "Bearer " + key), body.toString()))
-        return json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
+        val system = JsonObject().apply { addProperty("role", "system"); addProperty("content", "You are a rigorous independent evidence reviewer.") }
+        val user = JsonObject().apply { addProperty("role", "user"); addProperty("content", prompt) }
+        val messages = JsonArray().apply { add(system); add(user) }
+        val body = JsonObject().apply {
+            addProperty("model", GROQ_MODEL); addProperty("temperature", 0.2); addProperty("max_tokens", 1400)
+            add("messages", messages)
+        }
+        val json = JsonParser.parseString(postRequest(
+            "https://api.groq.com/openai/v1/chat/completions",
+            mapOf("Authorization" to "Bearer " + key), body.toString()
+        )).asJsonObject
+        return json.getAsJsonArray("choices")?.get(0)?.asJsonObject
+            ?.getAsJsonObject("message")?.get("content")?.takeUnless { it.isJsonNull }?.asString
             ?.takeIf { it.isNotBlank() } ?: error("Groq returned an empty response")
     }
 
