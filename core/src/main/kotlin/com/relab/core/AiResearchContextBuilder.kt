@@ -30,8 +30,9 @@ object AiResearchContextBuilder {
         val recordGroups = eligibleRecords.groupBy { it.market to it.sessionId }
         val eligibleRankings = scannerRankings.filter { it.market in ReverseEngineeringModel.enabledMarkets && it.targetDate == targetDateExclusive }.groupBy { it.market to it.sessionId }
         val output = StringBuilder()
+        var currentLimit = maxChars
         fun line(value: String) {
-            if (output.length < maxChars) output.append(value).append('\n')
+            if (output.length < currentLimit) output.append(value).append('\\n')
         }
         line("RE-LAB ACTUAL CHART EVIDENCE")
         line("Target date exclusive: $targetDateExclusive")
@@ -39,10 +40,11 @@ object AiResearchContextBuilder {
         line("IMPORTANT: raw source observations below are not independent confirmations. Derived records are exploratory and may include single-source/conflicting groups; inspect provenance before treating as truth.")
         line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}.")
         line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use history strictly before target date.")
-        val marketBudget = (maxChars / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
+        val marketBudget = ((maxChars - output.length) / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
         for (market in ReverseEngineeringModel.enabledMarkets.sortedBy { it.name }) {
             val marketStart = output.length
             val marketLimit = minOf(maxChars, marketStart + marketBudget)
+            currentLimit = marketLimit
             if (output.length >= marketLimit) break
             val sessions = (observationGroups.keys + recordGroups.keys + eligibleRankings.keys)
                 .filter { it.first == market }
