@@ -141,4 +141,16 @@ class ChartPatternGridScannerTest {
         })
     }
 
+
+    @Test fun verticalPatternsFollowObservedRowsAcrossCalendarGaps() {
+        val report = ChartPatternGridScanner.scan(
+            listOf(row(1, "123"), row(4, "456"), row(6, "789")),
+            ChartPatternSide.OPEN_PANNA,
+            maximumStep = 1
+        ).single()
+        assertTrue(report.occurrences.any {
+            it.direction == PatternDirection.VERTICAL && it.pattern == "147" && it.step == 1
+        })
+    }
+
 }
