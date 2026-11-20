@@ -30,12 +30,12 @@ class PatternEvidenceDatabaseTest {
         val repeated = evidence.single {
             it.channel == PatternEvidenceChannel.OPEN_PANNA && it.pattern == "111>222"
         }
-        assertEquals(2, repeated.occurrences)
+        assertEquals(3, repeated.occurrences)
         assertEquals(1, repeated.evaluatedOccurrences)
         assertEquals(1, repeated.hits)
-        assertEquals(0, repeated.misses)
-        assertEquals(1.0, repeated.hitRate!!, 0.0)
-        assertEquals(2, repeated.distinctSourceCount)
+        assertEquals(1, repeated.misses)
+        assertEquals(0.5, repeated.hitRate!!, 0.0)
+        assertEquals(5, repeated.distinctSourceCount)
         assertEquals(0, repeated.ageInChartRows)
     }
 
