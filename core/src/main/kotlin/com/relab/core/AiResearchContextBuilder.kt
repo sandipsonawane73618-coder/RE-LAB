@@ -31,12 +31,17 @@ object AiResearchContextBuilder {
         val eligibleRankings = scannerRankings.filter { it.market in ReverseEngineeringModel.enabledMarkets && it.targetDate == targetDateExclusive }.groupBy { it.market to it.sessionId }
         val output = StringBuilder()
         var currentLimit = maxChars
+        var wasTruncated = false
         fun line(value: String) {
             val remaining = currentLimit - output.length
-            if (remaining <= 0) return
+            if (remaining <= 0) {
+                wasTruncated = true
+                return
+            }
             if (value.length + 1 <= remaining) {
                 output.append(value).append('\n')
             } else {
+                wasTruncated = true
                 output.append(value.take((remaining - 1).coerceAtLeast(0))).append('\n')
             }
         }
@@ -99,7 +104,7 @@ object AiResearchContextBuilder {
                 }
             }
         }
-        if (output.length >= maxChars - truncationSuffix.length) {
+        if (wasTruncated) {
             return output.substring(0, (maxChars - truncationSuffix.length).coerceAtLeast(0)) + truncationSuffix
         }
         return output.toString().trimEnd()
