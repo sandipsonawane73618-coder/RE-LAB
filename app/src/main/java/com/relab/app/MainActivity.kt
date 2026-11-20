@@ -196,7 +196,8 @@ private data class DashboardAnalysisSnapshot(
     val reverseModelSets: List<ReverseModelDashboardSet>,
     val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
-    val sourceTiming: List<com.relab.core.SourceTimingSummary>
+    val sourceTiming: List<com.relab.core.SourceTimingSummary>,
+    val sourceIndependence: List<com.relab.core.SourceIndependenceReport>
 )
 
 private fun buildDashboardAnalysisSnapshot(
@@ -273,7 +274,8 @@ private fun buildDashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
         crossMarketReports, crossMarketLeadLagEvidence, crossMarketLeadLagBacktests, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
-        com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
+        com.relab.core.SourceTimingAnalytics.summarize(activeObservations),
+        com.relab.core.SourceIndependenceAudit.summarize(activeObservations)
     )
 }
 
@@ -443,6 +445,7 @@ private fun RelabHome(
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
+    val sourceIndependence = snapshot?.sourceIndependence.orEmpty()
 
     var reverseBacktestResults by remember {
         mutableStateOf<Map<String, Pair<com.relab.core.ReverseEngineeringBacktestReport, com.relab.core.ReverseEngineeringBacktestReport>>>(emptyMap())
@@ -962,6 +965,12 @@ private fun RelabHome(
                         }
                     }
                 }
+                Text("Independent publisher cross-check", style = MaterialTheme.typography.titleLarge)
+                if (sourceIndependence.isEmpty()) {
+                    Text(if (snapshot == null) "Auditing publisher independence…" else "No published source observations available for publisher comparison.")
+                } else {
+                    sourceIndependence.forEach { SourceIndependenceCard(it) }
+                }
                 Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
                 if (repeatedSourceRecords.isEmpty()) {
                     Text(if (snapshot == null) "Checking repeated source-record IDs…" else "No repeated source-record IDs found. Records without a source record ID are not guessed or grouped.")
@@ -1366,6 +1375,40 @@ private fun CrossMarketResearchCard(report: com.relab.core.CrossMarketPairReport
 }
 
 @Composable
+@Composable
+private fun SourceIndependenceCard(report: com.relab.core.SourceIndependenceReport) {
+    fun percent(value: Double?): String =
+        value?.let { "${"%.1f".format(it * 100.0)}%" } ?: "—"
+
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Independent publishers: ${report.independentPublisherCount} · ${report.publisherIds.joinToString().ifBlank { "None" }}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Published dates: ${report.publishedDates} · multi-publisher: ${report.multiPublisherDates} · consensus: ${report.consensusDates} · single-publisher: ${report.singlePublisherDates} · conflicts: ${report.conflictDates}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (report.pairAgreements.isEmpty()) {
+                Text("No independent publisher pair overlaps yet; this market has no cross-publisher agreement measurement.", style = MaterialTheme.typography.labelSmall)
+            } else {
+                report.pairAgreements.forEach { pair ->
+                    Text(
+                        "${pair.firstPublisherId} ↔ ${pair.secondPublisherId}: agree ${pair.agreedDates}, conflict ${pair.conflictingDates}, ambiguous ${pair.ambiguousDates} / shared ${pair.sharedPublishedDates} · agreement ${percent(pair.agreementRate)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Text(
+                "Pair agreement excludes dates where either publisher has multiple distinct values. Pages/snapshots from one publisher count once.",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
         ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
