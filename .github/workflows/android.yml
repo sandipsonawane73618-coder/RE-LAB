@@ -52,10 +52,8 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
   android-instrumentation:
-    # Keep emulator execution on the stable Ubuntu 22.04 image. The Ubuntu 26.04
-    # hosted image currently leaves the API 34 emulator at sys.boot_completed=blank.
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -71,10 +69,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: pixel_2
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          emulator-boot-timeout: 600
           script: gradle :app:connectedDebugAndroidTest
       - name: Upload instrumentation test reports
         if: always()
