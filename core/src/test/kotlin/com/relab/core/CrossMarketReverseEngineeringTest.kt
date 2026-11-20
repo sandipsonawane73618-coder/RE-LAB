@@ -28,7 +28,7 @@ class CrossMarketReverseEngineeringTest {
             )
         )
 
-        assertEquals(3, reports.size)
+        assertEquals(6, reports.size)
         val srideviKalyan = reports.single {
             it.firstMarket == Market.SRIDEVI && it.secondMarket == Market.KALYAN
         }
@@ -38,7 +38,7 @@ class CrossMarketReverseEngineeringTest {
         assertEquals(1, srideviKalyan.jodiMatches)
         assertEquals("222", srideviKalyan.topOpenRelations.single().fromFamilySequence)
         assertEquals("222", srideviKalyan.topOpenRelations.single().toFamilySequence)
-        assertTrue(reports.none {
+        assertTrue(reports.any {
             it.firstMarket == Market.MILAN_DAY || it.secondMarket == Market.MILAN_DAY
         })
     }

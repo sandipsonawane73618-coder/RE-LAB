@@ -28,7 +28,7 @@ class ReverseEngineeringModelTest {
     private fun history(market: Market = Market.SRIDEVI): List<ChartRecord> =
         (0 until 40).map { row(market, it) }
 
-    @Test fun usesOnlyFiveEnabledMarketsAndAbstainsForInsufficientHistory() {
+    @Test fun supportsAllNineMarketsAndAbstainsForInsufficientHistory() {
         val result = ReverseEngineeringModel.rank(
             history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
             ReverseEngineeringSide.OPEN, minimumHistory = 50
@@ -42,7 +42,7 @@ class ReverseEngineeringModelTest {
             )
             fail("Disabled market must not be ranked")
         } catch (expected: IllegalArgumentException) {
-            assertTrue(expected.message!!.contains("five enabled markets"))
+            fail("All nine declared markets must be rankable")
         }
     }
 

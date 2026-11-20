@@ -75,15 +75,12 @@ data class ReverseEngineeringBacktestReport(
 }
 
 /**
- * Five-market, auditable chart reverse-engineering model.
+ * Nine-market, auditable chart reverse-engineering model.
  * Uses only records strictly earlier than targetDate.
  * Scores are relative evidence indices, never calibrated probabilities.
  */
 object ReverseEngineeringModel {
-    val enabledMarkets: List<Market> = listOf(
-        Market.SRIDEVI, Market.SRIDEVI_NIGHT, Market.KALYAN,
-        Market.MAIN_BAZAR, Market.TIME_BAZAR
-    )
+    val enabledMarkets: List<Market> = Market.entries
 
     private data class CrossMarketSignal(
         val conditionalCounts: Map<String, Int>,
@@ -101,7 +98,7 @@ object ReverseEngineeringModel {
         minimumHistory: Int = 30,
         smoothingAlpha: Double = 1.0
     ): ReverseEngineeringRanking {
-        require(market in enabledMarkets) { "Only the five enabled markets can be ranked" }
+        require(market in enabledMarkets) { "Market is not enabled for reverse-engineering" }
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
         require(minimumHistory >= 1) { "Minimum history must be at least 1" }
@@ -340,7 +337,7 @@ object ReverseEngineeringModel {
         candidateLimit: Int = 10
     ): ReverseEngineeringBacktestReport {
         require(targetLimit in 1..1000) { "Target limit must be between 1 and 1000" }
-        require(market in enabledMarkets) { "Only the five enabled markets can be backtested" }
+        require(market in enabledMarkets) { "Market is not enabled for walk-forward backtesting" }
         val actualRows = records.asSequence()
             .filter { it.market == market && it.sessionId == sessionId }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
