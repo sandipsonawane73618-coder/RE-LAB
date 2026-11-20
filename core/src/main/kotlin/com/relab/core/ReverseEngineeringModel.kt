@@ -457,6 +457,27 @@ object ReverseEngineeringModel {
         return JodiFamilySequenceScanner.crossMarketAlignment(earlier)
     }
 
+    /** Pattern-level evidence for one market/session, using strictly earlier valid rows. */
+    fun rankPatternEvidence(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        windowLengths: IntRange = 2..5,
+        minimumEvaluations: Int = 3,
+        recentOccurrenceWindow: Int = 20
+    ): List<RankedPatternEvidence> {
+        require(market in enabledMarkets) { "Market is not enabled for pattern evidence" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        val evidence = PatternEvidenceDatabase.analyze(
+            earlierRows, targetDate, windowLengths, recentOccurrenceWindow
+        )
+        return PatternEvidenceRanking.rank(evidence, minimumEvaluations)
+    }
+
     fun deriveJodiCandidates(
         openCandidates: List<ReverseEngineeringCandidate>,
         closeCandidates: List<ReverseEngineeringCandidate>,
