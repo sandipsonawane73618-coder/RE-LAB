@@ -102,5 +102,8 @@ class AiResearchContextBuilderTest {
         )
         assertTrue(context.length <= 3000)
         assertTrue(context.contains("Evidence pack reached configured character limit"))
+        ReverseEngineeringModel.enabledMarkets.forEach { market ->
+            assertTrue("Truncated evidence pack omitted ${market.name}", context.contains("=== MARKET: ${market.name} ==="))
+        }
     }
 }
