@@ -45,7 +45,8 @@ object PatternEvidenceRanking {
             val volatility = (item.rollingHitRateStdDev ?: 0.5).coerceIn(0.0, 0.5)
             val stability = 1.0 - volatility
             val lift = if (enough) item.hitRate!! - item.baselineHitRate!! else 0.0
-            val score = lift * support * recency * stability * 100.0
+            // Keep unproven records below even negative-but-measured evidence.
+            val score = if (enough) lift * support * recency * stability * 100.0 else -101.0
             val assessment = when {
                 !enough -> PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE
                 lift > 0.0 -> PatternEvidenceAssessment.OUTPERFORMS_BASELINE
