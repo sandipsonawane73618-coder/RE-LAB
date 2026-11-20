@@ -465,6 +465,17 @@ object ReverseEngineeringModel {
     ): List<CrossMarketLeadLagEvidence> =
         CrossMarketLeadLagEvidenceEngine.analyze(records, targetDateExclusive, maxSourceAgeDays)
 
+    /** Chronological out-of-sample lead/lag evaluation with matched baseline and Wilson bounds. */
+    fun backtestCrossMarketLeadLag(
+        records: List<ChartRecord>,
+        targetDateExclusive: LocalDate,
+        maxSourceAgeDays: Long = 7,
+        minimumSignalOccurrences: Int = 5
+    ): List<CrossMarketWalkForwardReport> =
+        CrossMarketLeadLagWalkForwardEvaluator.evaluate(
+            records, targetDateExclusive, maxSourceAgeDays, minimumSignalOccurrences
+        )
+
     /** Pattern-level evidence for one market/session, using strictly earlier valid rows. */
     fun rankPatternEvidence(
         records: List<ChartRecord>,
