@@ -1,3 +1,4 @@
+import csv
 import tempfile
 import unittest
 from datetime import date
@@ -26,6 +27,55 @@ class WalkForwardBacktestTests(unittest.TestCase):
     def test_empty_market_abstains_without_fake_accuracy(self):
         result = backtest.evaluate_market([], "KALYAN", minimum_history=1)
         self.assertEqual({}, result)
+
+
+    def test_eligible_csv_rejects_malformed_published_chart_results(self):
+        cases = (
+            ("12-34-567", "main", "Invalid result"),
+            ("123-4-567", "main", "Invalid result"),
+            ("123-45-67", "main", "Invalid result"),
+            ("123-45-567", "   ", "Missing session ID"),
+        )
+        for result, session_id, message in cases:
+            with self.subTest(result=result, session_id=session_id):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "eligible.csv"
+                    with path.open("w", newline="", encoding="utf-8") as handle:
+                        writer = csv.DictWriter(
+                            handle,
+                            fieldnames=("market", "status", "date", "session_id", "result"),
+                        )
+                        writer.writeheader()
+                        writer.writerow({
+                            "market": "SRIDEVI",
+                            "status": "PUBLISHED",
+                            "date": "2026-01-01",
+                            "session_id": session_id,
+                            "result": result,
+                        })
+                    with self.assertRaisesRegex(ValueError, message):
+                        backtest.read_eligible(path)
+
+    def test_eligible_csv_accepts_zero_padded_chart_values_and_trimmed_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "eligible.csv"
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("market", "status", "date", "session_id", "result"),
+                )
+                writer.writeheader()
+                writer.writerow({
+                    "market": " sridevi ",
+                    "status": " published ",
+                    "date": "2026-01-01",
+                    "session_id": " main ",
+                    "result": " 007-05-009 ",
+                })
+            rows = backtest.read_eligible(path)
+        self.assertEqual("007", rows["SRIDEVI"][0]["open"])
+        self.assertEqual("009", rows["SRIDEVI"][0]["close"])
+        self.assertEqual("main", rows["SRIDEVI"][0]["session_id"])
 
 
 if __name__ == "__main__":
