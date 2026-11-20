@@ -692,6 +692,7 @@ private fun RelabHome(
                         context.startActivity(
                             Intent(context, AiResearchActivity::class.java)
                                 .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
+                                .putExtra(AiResearchActivity.EXTRA_TARGET_DATE, selectedDate.toString())
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
