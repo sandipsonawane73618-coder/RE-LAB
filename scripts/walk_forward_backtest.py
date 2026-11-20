@@ -75,7 +75,8 @@ CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
 def rank_pannas(
     exact_counts: Counter, family_counts: Counter, weekday_counts: Counter,
     transitions: Counter, previous_state: str, actual: str, limit: int = 10,
-    weights: tuple[float, float, float, float] = (0.30, 0.35, 0.20, 0.15)
+    weights: tuple[float, float, float, float] = (0.30, 0.35, 0.20, 0.15),
+    lexical_tiebreak: bool = False
 ) -> tuple[list[str], int]:
     max_exact = max(exact_counts.values(), default=1)
     max_family = max(family_counts.values(), default=1)
@@ -98,7 +99,11 @@ def rank_pannas(
         if panna == actual:
             actual_item = item
 
-    sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
+    sort_key = (
+        (lambda item: (-item[1], item[0]))
+        if lexical_tiebreak
+        else (lambda item: (-item[1], -item[2], -item[3], item[0]))
+    )
     top = heapq.nsmallest(limit, scored, key=sort_key)
     actual_rank = 1 + sum(sort_key(item) < sort_key(actual_item) for item in scored)
     return [item[0] for item in top], actual_rank
@@ -176,7 +181,7 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                         _, variant_rank = rank_pannas(
                             exact_counts, family_counts, weekday_counts,
                             transitions, family_history[-1], actual, 10,
-                            weights=weights
+                            weights=weights, lexical_tiebreak=True
                         )
                         ablation_ranks[variant].append(variant_rank)
 
