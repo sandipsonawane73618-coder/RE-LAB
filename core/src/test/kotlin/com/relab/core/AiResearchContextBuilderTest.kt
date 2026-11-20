@@ -31,6 +31,7 @@ class AiResearchContextBuilderTest {
         assertTrue(context.contains("RAW SOURCE OBSERVATIONS"))
         assertTrue(context.contains("123-06-456"))
         assertTrue(context.contains("not independent confirmations"))
+        assertTrue(context.contains("EVIDENCE_REF=[SRIDEVI/main/2026-01-02/publisher-SRIDEVI]"))
     }
 
     @Test fun excludesTargetAndFutureRows() {
