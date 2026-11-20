@@ -73,4 +73,38 @@ class PatternEvidenceDatabaseTest {
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.CLOSE_PANNA })
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.JODI })
     }
+    @Test fun recordsMatchedGlobalBaselineAndRecencyMetrics() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333"),
+            row(3, "111"), row(4, "222"), row(5, "333"),
+            row(6, "111"), row(7, "222"), row(8, "444")
+        )
+        val item = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        ).single { it.channel == PatternEvidenceChannel.OPEN_PANNA && it.pattern == "111>222" }
+        assertEquals(0, item.baselineHits)
+        assertEquals(0.0, item.baselineHitRate!!, 0.0)
+        assertEquals(0.5, item.baselineLift!!, 0.0)
+        assertEquals(0.5, item.recencyWeightedHitRate!!, 0.0)
+        assertEquals(0.0, item.recentHitRate!!, 0.0)
+    }
+
+    @Test fun evidenceRankingDoesNotPromoteInsufficientSamples() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333"),
+            row(3, "111"), row(4, "222"), row(5, "333"),
+            row(6, "111"), row(7, "222"), row(8, "444")
+        )
+        val evidence = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        val ranked = PatternEvidenceRanking.rank(evidence, minimumEvaluations = 3)
+        val repeated = ranked.single {
+            it.evidence.channel == PatternEvidenceChannel.OPEN_PANNA &&
+                it.evidence.pattern == "111>222"
+        }
+        assertEquals(PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE, repeated.assessment)
+        assertTrue(ranked.all { it.rankScore.isFinite() })
+    }
+
 }
