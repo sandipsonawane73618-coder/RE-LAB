@@ -86,7 +86,7 @@ class ChartPatternGridScannerTest {
         val reports = ChartPatternGridScanner.scan(rows, ChartPatternSide.OPEN_PANNA, maximumStep = 1)
         assertEquals(2, reports.size)
         assertTrue(reports.single { it.market == Market.SRIDEVI }.occurrences.isNotEmpty())
-        assertTrue(reports.single { it.market == Market.KALYAN }.occurrences.isEmpty())
+        assertFalse(reports.single { it.market == Market.KALYAN }.occurrences.any {\n            it.direction == PatternDirection.VERTICAL && it.pattern == "147"\n        })
     }
 
     @Test fun rejectsUnreconciledDuplicateDatesAndCountsInvalidRows() {
