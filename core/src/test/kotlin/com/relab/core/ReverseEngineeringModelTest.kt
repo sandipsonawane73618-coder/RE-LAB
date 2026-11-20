@@ -185,7 +185,7 @@ class ReverseEngineeringModelTest {
 
     @Test fun crossMarketSequenceModelEntryPointUsesOnlyEarlierDates() {
         val past = row(Market.SRIDEVI, 1, open = "166", close = "277")
-        val future = row(Market.KALYAN, 100, open = "166", close = "277")
+        val future = row(Market.KALYAN, 100, open = "166", close = "277").copy(sourceId = "future-cross-market")
         val sameDatePrior = past.copy(market = Market.KALYAN, sourceId = "kalyan-prior")
         val result = ReverseEngineeringModel.scanCrossMarketAlignment(
             listOf(past, sameDatePrior, future),
