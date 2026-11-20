@@ -10,7 +10,9 @@ data class AiResearchResult(val geminiAnalysis: String, val groqReview: String, 
 data class AiResearchCheckpoint(val geminiAnalysis: String = "", val groqReview: String = "", val finalSynthesis: String = "")
 
 /** Gemini proposes; Groq independently challenges; Gemini reconciles. Each finished stage can be persisted. */
-class AiResearchEngine {
+class AiResearchEngine internal constructor(
+    private val postRequest: (endpoint: String, headers: Map<String, String>, body: String) -> String = ::postHttp
+) {
     fun runCrossReview(
         geminiKey: String, groqKey: String, question: String, context: String, priorMemory: String,
         checkpoint: AiResearchCheckpoint = AiResearchCheckpoint(),
@@ -95,7 +97,7 @@ class AiResearchEngine {
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user")
             .put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
             .put("generationConfig", JSONObject().put("temperature", 0.2).put("maxOutputTokens", 1400))
-        val json = JSONObject(post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        val json = JSONObject(postRequest("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
             mapOf("x-goog-api-key" to key), body.toString()))
         val parts = json.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
             ?: error("Gemini returned no text")
@@ -106,29 +108,32 @@ class AiResearchEngine {
         val body = JSONObject().put("model", GROQ_MODEL).put("temperature", 0.2).put("max_tokens", 1400)
             .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", "You are a rigorous independent evidence reviewer."))
                 .put(JSONObject().put("role", "user").put("content", prompt)))
-        val json = JSONObject(post("https://api.groq.com/openai/v1/chat/completions",
+        val json = JSONObject(postRequest("https://api.groq.com/openai/v1/chat/completions",
             mapOf("Authorization" to "Bearer " + key), body.toString()))
         return json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
             ?.takeIf { it.isNotBlank() } ?: error("Groq returned an empty response")
     }
-    private fun post(endpoint: String, headers: Map<String, String>, body: String): String {
-        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 20_000; readTimeout = 60_000; doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json")
-            headers.forEach { (name, value) -> setRequestProperty(name, value) }
-        }
-        try {
-            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty().take(200_000)
-            if (status !in 200..299) {
-                val detail = runCatching { JSONObject(response).optJSONObject("error")?.optString("message") }.getOrNull()
-                    ?.takeIf { it.isNotBlank() } ?: response.take(500)
-                error("AI provider HTTP " + status + ": " + detail)
-            }
-            return response
-        } finally { conn.disconnect() }
-    }
+
     companion object { const val GROQ_MODEL = "openai/gpt-oss-120b" }
+}
+
+
+private fun postHttp(endpoint: String, headers: Map<String, String>, body: String): String {
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"; connectTimeout = 20_000; readTimeout = 60_000; doOutput = true
+        setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json")
+        headers.forEach { (name, value) -> setRequestProperty(name, value) }
+    }
+    try {
+        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val status = conn.responseCode
+        val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+        val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty().take(200_000)
+        if (status !in 200..299) {
+            val detail = runCatching { JSONObject(response).optJSONObject("error")?.optString("message") }.getOrNull()
+                ?.takeIf { it.isNotBlank() } ?: response.take(500)
+            error("AI provider HTTP " + status + ": " + detail)
+        }
+        return response
+    } finally { conn.disconnect() }
 }
