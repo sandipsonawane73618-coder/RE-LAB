@@ -31,3 +31,42 @@ class AiEvidenceCitationAuditorTest {
         assertTrue(audit.isClean)
     }
 }
+
+    @Test fun deduplicatesRepeatedCitationsAndNormalizesWhitespace() {
+        val evidence = """
+            EVIDENCE_REF=[SRIDEVI/main/2026-01-02/publisher-a]
+            SCANNER_REF=[SCANNER/KALYAN/night/OPEN/2026-02-01]
+        """.trimIndent()
+        val output = """
+            First mention [SRIDEVI main 2026-01-02 publisher-a].
+            Repeated mention [SRIDEVI/main/2026-01-02/publisher-a].
+            Scanner [SCANNER KALYAN night OPEN 2026-02-01].
+        """.trimIndent()
+
+        val audit = AiEvidenceCitationAuditor.audit(evidence, output)
+
+        assertEquals(2, audit.suppliedReferences)
+        assertEquals("Repeated citations must count once", 2, audit.citedReferences)
+        assertEquals(2, audit.verifiedReferences.size)
+        assertTrue(audit.unsupportedReferences.isEmpty())
+        assertTrue(audit.isClean)
+    }
+
+    @Test fun flagsFabricatedScannerReferenceAndIgnoresNonCitationLabels() {
+        val evidence = "SCANNER_REF=[SCANNER/KALYAN/night/CLOSE/2026-02-01]"
+        val output = """
+            [OBSERVED] and [NEEDS-TEST] are labels, not evidence references.
+            Unsupported scanner [SCANNER/RAJDHANI/day/OPEN/2026-02-01].
+        """.trimIndent()
+
+        val audit = AiEvidenceCitationAuditor.audit(evidence, output)
+
+        assertEquals(1, audit.suppliedReferences)
+        assertEquals(1, audit.citedReferences)
+        assertTrue(audit.verifiedReferences.isEmpty())
+        assertEquals(
+            listOf("SCANNER/RAJDHANI/day/OPEN/2026-02-01"),
+            audit.unsupportedReferences
+        )
+        assertFalse(audit.isClean)
+    }
