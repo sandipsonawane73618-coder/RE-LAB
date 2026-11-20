@@ -147,7 +147,7 @@ class CandidateRankingEngineTest {
         val ranked = CandidateRankingEngine.rank(
             rows, Market.SRIDEVI, "main",
             LocalDate.of(2026, 10, 20), PannaSide.OPEN,
-            limit = 1000, minimumHistory = 5
+            limit = 100, minimumHistory = 5
         )
         val position111 = ranked.candidates.indexOfFirst { it.panna == "111" }
         val position222 = ranked.candidates.indexOfFirst { it.panna == "222" }
