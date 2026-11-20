@@ -76,7 +76,8 @@ def rank_pannas(
     exact_counts: Counter, family_counts: Counter, weekday_counts: Counter,
     transitions: Counter, previous_state: str, actual: str, limit: int = 10,
     weights: tuple[float, float, float, float] = (0.30, 0.35, 0.20, 0.15),
-    lexical_tiebreak: bool = False
+    lexical_tiebreak: bool = False,
+    exact_primary_tiebreak: bool = False
 ) -> tuple[list[str], int]:
     max_exact = max(exact_counts.values(), default=1)
     max_family = max(family_counts.values(), default=1)
@@ -94,16 +95,22 @@ def rank_pannas(
             + weights[2] * weekday_counts[family] / max_weekday
             + weights[3] * transitions[(previous_state, family)] / max_transition
         ) * 100.0
-        item = (panna, score, family_count, exact)
+        secondary_score = (
+            weights[1] * family_count / max_family
+            + weights[2] * weekday_counts[family] / max_weekday
+            + weights[3] * transitions[(previous_state, family)] / max_transition
+        ) * 100.0
+        item = (panna, score, family_count, exact, secondary_score)
         scored.append(item)
         if panna == actual:
             actual_item = item
 
-    sort_key = (
-        (lambda item: (-item[1], item[0]))
-        if lexical_tiebreak
-        else (lambda item: (-item[1], -item[2], -item[3], item[0]))
-    )
+    if exact_primary_tiebreak:
+        sort_key = lambda item: (-item[3], -item[4], item[0])
+    elif lexical_tiebreak:
+        sort_key = lambda item: (-item[1], item[0])
+    else:
+        sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
     top = heapq.nsmallest(limit, scored, key=sort_key)
     actual_rank = 1 + sum(sort_key(item) < sort_key(actual_item) for item in scored)
     return [item[0] for item in top], actual_rank
@@ -166,8 +173,15 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                 "no_weekday": (0.375, 0.4375, 0.0, 0.1875),
                 "no_transition": (0.352941, 0.411765, 0.235294, 0.0),
             }
-            tuning_validation_ranks = {name: [] for name in ablation_weights}
-            tuning_test_ranks = {name: [] for name in ablation_weights}
+            exact_primary_variants = {
+                "exact_primary_family": (0.0, 1.0, 0.0, 0.0),
+                "exact_primary_weekday": (0.0, 0.0, 1.0, 0.0),
+                "exact_primary_transition": (0.0, 0.0, 0.0, 1.0),
+                "exact_primary_combined": (0.0, 0.50, 0.30, 0.20),
+            }
+            all_variants = {**ablation_weights, **exact_primary_variants}
+            tuning_validation_ranks = {name: [] for name in all_variants}
+            tuning_test_ranks = {name: [] for name in all_variants}
             tuning_test_baseline_ranks = []
             validation_start = int(len(session_rows) * 0.70)
             test_start = int(len(session_rows) * 0.85)
@@ -183,11 +197,14 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                     baseline_rank = rank_exact_frequency(exact_counts, actual)
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
-                    for variant, weights in ablation_weights.items():
+                    for variant, weights in all_variants.items():
+                        is_exact_primary = variant in exact_primary_variants
                         _, variant_rank = rank_pannas(
                             exact_counts, family_counts, weekday_counts,
                             transitions, family_history[-1], actual, 10,
-                            weights=weights, lexical_tiebreak=True
+                            weights=weights,
+                            lexical_tiebreak=not is_exact_primary,
+                            exact_primary_tiebreak=is_exact_primary,
                         )
                         ablation_ranks.setdefault(variant, []).append(variant_rank)
                         if validation_start <= target_index < test_start:
@@ -256,7 +273,9 @@ def evaluate(path: Path, minimum_history: int = 30) -> dict:
     # The final 15% of each session is held out until after selection.
     tuning_names = (
         "balanced_default", "exact_only", "family_only", "no_exact",
-        "no_weekday", "no_transition",
+        "no_weekday", "no_transition", "exact_primary_family",
+        "exact_primary_weekday", "exact_primary_transition",
+        "exact_primary_combined",
     )
     validation_totals = {
         name: {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
