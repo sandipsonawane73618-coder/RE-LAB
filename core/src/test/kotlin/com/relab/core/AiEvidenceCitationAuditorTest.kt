@@ -84,4 +84,17 @@ class AiEvidenceCitationAuditorTest {
         assertEquals(listOf("FAKE/main/2026-01-01/injected"), audit.unsupportedReferences)
         assertFalse(audit.isClean)
     }
+
+    @Test fun flagsTruncatedMarketCitationInsteadOfIgnoringIt() {
+        val evidence = "EVIDENCE_REF=[SRIDEVI/main/2026-01-02/publisher-a]"
+        val output = "Claim with incomplete citation [SRIDEVI/main/2026-01-02]."
+
+        val audit = AiEvidenceCitationAuditor.audit(evidence, output)
+
+        assertEquals(1, audit.suppliedReferences)
+        assertEquals(1, audit.citedReferences)
+        assertTrue(audit.verifiedReferences.isEmpty())
+        assertEquals(listOf("SRIDEVI/main/2026-01-02"), audit.unsupportedReferences)
+        assertFalse(audit.isClean)
+    }
 }
