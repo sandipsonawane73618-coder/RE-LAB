@@ -78,6 +78,12 @@ object AiResearchContextBuilder {
                 records.take(maxRecordsPerMarketSession).sortedBy { it.date }.forEach {
                     line("${it.date} | ${it.openPanna} | ${it.jodi} | ${it.closePanna} | ${it.sourceId} | EVIDENCE_REF=[${market.name}/$session/${it.date}/${it.sourceId}]")
                 }
+                line("FAMILY MOVEMENT HYPOTHESIS (research only; not a prediction):")
+                records.take(3).sortedBy { it.date }.forEach { row ->
+                    line("${row.date} | Jodi ${row.jodi} -> ${FamilyMovementMath.variants(row.jodi).joinToString("/")}")
+                    line("${row.date} | Open panna ${row.openPanna} -> ${FamilyMovementMath.variants(row.openPanna).joinToString("/")}")
+                    line("${row.date} | Close panna ${row.closePanna} -> ${FamilyMovementMath.variants(row.closePanna).joinToString("/")}")
+                }
                 line("RAW SOURCE OBSERVATIONS (date | source id | status | raw text | normalized result | retrieved at):")
                 sourceRows.take(maxObservationsPerMarketSession).sortedBy { it.date }.forEach {
                     val raw = it.rawText.replace('\n', ' ').replace('\r', ' ').take(100)
