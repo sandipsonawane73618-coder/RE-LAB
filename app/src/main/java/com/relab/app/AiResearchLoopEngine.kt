@@ -75,6 +75,7 @@ class AiResearchLoopEngine(
         require(evidence.isNotBlank()) { "Provide an evidence pack before starting research" }
 
         val saved = checkpoint.rounds.associateBy { it.roundNumber }
+        require(saved.size == checkpoint.rounds.size) { "Checkpoint contains duplicate round numbers" }
         require(saved.keys.all { it in 1..maxRounds }) { "Checkpoint contains a round outside the requested loop limit" }
         val completed = mutableListOf<AiResearchLoopRoundResult>()
         var accumulatedMemory = priorMemory.take(MAX_MEMORY_CHARS)
