@@ -114,15 +114,15 @@ class WalkForwardBacktestTests(unittest.TestCase):
         self.assertEqual(15, validation["tested_targets"])
         self.assertEqual(15, held_out["tested_targets"])
         self.assertEqual(15, result["tuning_test_baseline"]["tested_targets"])
-        self.assertEqual(6, len(result["feature_ablation_top10"]))
+        self.assertEqual(10, len(result["feature_ablation_top10"]))
         self.assertIn("balanced_default", result["feature_ablation_top10"])
+        self.assertIn("exact_primary_combined", result["feature_ablation_top10"])
 
     def test_exact_primary_tiebreak_preserves_frequency_priority_and_uses_secondary_evidence(self):
         exact = backtest.Counter()
         families = backtest.Counter({"111": 5})
         weekdays = backtest.Counter()
         transitions = backtest.Counter()
-        _, baseline_rank = backtest.rank_exact_frequency(exact, "111"), None
         _, lexical_rank = backtest.rank_pannas(
             exact, families, weekdays, transitions, "000", "111",
             weights=(0.0, 0.0, 0.0, 0.0), lexical_tiebreak=True,
