@@ -61,7 +61,12 @@ data class ReverseEngineeringBacktestReport(
     val top10AnkHits: Int,
     val top1FamilyHits: Int,
     val top10FamilyHits: Int,
-    val priorModeFamilyHits: Int
+    val priorModeFamilyHits: Int,
+    val globalExactTop1Hits: Int,
+    val globalExactTop10Hits: Int,
+    val weekdayExactTop1Hits: Int,
+    val weekdayExactTop10Hits: Int,
+    val previousTransitionFamilyHits: Int
 ) {
     val top1ExactRate: Double get() = rate(top1ExactHits)
     val top10ExactRate: Double get() = rate(top10ExactHits)
@@ -70,6 +75,11 @@ data class ReverseEngineeringBacktestReport(
     val top1FamilyRate: Double get() = rate(top1FamilyHits)
     val top10FamilyRate: Double get() = rate(top10FamilyHits)
     val priorModeFamilyRate: Double get() = rate(priorModeFamilyHits)
+    val globalExactTop1Rate: Double get() = rate(globalExactTop1Hits)
+    val globalExactTop10Rate: Double get() = rate(globalExactTop10Hits)
+    val weekdayExactTop1Rate: Double get() = rate(weekdayExactTop1Hits)
+    val weekdayExactTop10Rate: Double get() = rate(weekdayExactTop10Hits)
+    val previousTransitionFamilyRate: Double get() = rate(previousTransitionFamilyHits)
     private fun rate(value: Int): Double =
         if (evaluatedTargets == 0) 0.0 else value.toDouble() / evaluatedTargets
 }
@@ -355,6 +365,11 @@ object ReverseEngineeringModel {
         var top1Family = 0
         var top10Family = 0
         var baselineFamily = 0
+        var globalExactTop1 = 0
+        var globalExactTop10 = 0
+        var weekdayExactTop1 = 0
+        var weekdayExactTop10 = 0
+        var previousTransitionFamily = 0
 
         targets.forEach { actual ->
             val ranking = rank(records, market, sessionId, actual.date, side,
@@ -375,16 +390,42 @@ object ReverseEngineeringModel {
             if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
             if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
-            val priorFamilies = actualRows.filter { it.date.isBefore(actual.date) }
-                .map { familyOf(pannaOf(it, side)) }
+            val priorRows = actualRows.filter { it.date.isBefore(actual.date) }
+            val priorFamilies = priorRows.map { familyOf(pannaOf(it, side)) }
             val modeFamily = priorFamilies.groupingBy { it }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
                 .firstOrNull()?.key
             if (modeFamily == actualFamily) baselineFamily++
+
+            // Matched baselines use only rows strictly earlier than this target.
+            fun topExact(values: List<ChartRecord>): List<String> =
+                values.groupingBy { pannaOf(it, side) }.eachCount().entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .take(candidateLimit).map { it.key }
+            val globalExact = topExact(priorRows)
+            if (globalExact.firstOrNull() == actualPanna) globalExactTop1++
+            if (actualPanna in globalExact) globalExactTop10++
+            val weekdayRows = priorRows.filter { it.date.dayOfWeek == actual.date.dayOfWeek }
+            val weekdayExact = topExact(weekdayRows)
+            if (weekdayExact.firstOrNull() == actualPanna) weekdayExactTop1++
+            if (actualPanna in weekdayExact) weekdayExactTop10++
+
+            val previousFamily = priorFamilies.lastOrNull()
+            if (previousFamily != null) {
+                val transitionOutcomes = priorFamilies.zipWithNext()
+                    .filter { (before, _) -> before == previousFamily }
+                    .map { (_, after) -> after }
+                val transitionMode = transitionOutcomes.groupingBy { it }.eachCount().entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .firstOrNull()?.key
+                if (transitionMode == actualFamily) previousTransitionFamily++
+            }
         }
         return ReverseEngineeringBacktestReport(
             market, sessionId, side, targets.size, evaluated, abstained,
-            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily
+            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily,
+            globalExactTop1, globalExactTop10, weekdayExactTop1, weekdayExactTop10,
+            previousTransitionFamily
         )
     }
 
