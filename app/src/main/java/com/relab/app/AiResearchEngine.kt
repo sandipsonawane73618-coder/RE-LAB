@@ -66,11 +66,12 @@ class AiResearchEngine {
         """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
         val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
 
-        // Audit both independent AI stages, not only the final Gemini summary.
+        // Audit every generated stage so the initial Gemini draft cannot bypass traceability checks.
+        val firstAudit = AiEvidenceCitationAuditor.audit(evidence, first)
         val groqAudit = AiEvidenceCitationAuditor.audit(evidence, critique)
         val finalAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
         return AiResearchResult(
-            first,
+            first + "\n\n" + formatCitationAudit("INITIAL GEMINI ANALYSIS", firstAudit),
             critique + "\n\n" + formatCitationAudit("GROQ INDEPENDENT REVIEW", groqAudit),
             synthesis + "\n\n" + formatCitationAudit("FINAL GEMINI SYNTHESIS", finalAudit)
         )
