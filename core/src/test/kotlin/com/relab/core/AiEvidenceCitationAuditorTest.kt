@@ -30,7 +30,6 @@ class AiEvidenceCitationAuditorTest {
         assertEquals(0, audit.citedReferences)
         assertTrue(audit.isClean)
     }
-}
 
     @Test fun deduplicatesRepeatedCitationsAndNormalizesWhitespace() {
         val evidence = """
@@ -70,3 +69,4 @@ class AiEvidenceCitationAuditorTest {
         )
         assertFalse(audit.isClean)
     }
+}
