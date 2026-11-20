@@ -74,7 +74,8 @@ CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
 
 def rank_pannas(
     exact_counts: Counter, family_counts: Counter, weekday_counts: Counter,
-    transitions: Counter, previous_state: str, actual: str, limit: int = 10
+    transitions: Counter, previous_state: str, actual: str, limit: int = 10,
+    weights: tuple[float, float, float, float] = (0.30, 0.35, 0.20, 0.15)
 ) -> tuple[list[str], int]:
     max_exact = max(exact_counts.values(), default=1)
     max_family = max(family_counts.values(), default=1)
@@ -87,10 +88,10 @@ def rank_pannas(
         exact = exact_counts[panna]
         family_count = family_counts[family]
         score = (
-            0.30 * exact / max_exact
-            + 0.35 * family_count / max_family
-            + 0.20 * weekday_counts[family] / max_weekday
-            + 0.15 * transitions[(previous_state, family)] / max_transition
+            weights[0] * exact / max_exact
+            + weights[1] * family_count / max_family
+            + weights[2] * weekday_counts[family] / max_weekday
+            + weights[3] * transitions[(previous_state, family)] / max_transition
         ) * 100.0
         item = (panna, score, family_count, exact)
         scored.append(item)
@@ -148,18 +149,36 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
             history_count = 0
             ranks: list[int] = []
             baseline_ranks: list[int] = []
+            ablation_ranks: dict[str, list[int]] = {
+                "exact_only": [], "family_only": [], "no_exact": [],
+                "no_weekday": [], "no_transition": [],
+            }
+            ablation_weights = {
+                "exact_only": (1.0, 0.0, 0.0, 0.0),
+                "family_only": (0.0, 1.0, 0.0, 0.0),
+                "no_exact": (0.0, 0.50, 0.30, 0.20),
+                "no_weekday": (0.375, 0.4375, 0.0, 0.1875),
+                "no_transition": (0.352941, 0.411765, 0.235294, 0.0),
+            }
             for target in session_rows:
                 # Evaluate first, then append target: no same-day or future leakage.
                 if history_count >= minimum_history:
                     actual = target[side]
+                    weekday_counts = weekday_family_counts[target["date"].weekday()]
                     _, rank = rank_pannas(
-                        exact_counts, family_counts,
-                        weekday_family_counts[target["date"].weekday()],
+                        exact_counts, family_counts, weekday_counts,
                         transitions, family_history[-1], actual, 10
                     )
                     baseline_rank = rank_exact_frequency(exact_counts, actual)
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
+                    for variant, weights in ablation_weights.items():
+                        _, variant_rank = rank_pannas(
+                            exact_counts, family_counts, weekday_counts,
+                            transitions, family_history[-1], actual, 10,
+                            weights=weights
+                        )
+                        ablation_ranks[variant].append(variant_rank)
 
                 panna = target[side]
                 family = family_sequence(panna)
@@ -171,6 +190,18 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                 weekday_family_counts[target["date"].weekday()][family] += 1
                 history_count += 1
             result = _metrics(ranks, ranks, [], baseline_ranks)
+            result["feature_ablation_top10"] = {
+                variant: {
+                    "top10_hit_rate": round(
+                        sum(1 for rank in variant_ranks if rank <= 10) / len(variant_ranks), 6
+                    ) if variant_ranks else 0.0,
+                    "mrr_top10": round(
+                        sum(1.0 / rank for rank in variant_ranks if rank <= 10) / len(variant_ranks), 6
+                    ) if variant_ranks else 0.0,
+                    "tested_targets": len(variant_ranks),
+                }
+                for variant, variant_ranks in ablation_ranks.items()
+            }
             result.update({
                 "market": market,
                 "session_id": session_id,
