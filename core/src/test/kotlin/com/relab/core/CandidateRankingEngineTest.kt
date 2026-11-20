@@ -165,4 +165,33 @@ class CandidateRankingEngineTest {
             LocalDate.of(2026, 11, 8), PannaSide.OPEN, minimumHistory = 5
         )
     }
+    @Test fun familyMovementSupportIsVisibleButDoesNotChangeExactFrequencyScore() {
+        val pannas = listOf("277", "277", "277", "111", "111", "222")
+        val rows = pannas.flatMapIndexed { index, panna ->
+            val date = LocalDate.of(2026, 10, 1).plusDays(index.toLong())
+            val openAnk = panna.sumOf { it.digitToInt() } % 10
+            listOf("publisher-a", "publisher-b").map { source ->
+                SourceObservation(
+                    market = Market.SRIDEVI, sessionId = "main", date = date,
+                    sourceId = source, retrievedAt = Instant.parse("2026-11-17T10:00:00Z"),
+                    rawText = "$panna-$openAnk" + "0-000",
+                    normalizedResult = "$panna-$openAnk" + "0-000",
+                    status = ObservationStatus.PUBLISHED
+                )
+            }
+        }
+        val ranked = CandidateRankingEngine.rank(
+            rows, Market.SRIDEVI, "main", LocalDate.of(2026, 10, 20),
+            PannaSide.OPEN, limit = 100, minimumHistory = 5
+        )
+        val original = ranked.candidates.single { it.panna == "277" }
+        val movementEquivalent = ranked.candidates.single { it.panna == "227" }
+        assertEquals(3, original.exactHistoricalCount)
+        assertEquals(0, movementEquivalent.exactHistoricalCount)
+        assertEquals(3, movementEquivalent.familyMovementHistoricalCount)
+        assertEquals(FamilyMovementMath.key("277"), movementEquivalent.familyMovementClass)
+        assertEquals(original.score, 100.0, 0.0)
+        assertEquals(movementEquivalent.score, 0.0, 0.0)
+    }
+
 }
