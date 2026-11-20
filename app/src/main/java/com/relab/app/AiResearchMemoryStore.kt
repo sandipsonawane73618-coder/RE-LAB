@@ -172,20 +172,21 @@ class AiResearchMemoryStore(context: Context) : SQLiteOpenHelper(context.applica
 
     fun latestResumableLoop(): AiResearchLoopSession? {
         val db = readableDatabase
-        db.query("ai_research_loops", arrayOf("id","created_at","question","evidence","prior_memory","max_rounds","state","last_error"),
+        val session = db.query("ai_research_loops",
+            arrayOf("id","created_at","question","evidence","prior_memory","max_rounds","state","last_error"),
             "state IN ('PENDING','INTERRUPTED')", null, null, null, "created_at DESC", "1").use { c ->
             if (!c.moveToFirst()) return null
-            val id = c.getString(0)
-            val rounds = mutableListOf<AiResearchLoopRoundCheckpoint>()
-            db.query("ai_research_loop_rounds", arrayOf("round_number","gemini_analysis","groq_review","final_synthesis"),
-                "loop_id=?", arrayOf(id), null, null, "round_number ASC").use { r ->
-                while (r.moveToNext()) rounds += AiResearchLoopRoundCheckpoint(
-                    r.getInt(0), AiResearchCheckpoint(r.getString(1), r.getString(2), r.getString(3))
-                )
-            }
-            return AiResearchLoopSession(id,c.getString(1),c.getString(2),c.getString(3),c.getString(4),
-                c.getInt(5),rounds,c.getString(6),c.getString(7))
+            AiResearchLoopSession(c.getString(0),c.getString(1),c.getString(2),c.getString(3),c.getString(4),
+                c.getInt(5), emptyList(),c.getString(6),c.getString(7))
         }
+        val rounds = mutableListOf<AiResearchLoopRoundCheckpoint>()
+        db.query("ai_research_loop_rounds", arrayOf("round_number","gemini_analysis","groq_review","final_synthesis"),
+            "loop_id=?", arrayOf(session.id), null, null, "round_number ASC").use { r ->
+            while (r.moveToNext()) rounds += AiResearchLoopRoundCheckpoint(
+                r.getInt(0), AiResearchCheckpoint(r.getString(1), r.getString(2), r.getString(3))
+            )
+        }
+        return session.copy(rounds = rounds)
     }
 
     fun latest(limit: Int = 5): List<AiResearchEntry> {
