@@ -32,7 +32,13 @@ object AiResearchContextBuilder {
         val output = StringBuilder()
         var currentLimit = maxChars
         fun line(value: String) {
-            if (output.length < currentLimit) output.append(value).append('\n')
+            val remaining = currentLimit - output.length
+            if (remaining <= 0) return
+            if (value.length + 1 <= remaining) {
+                output.append(value).append('\n')
+            } else {
+                output.append(value.take((remaining - 1).coerceAtLeast(0))).append('\n')
+            }
         }
         line("RE-LAB ACTUAL CHART EVIDENCE")
         line("Target date exclusive: $targetDateExclusive")
