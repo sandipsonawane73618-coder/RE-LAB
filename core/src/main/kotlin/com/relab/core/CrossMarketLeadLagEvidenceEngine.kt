@@ -72,7 +72,7 @@ object CrossMarketLeadLagEvidenceEngine {
                     }
                     val baselineByTargetDate = mutableMapOf<LocalDate, String>()
                     val globalTargetCounts = linkedMapOf<String, Int>()
-                    targetRows.forEach { target ->
+                    targetRows.forEach targetLoop@ { target ->
                         if (globalTargetCounts.isNotEmpty()) {
                             baselineByTargetDate[target.date] = globalTargetCounts.entries
                                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
@@ -87,7 +87,7 @@ object CrossMarketLeadLagEvidenceEngine {
                         while (sourceIndex + 1 < sourceRows.size &&
                             sourceRows[sourceIndex + 1].date.isBefore(target.date)
                         ) sourceIndex++
-                        if (sourceIndex < 0) return@forEach
+                        if (sourceIndex < 0) return@targetLoop
                         val source = sourceRows[sourceIndex]
                         val age = ChronoUnit.DAYS.between(source.date, target.date)
                         if (age in 1..maxSourceAgeDays) events += Triple(source, target, value(source))
