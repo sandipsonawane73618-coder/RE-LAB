@@ -69,6 +69,27 @@ class ResearchToBacktestWorkflowTest {
     }
 
     @Test
+    fun invalidAiProposalIsRejectedWithoutAbortingValidProposals() {
+        val rows = repeatedRows()
+        val valid = ResearchPatternProposal(
+            "valid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "111>222"
+        )
+        val invalid = ResearchPatternProposal(
+            "invalid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "11>222"
+        )
+        val report = ResearchToBacktestWorkflow.run(
+            records = rows, scannerRankings = emptyList(), proposals = listOf(invalid, valid),
+            targetDateExclusive = LocalDate.of(2026, 1, 1).plusDays(120), minimumEvaluations = 20
+        )
+        val rejected = report.assessments.single { it.proposal.id == "invalid" }
+        val verified = report.assessments.single { it.proposal.id == "valid" }
+        assertEquals(ResearchVerificationStatus.REJECTED, rejected.status)
+        assertTrue(rejected.rejectionReason.orEmpty().contains("exactly 3 digits"))
+        assertEquals(ResearchVerificationStatus.VERIFIED, verified.status)
+        assertTrue(report.compactSummary().contains("REASON="))
+        assertTrue(ResearchToBacktestCsvExporter.export(report).contains("rejection_reason"))
+    }
+    @Test
     fun targetDateAndFutureRowsAreExcluded() {
         val rows = listOf(
             row(0, "111"), row(1, "222"), row(2, "333"),
