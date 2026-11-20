@@ -52,8 +52,6 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
   android-instrumentation:
-    # Pin a supported LTS runner; ubuntu-latest moved to 26.04 and the
-    # hosted emulator repeatedly disappeared from ADB before boot completed.
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -65,9 +63,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      # GitHub-hosted Ubuntu exposes /dev/kvm as root:kvm (0660), but
-      # the runner account is not in the kvm group. Grant access only on this
-      # disposable CI VM before the emulator action starts.
       - name: Grant runner access to KVM
         run: |
           test -e /dev/kvm
@@ -81,22 +76,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          # Hosted Ubuntu runner exposes /dev/kvm; keep hardware acceleration on.
-          # The action's auto mode disabled it, and Emulator 37 refuses -accel off.
           disable-linux-hw-accel: false
           emulator-boot-timeout: 360
-          script: |
-            set -e
-            # Separate Gradle/instrumentation sessions with an explicit app force-stop
-            # between them exercise real cold process relaunches with the same DB.
-            for pass in 1 2 3; do
-              echo "Cold-process startup pass $pass/3"
-              gradle --rerun-tasks :app:connectedDebugAndroidTest
-              if [ "$pass" -lt 3 ]; then
-                adb shell am force-stop com.relab.app
-                sleep 2
-              fi
-            done
+          script: bash scripts/run_android_relaunch_tests.sh
       - name: Capture emulator diagnostics
         if: always()
         continue-on-error: true
