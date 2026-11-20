@@ -42,7 +42,6 @@ class StartupRelaunchTest {
 
             // Exercise saved-history loading, Compose startup and background analysis.
             SystemClock.sleep(2_000)
-            instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
                 assertFalse("MainActivity unexpectedly finished during startup", main.isFinishing)
                 assertFalse("MainActivity was destroyed during startup", main.isDestroyed)
