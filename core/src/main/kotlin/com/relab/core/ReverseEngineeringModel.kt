@@ -413,6 +413,31 @@ object ReverseEngineeringModel {
         return ChartPatternGridScanner.scan(earlierRows, scannerSide, minimumLength, maximumStep)
     }
 
+    /** Chronological Jodi/family evidence strictly before the requested target date. */
+    fun scanJodiFamilySequences(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        maximumWindowLength: Int = 3
+    ): List<MarketSequenceReport> {
+        require(market in enabledMarkets) { "Market is not enabled for sequence scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlier = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        return JodiFamilySequenceScanner.scan(earlier, maximumWindowLength)
+    }
+
+    /** Same-date cross-market alignments from earlier observations only. */
+    fun scanCrossMarketAlignment(
+        records: List<ChartRecord>,
+        targetDate: LocalDate
+    ): List<CrossMarketSequenceEvidence> {
+        val earlier = records.filter { it.date.isBefore(targetDate) && it.market in enabledMarkets }
+        return JodiFamilySequenceScanner.crossMarketAlignment(earlier)
+    }
+
     fun deriveJodiCandidates(
         openCandidates: List<ReverseEngineeringCandidate>,
         closeCandidates: List<ReverseEngineeringCandidate>,
