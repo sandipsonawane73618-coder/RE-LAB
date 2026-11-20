@@ -1,6 +1,7 @@
 package com.relab.app
 
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -602,6 +603,28 @@ private fun RelabHome(
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
+                Button(
+                    onClick = {
+                        val contextSummary = buildString {
+                            appendLine("RE-LAB dataset snapshot")
+                            appendLine("Total source observations: " + observations.size)
+                            appendLine("Published source rows: " + published)
+                            appendLine("Consensus chart records: " + chartBuild.records.size)
+                            appendLine("Conflicting reconciliation groups: " + conflicts)
+                            appendLine("Research records: " + researchRecords.size)
+                            activeObservations.groupBy { it.market.name + "/" + it.sessionId }
+                                .toSortedMap().forEach { (session, rows) ->
+                                    appendLine(session + ": " + rows.size + " source observations")
+                                }
+                            appendLine("Only this compact summary is prefilled; add specific evidence manually before sending it to external AI providers.")
+                        }
+                        context.startActivity(
+                            Intent(context, AiResearchActivity::class.java)
+                                .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open Two-AI Research Lab") }
                 Button(
                     enabled = !linkBusy,
                     onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },

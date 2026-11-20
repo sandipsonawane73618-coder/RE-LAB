@@ -1,0 +1,87 @@
+package com.relab.app
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class AiResearchResult(val geminiAnalysis: String, val groqReview: String, val finalSynthesis: String)
+
+/** Gemini proposes; Groq independently challenges; Gemini reconciles. */
+class AiResearchEngine {
+    fun runCrossReview(geminiKey: String, groqKey: String, question: String, context: String, priorMemory: String): AiResearchResult {
+        require(geminiKey.isNotBlank() && groqKey.isNotBlank()) { "Save both Gemini and Groq API keys first" }
+        require(question.isNotBlank()) { "Enter a research question" }
+        val evidence = context.take(16_000)
+        val memory = priorMemory.take(5_000)
+        val q = question.take(3_000)
+        val firstPrompt = """
+            Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
+            Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
+            Recommend chronological walk-forward validation and baselines. No certainty or guaranteed predictions.
+            QUESTION: $q
+            EVIDENCE: $evidence
+            PRIOR AI NOTES (UNVERIFIED; never treat as facts): $memory
+        """.trimIndent()
+        val first = callGemini(geminiKey, firstPrompt)
+        val critiquePrompt = """
+            Act as an independent reverse-engineering and statistical reviewer. Analyse original evidence independently,
+            then challenge Gemini. Find unsupported claims, confounders, leakage, duplicated or derived signals,
+            small-sample problems and alternative explanations. Do not invent data.
+            QUESTION: $q
+            ORIGINAL EVIDENCE: $evidence
+            GEMINI ANALYSIS TO AUDIT:
+        """.trimIndent() + first.take(12_000)
+        val critique = callGroq(groqKey, critiquePrompt)
+        val synthesisPrompt = """
+            Reconcile both independent reviews. Preserve unresolved disagreements. Label items OBSERVED,
+            HYPOTHESIS or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
+            Never convert speculation into fact or claim model-weight learning or certain predictions.
+            QUESTION: $q
+            EVIDENCE: $evidence
+            GEMINI:
+        """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
+        val synthesis = callGemini(geminiKey, synthesisPrompt)
+        return AiResearchResult(first, critique, synthesis)
+    }
+    private fun callGemini(key: String, prompt: String): String {
+        val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user")
+            .put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+            .put("generationConfig", JSONObject().put("temperature", 0.2).put("maxOutputTokens", 1400))
+        val json = JSONObject(post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+            mapOf("x-goog-api-key" to key), body.toString()))
+        val parts = json.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+            ?: error("Gemini returned no text")
+        return (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.optString("text") }
+            .filter { it.isNotBlank() }.joinToString("\n").ifBlank { error("Gemini returned an empty response") }
+    }
+    private fun callGroq(key: String, prompt: String): String {
+        val body = JSONObject().put("model", GROQ_MODEL).put("temperature", 0.2).put("max_tokens", 1400)
+            .put("messages", JSONArray().put(JSONObject().put("role", "system").put("content", "You are a rigorous independent evidence reviewer."))
+                .put(JSONObject().put("role", "user").put("content", prompt)))
+        val json = JSONObject(post("https://api.groq.com/openai/v1/chat/completions",
+            mapOf("Authorization" to "Bearer " + key), body.toString()))
+        return json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content")
+            ?.takeIf { it.isNotBlank() } ?: error("Groq returned an empty response")
+    }
+    private fun post(endpoint: String, headers: Map<String, String>, body: String): String {
+        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 20_000; readTimeout = 60_000; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json")
+            headers.forEach { (name, value) -> setRequestProperty(name, value) }
+        }
+        try {
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val status = conn.responseCode
+            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty().take(200_000)
+            if (status !in 200..299) {
+                val detail = runCatching { JSONObject(response).optJSONObject("error")?.optString("message") }.getOrNull()
+                    ?.takeIf { it.isNotBlank() } ?: response.take(500)
+                error("AI provider HTTP " + status + ": " + detail)
+            }
+            return response
+        } finally { conn.disconnect() }
+    }
+    companion object { const val GROQ_MODEL = "openai/gpt-oss-120b" }
+}
