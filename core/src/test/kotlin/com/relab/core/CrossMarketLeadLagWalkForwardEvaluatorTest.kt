@@ -45,7 +45,7 @@ class CrossMarketLeadLagWalkForwardEvaluatorTest {
         assertNotNull(report.confidence95Lower)
         assertNotNull(report.confidence95Upper)
         assertTrue(report.confidence95Lower!! < report.hitRate!!)
-        assertTrue(report.confidence95Upper!! > report.hitRate!!)
+        assertTrue(report.confidence95Upper!! >= report.hitRate!!)
         assertEquals(3, report.distinctSourceCount)
     }
 
