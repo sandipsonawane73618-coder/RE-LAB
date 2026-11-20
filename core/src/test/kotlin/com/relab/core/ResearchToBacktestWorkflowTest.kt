@@ -78,6 +78,7 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(report.exactPatternEvidence.isNotEmpty())
         assertTrue(report.familyPatternEvidence.isNotEmpty())
         assertTrue(report.compactSummary().contains("No executable AI proposals"))
+        assertEquals(repeatedRows().size, report.validConsensusRowsBeforeCutoff)
     }
     @Test
     fun invalidAiProposalIsRejectedWithoutAbortingValidProposals() {
@@ -161,6 +162,10 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(report.exactPatternEvidence.isNotEmpty())
         assertTrue(report.familyPatternEvidence.isNotEmpty())
         assertTrue(report.compactSummary().contains("VERIFIED"))
+        assertEquals(rows.size, report.datasetRecordsProvided)
+        assertEquals(rows.size, report.validConsensusRowsBeforeCutoff)
+        assertEquals(0, report.excludedOnOrAfterCutoff)
+        assertEquals(1, report.coveredMarketSessions)
         assertTrue(ResearchToBacktestCsvExporter.export(report).contains("workflow-1"))
     }
 }
