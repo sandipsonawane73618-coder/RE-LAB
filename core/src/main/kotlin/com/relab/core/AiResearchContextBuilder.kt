@@ -14,7 +14,8 @@ object AiResearchContextBuilder {
         targetDateExclusive: LocalDate,
         maxRecordsPerMarketSession: Int = 6,
         maxObservationsPerMarketSession: Int = 6,
-        maxChars: Int = 14_000
+        maxChars: Int = 20_000,
+        scannerRankings: List<ReverseEngineeringRanking> = emptyList()
     ): String {
         require(maxRecordsPerMarketSession >= 0)
         require(maxObservationsPerMarketSession >= 0)
@@ -27,6 +28,7 @@ object AiResearchContextBuilder {
         }
         val observationGroups = eligibleObservations.groupBy { it.market to it.sessionId }
         val recordGroups = eligibleRecords.groupBy { it.market to it.sessionId }
+        val eligibleRankings = scannerRankings.filter { it.market in ReverseEngineeringModel.enabledMarkets && it.targetDate == targetDateExclusive }.groupBy { it.market to it.sessionId }
         val output = StringBuilder()
         fun line(value: String) {
             if (output.length < maxChars) output.append(value).append('\n')
@@ -36,9 +38,10 @@ object AiResearchContextBuilder {
         line("Scope: all nine enabled markets; rows on/after target date excluded.")
         line("IMPORTANT: raw source observations below are not independent confirmations. Derived records are exploratory and may include single-source/conflicting groups; inspect provenance before treating as truth.")
         line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}.")
+        line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use history strictly before target date.")
         for (market in ReverseEngineeringModel.enabledMarkets.sortedBy { it.name }) {
             if (output.length >= maxChars) break
-            val sessions = (observationGroups.keys + recordGroups.keys)
+            val sessions = (observationGroups.keys + recordGroups.keys + eligibleRankings.keys)
                 .filter { it.first == market }
                 .map { it.second }.distinct().sorted()
             line("")
@@ -62,6 +65,25 @@ object AiResearchContextBuilder {
                 sourceRows.take(maxObservationsPerMarketSession).sortedBy { it.date }.forEach {
                     val raw = it.rawText.replace('\n', ' ').replace('\r', ' ').take(100)
                     line("${it.date} | ${it.sourceId} | ${it.status.name} | $raw | ${it.normalizedResult ?: "—"} | ${it.retrievedAt}")
+                }
+
+                eligibleRankings[market to session].orEmpty().sortedBy { it.side.name }.forEach { ranking ->
+                    line("SCANNER ${ranking.side} | target=${ranking.targetDate} | training rows=${ranking.trainingRecords} | min history=${ranking.minimumHistoryRequired} | abstained=${ranking.abstained}")
+                    line("Active evidence layers: ${ranking.activeEvidenceLayers.joinToString(", ").ifBlank { "none" }}")
+                    line("Scanner note: ${ranking.note}")
+                    if (ranking.abstained) {
+                        line("No candidates: model abstained rather than ranking insufficient history.")
+                    } else {
+                        line("TOP PANNA CANDIDATES (panna | family | relative index | exact | family | ank | position | type | reverse | weekday | transition | open-close | cross-market):")
+                        ranking.candidates.take(3).forEach { candidate ->
+                            fun metric(value: Double?): String = value?.let { "%.4f".format(java.util.Locale.ROOT, it) } ?: "n/a"
+                            line("${candidate.panna} | ${candidate.familySequence} | ${metric(candidate.score)} | ${metric(candidate.exactPannaEvidence)} | ${metric(candidate.familyEvidence)} | ${metric(candidate.ankEvidence)} | ${metric(candidate.positionEvidence)} | ${metric(candidate.pannaTypeEvidence)} | ${metric(candidate.reversePannaEvidence)} | ${metric(candidate.weekdayEvidence)} | ${metric(candidate.previousTransitionEvidence)} | ${metric(candidate.openCloseConditionalEvidence)} | ${metric(candidate.crossMarketConditionalEvidence)}")
+                        }
+                        line("TOP FAMILY SEQUENCES (family | relative index | historical count | weekday | previous transition | open-close | cross-market):")
+                        ranking.familyCandidates.take(3).forEach { candidate ->
+                            line("${candidate.familySequence} | ${"%.3f".format(java.util.Locale.ROOT, candidate.score)} | ${candidate.historicalCount} | ${candidate.weekdayCount ?: "n/a"} | ${candidate.previousTransitionCount ?: "n/a"} | ${candidate.openCloseConditionalCount ?: "n/a"} | ${candidate.crossMarketConditionalCount ?: "n/a"}")
+                        }
+                    }
                 }
             }
         }
