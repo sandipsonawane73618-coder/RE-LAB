@@ -65,6 +65,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      # GitHub-hosted Ubuntu exposes /dev/kvm as root:kvm (0660), but
+      # the runner account is not in the kvm group. Grant access only on this
+      # disposable CI VM before the emulator action starts.
+      - name: Grant runner access to KVM
+        run: |
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          ls -l /dev/kvm
       - name: Run Android launch and relaunch instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -76,7 +85,6 @@ jobs:
           # The action's auto mode disabled it, and Emulator 37 refuses -accel off.
           disable-linux-hw-accel: false
           emulator-boot-timeout: 360
-          verbose: true
           script: |
             set -e
             # Separate Gradle/instrumentation sessions with an explicit app force-stop
