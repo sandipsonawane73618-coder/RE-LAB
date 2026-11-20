@@ -23,7 +23,13 @@ data class PatternEvidenceRecord(
     val ageInChartRows: Int,
     val ageInDays: Long,
     val distinctSourceCount: Int,
-    val recentOutcomeStability: Double?
+    val recentOutcomeStability: Double?,
+    val baselineHits: Int,
+    val baselineHitRate: Double?,
+    val baselineLift: Double?,
+    val recencyWeightedHitRate: Double?,
+    val recentHitRate: Double?,
+    val rollingHitRateStdDev: Double?
 )
 
 /**
@@ -99,6 +105,8 @@ object PatternEvidenceDatabase {
                             val outcomeCounts = linkedMapOf<String, Int>()
                             var hits = 0
                             var misses = 0
+                            var baselineHits = 0
+                            val scoredPatternHits = mutableListOf<Boolean>()
                             events.forEach { event ->
                                 if (historicalOutcomes.isNotEmpty()) {
                                     val predicted = historicalOutcomes.groupingBy { it }.eachCount()
@@ -106,7 +114,16 @@ object PatternEvidenceDatabase {
                                         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
                                             .thenBy { it.key })
                                         .first().key
-                                    if (predicted == event.outcome) hits++ else misses++
+                                    val patternHit = predicted == event.outcome
+                                    if (patternHit) hits++ else misses++
+                                    scoredPatternHits += patternHit
+                                    val priorChannelOutcomes = values.take(event.rowIndex)
+                                    val baselinePrediction = priorChannelOutcomes.groupingBy { it }.eachCount()
+                                        .entries
+                                        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
+                                            .thenBy { it.key })
+                                        .first().key
+                                    if (baselinePrediction == event.outcome) baselineHits++
                                 }
                                 historicalOutcomes += event.outcome
                                 outcomeCounts[event.outcome] = (outcomeCounts[event.outcome] ?: 0) + 1
@@ -114,6 +131,27 @@ object PatternEvidenceDatabase {
                             val recent = historicalOutcomes.takeLast(recentOccurrenceWindow)
                             val stability = if (recent.isEmpty()) null else
                                 recent.groupingBy { it }.eachCount().values.max().toDouble() / recent.size
+                            val recentHits = scoredPatternHits.takeLast(recentOccurrenceWindow)
+                            val recentHitRate = recentHits.takeIf { it.isNotEmpty() }
+                                ?.count { it }?.toDouble()?.div(recentHits.size)
+                            val weightedHitRate = if (scoredPatternHits.isEmpty()) null else {
+                                val halfLife = maxOf(1.0, recentOccurrenceWindow / 2.0)
+                                val weights = scoredPatternHits.indices.map { index ->
+                                    Math.pow(0.5, (scoredPatternHits.lastIndex - index) / halfLife)
+                                }
+                                scoredPatternHits.indices.sumOf { index ->
+                                    (if (scoredPatternHits[index]) 1.0 else 0.0) * weights[index]
+                                } / weights.sum()
+                            }
+                            val rollingWindow = minOf(5, scoredPatternHits.size)
+                            val rollingRates = if (rollingWindow < 2) emptyList() else
+                                (0..(scoredPatternHits.size - rollingWindow)).map { start ->
+                                    scoredPatternHits.subList(start, start + rollingWindow)
+                                        .count { it }.toDouble() / rollingWindow
+                                }
+                            val rollingMean = rollingRates.average()
+                            val rollingStdDev = if (rollingRates.size < 2) null else
+                                kotlin.math.sqrt(rollingRates.map { (it - rollingMean) * (it - rollingMean) }.average())
                             val last = events.last()
                             val rankedOutcomes = outcomeCounts.entries
                                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
@@ -137,7 +175,14 @@ object PatternEvidenceDatabase {
                                 distinctSourceCount = (events.map { it.sourceId } +
                                     rows.subList(maxOf(0, last.rowIndex - windowLength), last.rowIndex)
                                         .map { it.sourceId }).distinct().size,
-                                recentOutcomeStability = stability
+                                recentOutcomeStability = stability,
+                                baselineHits = baselineHits,
+                                baselineHitRate = if (hits + misses == 0) null else baselineHits.toDouble() / (hits + misses),
+                                baselineLift = if (hits + misses == 0) null else
+                                    hits.toDouble() / (hits + misses) - baselineHits.toDouble() / (hits + misses),
+                                recencyWeightedHitRate = weightedHitRate,
+                                recentHitRate = recentHitRate,
+                                rollingHitRateStdDev = rollingStdDev
                             )
                         }
                     }
