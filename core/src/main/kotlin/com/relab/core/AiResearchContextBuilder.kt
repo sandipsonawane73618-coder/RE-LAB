@@ -73,7 +73,7 @@ object AiResearchContextBuilder {
                 }
 
                 eligibleRankings[market to session].orEmpty().sortedBy { it.side.name }.forEach { ranking ->
-                    line("SCANNER ${ranking.side} | target=${ranking.targetDate} | training rows=${ranking.trainingRecords} | min history=${ranking.minimumHistoryRequired} | abstained=${ranking.abstained}")
+                    line("SCANNER ${ranking.side} | target=${ranking.targetDate} | training rows=${ranking.trainingRecords} | min history=${ranking.minimumHistoryRequired} | abstained=${ranking.abstained} | SCANNER_REF=[SCANNER/${market.name}/$session/${ranking.side}/${ranking.targetDate}]")
                     line("Active evidence layers: ${ranking.activeEvidenceLayers.joinToString(", ").ifBlank { "none" }}")
                     line("Scanner note: ${ranking.note}")
                     if (ranking.abstained) {
