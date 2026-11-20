@@ -2,8 +2,6 @@ package com.relab.app
 
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -29,12 +27,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
@@ -257,6 +260,7 @@ private fun RelabHome(
     onClearCsv: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
@@ -264,7 +268,11 @@ private fun RelabHome(
     var linkBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        if (initialObservations.isEmpty() && observations.isEmpty() && !linkBusy) {
+        // Resume an interrupted first import if one or more enabled markets are still absent.
+        val missingEnabledMarket = com.relab.core.ReverseEngineeringModel.enabledMarkets.any { market ->
+            initialObservations.none { it.market == market }
+        }
+        if (missingEnabledMarket && !linkBusy) {
             importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
         }
     }
@@ -596,7 +604,7 @@ private fun RelabHome(
                 Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
                 Button(
                     enabled = !linkBusy,
-                    onClick = { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) },
+                    onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(if (linkBusy) "Fetching 5 markets…" else "Fetch / Refresh All 5 Markets") }
                 Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
@@ -615,7 +623,7 @@ private fun RelabHome(
                         if (detected == null) {
                             importMessage = "Unsupported chart URL. Supported markets: Sridevi, Sridevi Night, Kalyan, Time Bazar, Main Bazar."
                         } else {
-                            importChartLink(chartUrl, detected, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
+                            scope.launch { importChartLink(chartUrl, detected, onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -1172,8 +1180,8 @@ private fun CandidateResearchCard(
     }
 }
 
-/** Fetches and stores history for the five markets enabled in this app. */
-private fun importAllCanonicalCharts(
+/** Fetches the five enabled markets in order and persists each successful page immediately. */
+private suspend fun importAllCanonicalCharts(
     save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     updateObservations: (List<com.relab.core.SourceObservation>) -> Unit,
     updateMessage: (String) -> Unit,
@@ -1186,64 +1194,95 @@ private fun importAllCanonicalCharts(
         "https://sattamatkajodi.com/main-bazar-panel-chart.php",
         "https://sattamatkajodi.com/time-bazar-panel-chart.php"
     )
-    val mainHandler = Handler(Looper.getMainLooper())
+    val outcomes = mutableListOf<String>()
+    var latestSaved: List<com.relab.core.SourceObservation>? = null
+    var importedCount = 0
     updateBusy(true)
     updateMessage("Fetching historical charts for all 5 enabled markets…")
-    Thread {
-        val imported = mutableListOf<com.relab.core.SourceObservation>()
-        val outcomes = mutableListOf<String>()
-        sources.forEach { sourceUrl ->
+    try {
+        for (sourceUrl in sources) {
+            currentCoroutineContext().ensureActive()
             val market = com.relab.core.Market.fromSourceUrl(sourceUrl)
             if (market == null) {
                 outcomes += "Unknown market URL: $sourceUrl"
-            } else {
-                var connection: HttpURLConnection? = null
-                try {
-                    connection = URL(sourceUrl).openConnection() as HttpURLConnection
-                    connection.instanceFollowRedirects = true
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 25000
-                    connection.requestMethod = "GET"
-                    connection.setRequestProperty("User-Agent", "RE-LAB-Android/0.1")
-                    connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
-                    val code = connection.responseCode
-                    require(code in 200..299) { "HTTP $code" }
-                    val type = connection.contentType.orEmpty().lowercase()
-                    require(type.contains("text/html") || type.contains("application/xhtml+xml") || type.isBlank()) { "Unexpected content type: $type" }
-                    val bytes = connection.inputStream.use { readBoundedBytes(it, 8_000_000L) }
-                    val report = com.relab.core.HtmlChartImporter.import(bytes.toString(Charsets.UTF_8), connection.url.toString(), market, "main", java.time.Instant.now())
-                    imported += report.observations
-                    outcomes += "${market.name}: ${report.observations.size} rows, ${report.issues.size} issues, ${report.skippedRows} skipped"
-                } catch (error: Exception) {
-                    outcomes += "${market.name}: FAILED — ${error.message ?: "unknown error"}"
-                } finally {
-                    connection?.disconnect()
-                }
+                continue
             }
-        }
-        // SQLite merge + bulk insert can involve thousands of observations. Keep it
-        // off the main thread; only publish the completed immutable snapshot to Compose.
-        val saveResult = if (imported.isEmpty()) null else runCatching { save(imported) }
-        mainHandler.post {
-            try {
-                if (imported.isEmpty()) {
-                    updateMessage("No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " + outcomes.joinToString(" | "))
-                } else {
-                    val merged = saveResult?.getOrThrow()
-                        ?: error("Chart rows were fetched but local save did not complete")
-                    updateObservations(merged)
-                    updateMessage("Automatic 5-market fetch complete. Imported ${imported.size} observations; saved total ${merged.size}. " + outcomes.joinToString(" | "))
+
+            val report = try {
+                withContext(Dispatchers.IO) {
+                    var connection: HttpURLConnection? = null
+                    try {
+                        connection = URL(sourceUrl).openConnection() as HttpURLConnection
+                        connection.instanceFollowRedirects = true
+                        connection.connectTimeout = 15000
+                        connection.readTimeout = 25000
+                        connection.requestMethod = "GET"
+                        connection.setRequestProperty("User-Agent", "RE-LAB-Android/0.1")
+                        connection.setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                        val code = connection.responseCode
+                        require(code in 200..299) { "HTTP $code" }
+                        val type = connection.contentType.orEmpty().lowercase()
+                        require(type.contains("text/html") || type.contains("application/xhtml+xml") || type.isBlank()) {
+                            "Unexpected content type: $type"
+                        }
+                        val bytes = connection.inputStream.use { readBoundedBytes(it, 8_000_000L) }
+                        com.relab.core.HtmlChartImporter.import(
+                            bytes.toString(Charsets.UTF_8), connection.url.toString(),
+                            market, "main", java.time.Instant.now()
+                        )
+                    } finally {
+                        connection?.disconnect()
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
-                updateMessage("Fetched charts but local save failed: ${error.message ?: "unknown error"}")
-            } finally {
-                updateBusy(false)
+                outcomes += "${market.name}: FAILED — ${error.message ?: "unknown error"}"
+                continue
+            }
+
+            if (report.observations.isEmpty()) {
+                outcomes += "${market.name}: 0 rows, ${report.issues.size} issues, ${report.skippedRows} skipped"
+                continue
+            }
+
+            try {
+                // Persist each market as soon as it succeeds. If Android destroys this
+                // Activity mid-fetch, already completed markets survive the next launch.
+                latestSaved = withContext(Dispatchers.IO) { save(report.observations) }
+                importedCount += report.observations.size
+                outcomes += "${market.name}: ${report.observations.size} rows, ${report.issues.size} issues, ${report.skippedRows} skipped"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                outcomes += "${market.name}: SAVE FAILED — ${error.message ?: "unknown error"}"
             }
         }
-    }.start()
+
+        latestSaved?.let(updateObservations)
+        if (importedCount == 0) {
+            updateMessage(
+                "No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " +
+                    outcomes.joinToString(" | ")
+            )
+        } else {
+            updateMessage(
+                "Automatic 5-market fetch complete. Imported $importedCount observations; saved total " +
+                    "${latestSaved?.size ?: 0}. " + outcomes.joinToString(" | ")
+            )
+        }
+    } catch (cancelled: CancellationException) {
+        // Compose cancels this job when the owning Activity leaves composition.
+        // Per-market commits above remain durable and the next launch resumes missing markets.
+        throw cancelled
+    } catch (error: Exception) {
+        updateMessage("Chart fetch failed: ${error.message ?: "Unknown error"}")
+    } finally {
+        updateBusy(false)
+    }
 }
 
-private fun importChartLink(
+private suspend fun importChartLink(
     rawUrl: String,
     market: com.relab.core.Market,
     save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
@@ -1252,11 +1291,10 @@ private fun importChartLink(
     updateBusy: (Boolean) -> Unit
 ) {
     val cleanUrl = rawUrl.trim()
-    val mainHandler = Handler(Looper.getMainLooper())
     updateBusy(true)
     updateMessage("Fetching chart page…")
-    Thread {
-        try {
+    try {
+        val report = withContext(Dispatchers.IO) {
             val uri = java.net.URI(cleanUrl)
             require(uri.scheme == "https" || uri.scheme == "http") { "Enter a valid HTTP or HTTPS link." }
             require(!uri.host.isNullOrBlank()) { "The link must include a website host." }
@@ -1275,47 +1313,35 @@ private fun importChartLink(
                     "This link did not return an HTML chart page ($type)."
                 }
                 val bytes = connection.inputStream.use { readBoundedBytes(it, 8_000_000L) }
-                val html = bytes.toString(Charsets.UTF_8)
-                val report = com.relab.core.HtmlChartImporter.import(
-                    html, connection.url.toString(), market, "main", java.time.Instant.now()
+                com.relab.core.HtmlChartImporter.import(
+                    bytes.toString(Charsets.UTF_8), connection.url.toString(),
+                    market, "main", java.time.Instant.now()
                 )
-                // Persist large chart imports on this worker thread, not the UI thread.
-                val saveResult = if (report.observations.isEmpty()) null else runCatching {
-                    save(report.observations)
-                }
-                mainHandler.post {
-                    try {
-                        if (report.observations.isEmpty()) {
-                            val detail = report.issues.firstOrNull()
-                                ?: "No dated chart-result rows found. This page may be JavaScript-rendered or use an unsupported layout."
-                            updateMessage("No records imported: $detail Skipped rows: ${report.skippedRows}.")
-                        } else {
-                            val merged = saveResult?.getOrThrow()
-                                ?: error("Chart rows were fetched but local save did not complete")
-                            updateObservations(merged)
-                            updateMessage(
-                                "${market.name}: fetched ${report.observations.size} rows; total saved observations ${merged.size}. " +
-                                    "Malformed rows ${report.issues.size}; skipped rows ${report.skippedRows}. Source: ${uri.host}."
-                            )
-                        }
-                    } catch (error: Exception) {
-                        updateMessage("Save failed: ${error.message ?: "Unknown error"}")
-                    } finally {
-                        updateBusy(false)
-                    }
-                }
             } finally {
                 connection.disconnect()
             }
-        } catch (error: Exception) {
-            mainHandler.post {
-                updateMessage("Link import failed: ${error.message ?: "Unknown error"}")
-                updateBusy(false)
-            }
         }
-    }.start()
-}
 
+        if (report.observations.isEmpty()) {
+            val detail = report.issues.firstOrNull()
+                ?: "No dated chart-result rows found. This page may be JavaScript-rendered or use an unsupported layout."
+            updateMessage("No records imported: $detail Skipped rows: ${report.skippedRows}.")
+        } else {
+            val merged = withContext(Dispatchers.IO) { save(report.observations) }
+            updateObservations(merged)
+            updateMessage(
+                "${market.name}: fetched ${report.observations.size} rows; total saved observations ${merged.size}. " +
+                    "Malformed rows ${report.issues.size}; skipped rows ${report.skippedRows}. Source: ${java.net.URI(cleanUrl).host}."
+            )
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        updateMessage("Link import failed: ${error.message ?: "Unknown error"}")
+    } finally {
+        updateBusy(false)
+    }
+}
 
 @Composable
 private fun StartupLoadingScreen(status: String, detail: String) {
