@@ -59,12 +59,12 @@ object AiResearchContextBuilder {
                 line("Source status counts: " + if (statusCounts.isEmpty()) "none" else statusCounts.entries.joinToString(", ") { "${it.key}=${it.value}" })
                 line("CHART RECORDS (date | open panna | jodi | close panna | source id):")
                 records.take(maxRecordsPerMarketSession).sortedBy { it.date }.forEach {
-                    line("${it.date} | ${it.openPanna} | ${it.jodi} | ${it.closePanna} | ${it.sourceId}")
+                    line("${it.date} | ${it.openPanna} | ${it.jodi} | ${it.closePanna} | ${it.sourceId} | EVIDENCE_REF=[${market.name}/$session/${it.date}/${it.sourceId}]")
                 }
                 line("RAW SOURCE OBSERVATIONS (date | source id | status | raw text | normalized result | retrieved at):")
                 sourceRows.take(maxObservationsPerMarketSession).sortedBy { it.date }.forEach {
                     val raw = it.rawText.replace('\n', ' ').replace('\r', ' ').take(100)
-                    line("${it.date} | ${it.sourceId} | ${it.status.name} | $raw | ${it.normalizedResult ?: "—"} | ${it.retrievedAt}")
+                    line("${it.date} | ${it.sourceId} | ${it.status.name} | $raw | ${it.normalizedResult ?: "—"} | ${it.retrievedAt} | EVIDENCE_REF=[${market.name}/$session/${it.date}/${it.sourceId}]")
                 }
 
                 eligibleRankings[market to session].orEmpty().sortedBy { it.side.name }.forEach { ranking ->
