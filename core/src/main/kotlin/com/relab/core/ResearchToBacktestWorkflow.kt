@@ -212,6 +212,9 @@ object ResearchToBacktestWorkflow {
         minimumEvaluations: Int = 20,
         minimumLift: Double = 0.05
     ): ResearchToBacktestReport {
+        require(scannerRankings.all { it.targetDate == targetDateExclusive }) {
+            "Scanner rankings must use the same exclusive target date as the backtest"
+        }
         val eligible = records.filter { it.date.isBefore(targetDateExclusive) }
         val exactEvidence = PatternEvidenceDatabase.analyze(
             eligible, targetDateExclusive, outcomeMode = PatternOutcomeMode.EXACT
