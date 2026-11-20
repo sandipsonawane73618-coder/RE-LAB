@@ -85,7 +85,20 @@ jobs:
                 sleep 2
               fi
             done
-      - name: Capture emulator diagnostics\n        if: always()\n        continue-on-error: true\n        run: |\n          echo "=== Runner / disk ==="\n          uname -a\n          df -h\n          echo "=== KVM ==="\n          if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo "/dev/kvm unavailable"; fi\n          echo "=== ADB devices ==="\n          adb devices -l\n          echo "=== Emulator processes ==="\n          ps -ef\n      - name: Upload instrumentation test reports
+      - name: Capture emulator diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== Runner / disk ==="
+          uname -a
+          df -h
+          echo "=== KVM ==="
+          if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo "/dev/kvm unavailable"; fi
+          echo "=== ADB devices ==="
+          adb devices -l
+          echo "=== Emulator processes ==="
+          ps -ef
+      - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
