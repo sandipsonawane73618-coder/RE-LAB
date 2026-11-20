@@ -18,9 +18,9 @@ class FamilyMovementWalkForwardEvaluatorTest {
     @Test fun familyAndReverseVariantsAreRecognizedInChronologicalJodiTest() {
         val records = listOf(
             row(1, "17", "001", "025"),
-            row(2, "62", "006", "016"),
-            row(3, "71", "007", "025"),
-            row(4, "26", "002", "016")
+            row(2, "62", "006", "002"),
+            row(3, "71", "007", "001"),
+            row(4, "26", "002", "006")
         )
         val report = FamilyMovementWalkForwardEvaluator.evaluate(
             records, LocalDate.of(2026, 2, 1), minimumHistory = 3
@@ -50,9 +50,9 @@ class FamilyMovementWalkForwardEvaluatorTest {
     @Test fun targetAndFutureRowsAreExcludedBeforeEvaluation() {
         val records = listOf(
             row(1, "17", "001", "025"),
-            row(2, "62", "006", "016"),
-            row(3, "71", "007", "025"),
-            row(40, "26", "002", "016")
+            row(2, "62", "006", "002"),
+            row(3, "71", "007", "001"),
+            row(40, "26", "002", "006")
         )
         val report = FamilyMovementWalkForwardEvaluator.evaluate(
             records, LocalDate.of(2026, 2, 1), minimumHistory = 2
