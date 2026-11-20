@@ -856,9 +856,9 @@ private fun RelabHome(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (snapshot == null) {
-                    Text(analysisError?.let { "Research analysis error: $it" } ?: "Analysing five-market history and running chronological backtests off the UI thread…")
+                    Text(analysisError?.let { "Research analysis error: $it" } ?: "Analysing nine-market history and running chronological backtests off the UI thread…")
                 } else if (reverseModelSets.isEmpty()) {
-                    Text("No valid history is available for the five enabled markets yet.")
+                    Text("No valid history is available for the nine enabled markets yet.")
                 } else {
                     reverseModelSets.forEach { set ->
                         val backtestKey = "${set.market.name}|${set.sessionId}"
@@ -1412,7 +1412,7 @@ private fun CandidateResearchCard(
     }
 }
 
-/** Fetches the five enabled markets in order and persists each successful page immediately. */
+/** Fetches all nine enabled markets in order and persists each successful page immediately. */
 private suspend fun importAllCanonicalCharts(
     save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     updateObservations: (List<com.relab.core.SourceObservation>) -> Unit,
