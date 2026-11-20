@@ -72,37 +72,46 @@ object ChartPatternGridScanner {
                     "Duplicate dates for ${identity.first}/${identity.second}: reconcile source observations before scanning"
                 }
 
+                val orderedDates = valid.map { it.first.date }
+                val dateIndexes = orderedDates.withIndex().associate { it.value to it.index }
                 val cells = mutableMapOf<PatternGridCoordinate, Cell>()
-                valid.forEach { (record, panna) ->
-                    panna.forEachIndexed { position, digit ->
+                valid.forEach { (record, chartValue) ->
+                    chartValue.forEachIndexed { position, digit ->
                         cells[PatternGridCoordinate(record.date, position)] = Cell(digit, record.sourceId)
                     }
+                }
+
+                fun coordinateAt(rowIndex: Int, position: Int): PatternGridCoordinate? {
+                    if (rowIndex !in orderedDates.indices) return null
+                    val candidate = PatternGridCoordinate(orderedDates[rowIndex], position)
+                    return candidate.takeIf { it in cells }
                 }
 
                 val occurrences = mutableListOf<DirectionalPatternOccurrence>()
                 val directions = PatternDirection.entries
                 for ((coordinate, _) in cells) {
+                    val rowIndex = dateIndexes.getValue(coordinate.date)
                     for (direction in directions) {
                         for (step in 1..maximumStep) {
-                            val predecessor = PatternGridCoordinate(
-                                coordinate.date.minusDays(direction.rowDelta.toLong() * step),
+                            val predecessor = coordinateAt(
+                                rowIndex - direction.rowDelta * step,
                                 coordinate.position - direction.columnDelta * step
                             )
-                            if (predecessor in cells) continue
+                            if (predecessor != null) continue
 
                             val path = mutableListOf<PatternGridCoordinate>()
                             val values = StringBuilder()
                             val sourceIds = mutableListOf<String>()
-                            var cursor = coordinate
+                            var cursorIndex = rowIndex
+                            var cursorPosition = coordinate.position
                             while (true) {
-                                val cell = cells[cursor] ?: break
+                                val cursor = coordinateAt(cursorIndex, cursorPosition) ?: break
+                                val cell = cells.getValue(cursor)
                                 path += cursor
                                 values.append(cell.value)
                                 sourceIds += cell.sourceId
-                                cursor = PatternGridCoordinate(
-                                    cursor.date.plusDays(direction.rowDelta.toLong() * step),
-                                    cursor.position + direction.columnDelta * step
-                                )
+                                cursorIndex += direction.rowDelta * step
+                                cursorPosition += direction.columnDelta * step
                             }
                             if (path.size >= minimumLength) {
                                 occurrences += DirectionalPatternOccurrence(
