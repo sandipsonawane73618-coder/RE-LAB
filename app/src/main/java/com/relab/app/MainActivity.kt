@@ -252,7 +252,7 @@ private fun buildDashboardAnalysisSnapshot(
             market, sessionId,
             com.relab.core.ReverseEngineeringModel.rankPatternEvidence(
                 researchRecords, market, sessionId, targetDate,
-                windowLengths = 2..5, minimumEvaluations = 3, recentOccurrenceWindow = 20
+                windowLengths = 2..5, minimumEvaluations = 5, recentOccurrenceWindow = 20
             ).take(5)
         )
     }
@@ -809,7 +809,7 @@ private fun RelabHome(
                     style = MaterialTheme.typography.bodySmall
                 )
                 val qualifiedLeadLag = crossMarketLeadLagEvidence
-                    .filter { it.evaluatedOccurrences >= 3 && it.lift != null }
+                    .filter { it.evaluatedOccurrences >= 5 && it.lift != null }
                     .groupBy { it.targetMarket }
                 if (qualifiedLeadLag.isEmpty()) {
                     Text(if (snapshot == null) "Checking earlier-date cross-market signals…" else "No repeated cross-market signal has enough scored observations yet; the engine abstains rather than promoting weak evidence.")
