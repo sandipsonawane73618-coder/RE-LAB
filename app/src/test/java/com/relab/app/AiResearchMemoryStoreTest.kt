@@ -30,6 +30,7 @@ class AiResearchMemoryStoreTest {
         firstStore.saveLoopStage(session.id, 1, "FINAL_SYNTHESIS", "synthesis round one")
         firstStore.saveLoopStage(session.id, 2, "GEMINI_ANALYSIS", "research round two")
         firstStore.markLoopInterrupted(session.id, "network disconnected")
+        firstStore.close()
 
         val reopenedStore = AiResearchMemoryStore(context)
         val resumed = reopenedStore.latestResumableLoop()
