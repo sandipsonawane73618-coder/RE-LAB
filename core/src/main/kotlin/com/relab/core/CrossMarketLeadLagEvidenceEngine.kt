@@ -70,20 +70,9 @@ object CrossMarketLeadLagEvidenceEngine {
                             .map { ChartMath.family(it.digitToInt()).toString() }.joinToString("")
                         CrossMarketEvidenceChannel.JODI -> row.jodi
                     }
-                    val baselineByTargetDate = mutableMapOf<LocalDate, String>()
-                    val globalTargetCounts = linkedMapOf<String, Int>()
-                    targetRows.forEach targetLoop@ { target ->
-                        if (globalTargetCounts.isNotEmpty()) {
-                            baselineByTargetDate[target.date] = globalTargetCounts.entries
-                                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
-                                .first().key
-                        }
-                        val targetValue = value(target)
-                        globalTargetCounts[targetValue] = (globalTargetCounts[targetValue] ?: 0) + 1
-                    }
                     val events = mutableListOf<Triple<ChartRecord, ChartRecord, String>>()
                     var sourceIndex = -1
-                    targetRows.forEach { target ->
+                    targetRows.forEach targetLoop@ { target ->
                         while (sourceIndex + 1 < sourceRows.size &&
                             sourceRows[sourceIndex + 1].date.isBefore(target.date)
                         ) sourceIndex++
@@ -91,6 +80,17 @@ object CrossMarketLeadLagEvidenceEngine {
                         val source = sourceRows[sourceIndex]
                         val age = ChronoUnit.DAYS.between(source.date, target.date)
                         if (age in 1..maxSourceAgeDays) events += Triple(source, target, value(source))
+                    }
+                    val baselineByTargetDate = mutableMapOf<LocalDate, String>()
+                    val globalTargetCounts = linkedMapOf<String, Int>()
+                    events.forEach { (_, target, _) ->
+                        if (globalTargetCounts.isNotEmpty()) {
+                            baselineByTargetDate[target.date] = globalTargetCounts.entries
+                                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                                .first().key
+                        }
+                        val targetValue = value(target)
+                        globalTargetCounts[targetValue] = (globalTargetCounts[targetValue] ?: 0) + 1
                     }
                     events.groupBy { it.third }.forEach { (signal, signalEvents) ->
                         val priorOutcomes = mutableListOf<String>()
