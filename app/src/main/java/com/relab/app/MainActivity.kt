@@ -627,7 +627,7 @@ private fun RelabHome(
                         val resultGroup = groups.firstOrNull {
                             it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
                         }
-                        MarketPredictionSheet(set, resultGroup)
+                        MarketPredictionSheet(set, resultGroup, selectedDate)
                     }
                 }
                 OutlinedButton(
@@ -869,7 +869,8 @@ private data class PredictionDisplayCell(
 @Composable
 private fun MarketPredictionSheet(
     set: ReverseModelDashboardSet,
-    resultGroup: com.relab.core.ReconciliationGroup?
+    resultGroup: com.relab.core.ReconciliationGroup?,
+    selectedDate: LocalDate
 ) {
     val open = set.open.candidates.take(10)
     val close = set.close.candidates.take(10)
