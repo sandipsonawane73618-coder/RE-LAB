@@ -2,7 +2,7 @@ package com.relab.core
 
 import java.time.LocalDate
 
-enum class ChartPatternSide { OPEN_PANNA, CLOSE_PANNA }
+enum class ChartPatternSide { OPEN_PANNA, CLOSE_PANNA, JODI }
 
 enum class PatternDirection(val rowDelta: Int, val columnDelta: Int) {
     HORIZONTAL(0, 1),
