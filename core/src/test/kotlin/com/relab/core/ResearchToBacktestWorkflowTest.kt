@@ -69,6 +69,17 @@ class ResearchToBacktestWorkflowTest {
     }
 
     @Test
+    fun emptyProposalSetStillProducesScannerAndPatternEvidenceReport() {
+        val report = ResearchToBacktestWorkflow.run(
+            records = repeatedRows(), scannerRankings = emptyList(), proposals = emptyList(),
+            targetDateExclusive = LocalDate.of(2026, 1, 1).plusDays(120)
+        )
+        assertTrue(report.assessments.isEmpty())
+        assertTrue(report.exactPatternEvidence.isNotEmpty())
+        assertTrue(report.familyPatternEvidence.isNotEmpty())
+        assertTrue(report.compactSummary().contains("No executable AI proposals"))
+    }
+    @Test
     fun invalidAiProposalIsRejectedWithoutAbortingValidProposals() {
         val rows = repeatedRows()
         val valid = ResearchPatternProposal(
