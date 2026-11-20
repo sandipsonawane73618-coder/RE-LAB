@@ -116,11 +116,16 @@ object ProposedPatternBacktester {
         val baselineRate = evaluated.takeIf { it > 0 }?.let { baselineHits.toDouble() / it }
         val bounds = hitRate?.let { wilson(hits, evaluated) }
         val baselineBounds = baselineRate?.let { wilson(baselineHits, evaluated) }
-        val status = when {
-            evaluated < minimumEvaluations -> ResearchVerificationStatus.UNCERTAIN
-            bounds!!.first > baselineBounds!!.second + minimumLift -> ResearchVerificationStatus.VERIFIED
-            bounds.second < baselineBounds.first -> ResearchVerificationStatus.REJECTED
-            else -> ResearchVerificationStatus.UNCERTAIN
+        val status = if (evaluated < minimumEvaluations) {
+            ResearchVerificationStatus.UNCERTAIN
+        } else {
+            val patternInterval = requireNotNull(bounds)
+            val baselineInterval = requireNotNull(baselineBounds)
+            when {
+                patternInterval.first > baselineInterval.second + minimumLift -> ResearchVerificationStatus.VERIFIED
+                patternInterval.second < baselineInterval.first -> ResearchVerificationStatus.REJECTED
+                else -> ResearchVerificationStatus.UNCERTAIN
+            }
         }
         return ProposedPatternBacktest(
             proposal = proposal,
