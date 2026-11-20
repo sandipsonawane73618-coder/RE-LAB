@@ -98,5 +98,24 @@ class WalkForwardBacktestTests(unittest.TestCase):
         ))
 
 
+    def test_ablation_lexical_tiebreak_does_not_reintroduce_excluded_features(self):
+        exact = backtest.Counter()
+        families = backtest.Counter({"111": 10})
+        weekdays = backtest.Counter()
+        transitions = backtest.Counter()
+        _, contaminated_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "000",
+            limit=1, weights=(1.0, 0.0, 0.0, 0.0),
+        )
+        top, isolated_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "000",
+            limit=1, weights=(1.0, 0.0, 0.0, 0.0), lexical_tiebreak=True,
+        )
+        self.assertEqual(["000"], top)
+        self.assertEqual(1, isolated_rank)
+        self.assertGreater(contaminated_rank, isolated_rank)
+
+
+
 if __name__ == "__main__":
     unittest.main()
