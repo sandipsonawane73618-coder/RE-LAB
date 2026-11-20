@@ -72,6 +72,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          # Hosted Ubuntu runner exposes /dev/kvm; keep hardware acceleration on.
+          # The action's auto mode disabled it, and Emulator 37 refuses -accel off.
+          disable-linux-hw-accel: false
           emulator-boot-timeout: 360
           verbose: true
           script: |
