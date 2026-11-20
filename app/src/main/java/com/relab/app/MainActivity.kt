@@ -191,7 +191,8 @@ private data class DashboardAnalysisSnapshot(
 )
 
 private fun buildDashboardAnalysisSnapshot(
-    observations: List<com.relab.core.SourceObservation>
+    observations: List<com.relab.core.SourceObservation>,
+    targetDate: LocalDate = LocalDate.now()
 ): DashboardAnalysisSnapshot {
     val activeObservations = observations.filter {
         it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
@@ -206,8 +207,6 @@ private fun buildDashboardAnalysisSnapshot(
     val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
     val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
         .sortedWith(compareBy({ it.first.name }, { it.second }))
-    val targetDate = LocalDate.now()
-
     val candidateSets = marketSessions.map { (market, sessionId) ->
         val open = com.relab.core.CandidateRankingEngine.rank(
             activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.OPEN,
@@ -267,6 +266,9 @@ private fun RelabHome(
     val scope = rememberCoroutineScope()
     var showResearchTools by remember { mutableStateOf(false) }
     var rawCsv by remember { mutableStateOf(initialCsv) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var selectedDateText by remember { mutableStateOf(LocalDate.now().toString()) }
+    var dateError by remember { mutableStateOf<String?>(null) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var chartUrl by remember { mutableStateOf("") }
@@ -327,14 +329,14 @@ private fun RelabHome(
 
     // Reconciliation, pattern scans, candidate generation and chronological backtests
     // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
-    LaunchedEffect(observations) {
+    LaunchedEffect(observations, selectedDate) {
         analysisSnapshot = null
         analysisError = null
         analysisCompletedFor = null
         val rows = observations
         try {
             val computed = withContext(Dispatchers.Default) {
-                buildDashboardAnalysisSnapshot(rows)
+                buildDashboardAnalysisSnapshot(rows, selectedDate)
             }
             analysisSnapshot = computed
             analysisCompletedFor = rows
@@ -605,12 +607,22 @@ private fun RelabHome(
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Market Predictions", style = MaterialTheme.typography.titleMedium)
+                Text("Selected date", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { selectedDate = selectedDate.minusDays(1); selectedDateText = selectedDate.toString(); dateError = null }) { Text("‹") }
+                    OutlinedTextField(value = selectedDateText, onValueChange = { value ->
+                        selectedDateText = value
+                        try { selectedDate = LocalDate.parse(value.trim()); dateError = null } catch (_: Exception) { dateError = "Use YYYY-MM-DD" }
+                    }, label = { Text("YYYY-MM-DD") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { selectedDate = selectedDate.plusDays(1); selectedDateText = selectedDate.toString(); dateError = null }) { Text("›") }
+                }
+                dateError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
                 if (reverseModelSets.isEmpty()) {
                     Text("Predictions will appear when enough verified history is available.")
                 } else {
                     reverseModelSets.forEach { set ->
                         val actual = chartBuild.records.firstOrNull {
-                            it.market == set.market && it.sessionId == set.sessionId && it.date == set.open.targetDate
+                            it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
                         }
                         MarketPredictionSheet(set, actual)
                     }
@@ -855,12 +867,12 @@ private data class PredictionDisplayCell(
 private fun MarketPredictionSheet(set: ReverseModelDashboardSet, actual: com.relab.core.ChartRecord?) {
     val open = set.open.candidates.take(10)
     val close = set.close.candidates.take(10)
-    val openPannas = open.mapIndexed { i, c -> PredictionDisplayCell((i + 1).toString(), c.panna, c.score, if (actual == null) null else actual.openPanna == c.panna) }
-    val closePannas = close.mapIndexed { i, c -> PredictionDisplayCell((i + 1).toString(), c.panna, c.score, if (actual == null) null else actual.closePanna == c.panna) }
-    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }.sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first }).take(10).mapIndexed { i, p -> PredictionDisplayCell((i + 1).toString(), p.first.toString(), p.second, if (actual == null) null else actual.openPanna.sumOf { it.digitToInt() } % 10 == p.first) }
-    val jodis = set.jodi.take(10).mapIndexed { i, c -> PredictionDisplayCell((i + 1).toString(), c.jodi, c.score, if (actual == null) null else actual.jodi == c.jodi) }
-    val sangams = open.flatMap { o -> close.map { c -> Triple("${o.panna}-${c.panna}", o.score * c.score / 100.0, o.panna == actual?.openPanna && c.panna == actual?.closePanna) } }.sortedByDescending { it.second }.take(10).mapIndexed { i, p -> PredictionDisplayCell((i + 1).toString(), p.first, p.second, if (actual == null) null else p.third) }
-    val halfSangams = open.flatMap { o -> close.map { c -> Triple("${o.panna}-${c.ank}", o.score * c.score / 100.0, o.panna == actual?.openPanna && actual?.closePanna?.sumOf { it.digitToInt() }?.rem(10) == c.ank) } }.sortedByDescending { it.second }.distinctBy { it.first }.take(10).mapIndexed { i, p -> PredictionDisplayCell((i + 1).toString(), p.first, p.second, if (actual == null) null else p.third) }
+    val openPannas = open.map { it.panna }
+    val closePannas = close.map { it.panna }
+    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }.sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first }).take(10).map { it.first.toString() }
+    val jodis = set.jodi.take(10).map { it.jodi }
+    val sangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.panna) to (o.score * c.score / 100.0) } }.sortedByDescending { it.second }.take(10).map { it.first }
+    val halfSangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.ank) to (o.score * c.score / 100.0) } }.sortedByDescending { it.second }.distinctBy { it.first }.take(10).map { it.first }
     val marketName = when (set.market) {
         com.relab.core.Market.SRIDEVI -> "Sridevi Day"
         com.relab.core.Market.SRIDEVI_NIGHT -> "Sridevi Night"
@@ -869,36 +881,35 @@ private fun MarketPredictionSheet(set: ReverseModelDashboardSet, actual: com.rel
         com.relab.core.Market.TIME_BAZAR -> "Time Bazar"
         else -> set.market.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
     }
-    Card { Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleMedium)
-        PredictionGroup("Open Ank", openAnks)
-        PredictionGroup("Panna", openPannas)
-        PredictionGroup("Close Panna", closePannas)
-        PredictionGroup("Jodi", jodis)
-        PredictionGroup("Sangam (Open Panna + Close Panna)", sangams)
-        PredictionGroup("Half Sangam (Open Panna + Close Ank)", halfSangams)
-        Text(if (actual == null) "Result pending · match status updates when a published result is imported." else "Compared with imported chart result · ${actual.date}", style = MaterialTheme.typography.labelSmall)
-        if (set.open.abstained || set.close.abstained) Text("Insufficient history for one or more groups; unsupported candidates are not generated.", style = MaterialTheme.typography.labelSmall)
-    } }
-}
-
-@Composable
-private fun PredictionGroup(title: String, candidates: List<PredictionDisplayCell>) {
-    if (candidates.isEmpty()) return
-    Text(title, style = MaterialTheme.typography.titleSmall)
-    candidates.forEach { PredictionCandidateCell(it, Modifier.fillMaxWidth()) }
-}
-
-@Composable
-private fun PredictionCandidateCell(candidate: PredictionDisplayCell, modifier: Modifier = Modifier) {
-    val strongest = candidate.title == "1" && candidate.passed == null
-    val background = when { candidate.passed == true -> Color(0xFF1B5E20); strongest -> Color(0xFFB71C1C); else -> MaterialTheme.colorScheme.surfaceVariant }
-    val foreground = if (candidate.passed == true || strongest) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = background)) {
-        Text("#${candidate.title}  ${candidate.value}", modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = foreground)
+    Card {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleSmall)
+            if (actual != null) {
+                Text("RESULT PUBLISHED · ${actual.date}", color = Color(0xFF1B5E20), style = MaterialTheme.typography.labelMedium)
+                PredictionTableRow("Open Panna", actual.openPanna, true)
+                PredictionTableRow("Close Panna", actual.closePanna, true)
+                PredictionTableRow("Jodi", actual.jodi, true)
+            } else {
+                Text("PREDICTION · ${set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                PredictionTableRow("Open Ank", openAnks.joinToString(" · "), false, true)
+                PredictionTableRow("Panna", openPannas.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Close Panna", closePannas.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Jodi", jodis.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Sangam", sangams.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Half Sangam", halfSangams.take(6).joinToString(" · "), false, true)
+                if (set.open.abstained || set.close.abstained) Text("Insufficient history for one or more groups.", style = MaterialTheme.typography.labelSmall)
+            }
+        }
     }
 }
 
+@Composable
+private fun PredictionTableRow(label: String, value: String, isResult: Boolean, isPrediction: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.width(88.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifBlank { "—" }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = if (isResult) Color(0xFF1B5E20) else if (isPrediction) Color(0xFFB71C1C) else MaterialTheme.colorScheme.onSurface)
+    }
+}
 @Composable
 private fun CoverageReportCard(report: CoverageReport, onRangeApply: (LocalDate, LocalDate) -> Unit) {
     var startText by remember(report.market, report.sessionId, report.startDate) { mutableStateOf(report.startDate.toString()) }
