@@ -10,7 +10,7 @@ class AiResearchContextBuilderTest {
         SourceObservation(
             market = market, sessionId = "main",
             date = LocalDate.of(2026, 1, 1).plusDays(day.toLong()),
-            sourceId = "publisher-${market.name}", retrievedAt = Instant.parse("2026-02-01T00:00:00Z"),
+            sourceId = "publisher-${market.name}", retrievedAt = Instant.parse("2026-01-20T00:00:00Z"),
             rawText = if (status == ObservationStatus.PUBLISHED) "123-06-456" else "**",
             normalizedResult = if (status == ObservationStatus.PUBLISHED) "123-06-456" else null,
             status = status
@@ -35,15 +35,15 @@ class AiResearchContextBuilderTest {
 
     @Test fun excludesTargetAndFutureRows() {
         val old = observation(Market.SRIDEVI, 1)
-        val target = observation(Market.SRIDEVI, 31)
-        val future = observation(Market.SRIDEVI, 32)
-        val records = listOf(record(Market.SRIDEVI, 1), record(Market.SRIDEVI, 31), record(Market.SRIDEVI, 32))
+        val target = observation(Market.SRIDEVI, 59)
+        val future = observation(Market.SRIDEVI, 60)
+        val records = listOf(record(Market.SRIDEVI, 1), record(Market.SRIDEVI, 59), record(Market.SRIDEVI, 60))
         val context = AiResearchContextBuilder.build(
-            listOf(old, target, future), records, LocalDate.of(2026, 2, 1)
+            listOf(old, target, future), records, LocalDate.of(2026, 3, 1)
         )
         assertTrue(context.contains("2026-01-02"))
-        assertFalse(context.contains("2026-02-01"))
-        assertFalse(context.contains("2026-02-02"))
+        assertFalse(context.contains("2026-03-01 |"))
+        assertFalse(context.contains("2026-03-02 |"))
     }
 
     @Test fun preservesNonPublishedMarkersAndCapsRowsPerMarket() {
