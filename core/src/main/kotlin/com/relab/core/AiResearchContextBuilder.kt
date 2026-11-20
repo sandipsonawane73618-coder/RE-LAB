@@ -105,7 +105,7 @@ object AiResearchContextBuilder {
             }
         }
         if (wasTruncated) {
-            return output.substring(0, (maxChars - truncationSuffix.length).coerceAtLeast(0)) + truncationSuffix
+            return output.substring(0, minOf(output.length, (maxChars - truncationSuffix.length).coerceAtLeast(0))) + truncationSuffix
         }
         return output.toString().trimEnd()
     }
