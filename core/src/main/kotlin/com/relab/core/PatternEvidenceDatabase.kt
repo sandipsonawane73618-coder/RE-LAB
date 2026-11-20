@@ -172,9 +172,10 @@ object PatternEvidenceDatabase {
                                 lastSeenDate = last.date,
                                 ageInChartRows = rows.lastIndex - last.rowIndex,
                                 ageInDays = ChronoUnit.DAYS.between(last.date, rows.last().date),
-                                distinctSourceCount = (events.map { it.sourceId } +
-                                    rows.subList(maxOf(0, last.rowIndex - windowLength), last.rowIndex)
-                                        .map { it.sourceId }).distinct().size,
+                                distinctSourceCount = events.flatMap { event ->
+                                    rows.subList(event.rowIndex - windowLength, event.rowIndex)
+                                        .map { it.sourceId } + event.sourceId
+                                }.distinct().size,
                                 recentOutcomeStability = stability,
                                 baselineHits = baselineHits,
                                 baselineHitRate = if (hits + misses == 0) null else baselineHits.toDouble() / (hits + misses),
