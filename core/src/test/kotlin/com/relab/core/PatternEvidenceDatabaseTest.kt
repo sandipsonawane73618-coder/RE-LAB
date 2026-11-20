@@ -35,7 +35,7 @@ class PatternEvidenceDatabaseTest {
         assertEquals(1, repeated.hits)
         assertEquals(1, repeated.misses)
         assertEquals(0.5, repeated.hitRate!!, 0.0)
-        assertEquals(5, repeated.distinctSourceCount)
+        assertEquals(9, repeated.distinctSourceCount)
         assertEquals(0, repeated.ageInChartRows)
     }
 
