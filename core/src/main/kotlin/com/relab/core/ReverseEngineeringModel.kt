@@ -413,6 +413,25 @@ object ReverseEngineeringModel {
         return ChartPatternGridScanner.scan(earlierRows, scannerSide, minimumLength, maximumStep)
     }
 
+    /** Directional scan of the two Jodi columns, using only earlier valid chart rows. */
+    fun scanDirectionalJodiPatterns(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        minimumLength: Int = 2,
+        maximumStep: Int = 2
+    ): List<DirectionalPatternReport> {
+        require(market in enabledMarkets) { "Market is not enabled for Jodi scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        return ChartPatternGridScanner.scan(
+            earlierRows, ChartPatternSide.JODI, minimumLength, maximumStep
+        )
+    }
+
     /** Chronological Jodi/family evidence strictly before the requested target date. */
     fun scanJodiFamilySequences(
         records: List<ChartRecord>,
