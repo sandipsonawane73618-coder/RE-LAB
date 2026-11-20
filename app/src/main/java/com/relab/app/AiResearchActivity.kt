@@ -135,7 +135,9 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                 }
                 val report = withContext(Dispatchers.IO) {
                     val observations = LocalObservationDatabase(context).loadObservations()
-                    val records = com.relab.core.ReconciledChartBuilder.buildExploratoryRecords(observations)
+                    // Verification uses only multi-source consensus rows. Exploratory/single-source
+                    // records may inform AI hypotheses but cannot independently verify them.
+                    val records = com.relab.core.ReconciledChartBuilder.build(observations).records
                     val sessions = records.filter { it.date.isBefore(targetDate) }
                         .map { it.market to it.sessionId }.distinct()
                     val scannerRankings = sessions.flatMap { (market, session) ->
