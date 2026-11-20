@@ -171,6 +171,12 @@ data class ResearchToBacktestReport(
         appendLine("RESEARCH-TO-BACKTEST REPORT")
         appendLine("Target cutoff (exclusive): $targetDateExclusive")
         appendLine("Scanner rankings: ${scannerRankings.size}")
+        scannerRankings.take(12).forEach { ranking ->
+            val candidates = ranking.candidates.take(3).joinToString("; ") { it.panna + " (" + rate(it.score) + ")" }
+            appendLine("  SCANNER " + ranking.market + "/" + ranking.sessionId + " " + ranking.side +
+                " | target=" + ranking.targetDate + " | training=" + ranking.trainingRecords +
+                " | abstained=" + ranking.abstained + " | top=" + candidates.ifBlank { "none" })
+        }
         appendLine("Exact pattern evidence rows: ${exactPatternEvidence.size}")
         appendLine("Family-movement evidence rows: " + familyPatternEvidence.size)
         appendLine("Exact evidence ranking: OUTPERFORMS=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.OUTPERFORMS_BASELINE } + " | BELOW=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.BELOW_BASELINE } + " | INCONCLUSIVE=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INCONCLUSIVE } + " | INSUFFICIENT=" + rankedExactPatternEvidence.count { it.assessment == PatternEvidenceAssessment.INSUFFICIENT_EVIDENCE })
