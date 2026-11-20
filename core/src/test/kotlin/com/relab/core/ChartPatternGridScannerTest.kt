@@ -64,7 +64,7 @@ class ChartPatternGridScannerTest {
     }
 
     @Test fun shiftedStrideIsExplicitAndDoesNotBridgeByDefault() {
-        val rows = listOf(row(1, "123"), row(3, "456"), row(5, "789"))
+        val rows = listOf(row(1, "123"), row(2, "999"), row(3, "456"), row(4, "888"), row(5, "789"))
         val strict = ChartPatternGridScanner.scan(rows, ChartPatternSide.OPEN_PANNA, maximumStep = 1).single()
         val shifted = ChartPatternGridScanner.scan(rows, ChartPatternSide.OPEN_PANNA, maximumStep = 2).single()
 
