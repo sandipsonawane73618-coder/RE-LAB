@@ -231,6 +231,7 @@ object ResearchToBacktestCsvExporter {
                 result.abstainedOccurrences.toString(), result.hits.toString(), result.misses.toString(),
                 result.baselineHits.toString(), result.hitRate.csvRate(), result.baselineHitRate.csvRate(),
                 result.lift.csvRate(), result.wilsonLowerBound.csvRate(), result.wilsonUpperBound.csvRate(),
+                result.baselineWilsonLowerBound.csvRate(), result.baselineWilsonUpperBound.csvRate(),
                 result.status.name, p.rationale
             )
         }
