@@ -16,7 +16,7 @@ class AiResearchEngine {
     ): AiResearchResult {
         require(geminiKey.isNotBlank() && groqKey.isNotBlank()) { "Save both Gemini and Groq API keys first" }
         require(question.isNotBlank()) { "Enter a research question" }
-        val evidence = context.take(16_000); val memory = priorMemory.take(5_000); val q = question.take(3_000)
+        val evidence = context.take(20_000); val memory = priorMemory.take(5_000); val q = question.take(3_000)
         val firstPrompt = """
             Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
             Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
