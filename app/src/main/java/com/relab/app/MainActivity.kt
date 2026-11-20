@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -225,7 +226,7 @@ private fun buildDashboardAnalysisSnapshot(
     val reverseModelSets = marketSessions.map { (market, sessionId) ->
         val open = com.relab.core.ReverseEngineeringModel.rank(
             researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.OPEN,
-            limit = 10, minimumHistory = 30
+            limit = 100, minimumHistory = 30
         )
         val close = com.relab.core.ReverseEngineeringModel.rank(
             researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
@@ -849,6 +850,7 @@ private fun RelabHome(
 private data class PredictionDisplayCell(
     val title: String,
     val value: String,
+    val score: Double,
     val passed: Boolean?
 )
 
@@ -857,98 +859,98 @@ private fun MarketPredictionSheet(
     set: ReverseModelDashboardSet,
     actual: com.relab.core.ChartRecord?
 ) {
-    val openPanna = set.open.candidates.firstOrNull()?.panna
-    val closePanna = set.close.candidates.firstOrNull()?.panna
-    val openAnk = openPanna?.let { it.sumOf { digit -> digit.digitToInt() } % 10 }
-    val closeAnk = closePanna?.let { it.sumOf(Char::digitToInt) % 10 }
-    val predictedJodi = set.jodi.firstOrNull()?.jodi
+    val openCandidates = set.open.candidates
+        .groupBy { candidate -> candidate.panna.sumOf { it.digitToInt() } % 10 }
+        .map { (ank, candidates) -> ank to candidates.maxOf { it.score } }
+        .sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first })
+        .take(10)
+        .mapIndexed { index, item ->
+            PredictionDisplayCell(
+                (index + 1).toString(),
+                item.first.toString(),
+                item.second,
+                if (actual == null) null else actual.openPanna.sumOf { it.digitToInt() } % 10 == item.first
+            )
+        }
 
-    val actualOpenAnk = actual?.let { it.openPanna.sumOf(Char::digitToInt) % 10 }
-    val actualCloseAnk = actual?.let { it.closePanna.sumOf(Char::digitToInt) % 10 }
-    val cells = listOf(
+    val jodiCandidates = set.jodi.take(10).mapIndexed { index, candidate ->
         PredictionDisplayCell(
-            "Open",
-            openAnk?.toString() ?: "—",
-            if (actual == null || openAnk == null) null else actualOpenAnk == openAnk
-        ),
-        PredictionDisplayCell(
-            "Jodi",
-            predictedJodi ?: "—",
-            if (actual == null || predictedJodi == null) null else actual.jodi == predictedJodi
-        ),
-        PredictionDisplayCell(
-            "Panna",
-            if (openPanna == null || closePanna == null) "—" else "O $openPanna · C $closePanna",
-            if (actual == null || openPanna == null || closePanna == null) null
-            else actual.openPanna == openPanna || actual.closePanna == closePanna
-        ),
-        PredictionDisplayCell(
-            "Half Sangam",
-            if (openPanna == null || closePanna == null || openAnk == null || closeAnk == null) "—"
-            else "$openPanna-$closeAnk / $openAnk-$closePanna",
-            if (actual == null || openPanna == null || closePanna == null || openAnk == null || closeAnk == null) null
-            else (actual.openPanna == openPanna && actualCloseAnk == closeAnk) ||
-                (actual.closePanna == closePanna && actualOpenAnk == openAnk)
-        ),
-        PredictionDisplayCell(
-            "Full Sangam",
-            if (openPanna == null || closePanna == null) "—" else "$openPanna-$closePanna",
-            if (actual == null || openPanna == null || closePanna == null) null
-            else actual.openPanna == openPanna && actual.closePanna == closePanna
+            (index + 1).toString(),
+            candidate.jodi,
+            candidate.score,
+            if (actual == null) null else actual.jodi == candidate.jodi
         )
-    )
+    }
 
     Card {
         Column(
             Modifier.fillMaxWidth().padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 set.market.name.replace('_', ' ') + " · " + set.sessionId,
                 style = MaterialTheme.typography.titleMedium
             )
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                cells.forEach { cell ->
-                    val background = when (cell.passed) {
-                        true -> Color(0xFF1B5E20)
-                        false -> Color(0xFFB71C1C)
-                        null -> MaterialTheme.colorScheme.surfaceVariant
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Open", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text("Jodi", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            }
+            val rowCount = maxOf(openCandidates.size, jodiCandidates.size)
+            repeat(rowCount) { index ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (index < openCandidates.size) {
+                        PredictionCandidateCell(openCandidates[index], Modifier.weight(1f))
+                    } else {
+                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                     }
-                    val foreground = when (cell.passed) {
-                        true, false -> Color.White
-                        null -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    Card(
-                        modifier = Modifier.width(142.dp),
-                        colors = CardDefaults.cardColors(containerColor = background)
-                    ) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(9.dp),
-                            verticalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            Text(cell.title, style = MaterialTheme.typography.labelLarge, color = foreground)
-                            Text(cell.value, style = MaterialTheme.typography.titleMedium, color = foreground)
-                            Text(
-                                when (cell.passed) {
-                                    true -> "PASS"
-                                    false -> "FAIL"
-                                    null -> if (actual == null) "WAITING" else "NO PREDICTION"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = foreground
-                            )
-                        }
+                    if (index < jodiCandidates.size) {
+                        PredictionCandidateCell(jodiCandidates[index], Modifier.weight(1f))
+                    } else {
+                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                     }
                 }
             }
             Text(
-                if (actual == null) "Result pending · colours update after a consensus result is published"
-                else "Checked against the multi-source consensus result for " + actual.date,
+                when {
+                    actual == null -> "Result pending · status will update after verified consensus"
+                    else -> "Compared with verified result · " + actual.date
+                },
                 style = MaterialTheme.typography.labelSmall
             )
+            if (set.open.abstained || set.close.abstained) {
+                Text("Insufficient history for one or more prediction groups; no unsupported result is shown.",
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PredictionCandidateCell(
+    candidate: PredictionDisplayCell,
+    modifier: Modifier = Modifier
+) {
+    val background = when (candidate.passed) {
+        true -> Color(0xFF1B5E20)
+        false -> Color(0xFFB71C1C)
+        null -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val foreground = when (candidate.passed) {
+        true, false -> Color.White
+        null -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = background)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("#" + candidate.title + "  " + candidate.value,
+                style = MaterialTheme.typography.titleMedium, color = foreground)
+            Text("%.1f".format(candidate.score),
+                style = MaterialTheme.typography.labelSmall, color = foreground)
         }
     }
 }
