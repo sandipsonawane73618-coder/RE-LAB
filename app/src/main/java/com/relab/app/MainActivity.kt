@@ -191,6 +191,7 @@ private data class DashboardAnalysisSnapshot(
     val intelligenceReports: List<com.relab.core.MarketIntelligenceReport>,
     val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
     val crossMarketLeadLagEvidence: List<com.relab.core.CrossMarketLeadLagEvidence>,
+    val crossMarketLeadLagBacktests: List<com.relab.core.CrossMarketWalkForwardReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
     val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
@@ -215,6 +216,9 @@ private fun buildDashboardAnalysisSnapshot(
     val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
     val crossMarketLeadLagEvidence = com.relab.core.ReverseEngineeringModel.analyzeCrossMarketLeadLag(
         researchRecords, targetDate, maxSourceAgeDays = 7
+    )
+    val crossMarketLeadLagBacktests = com.relab.core.ReverseEngineeringModel.backtestCrossMarketLeadLag(
+        researchRecords, targetDate, maxSourceAgeDays = 7, minimumSignalOccurrences = 5
     )
     val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
         .sortedWith(compareBy({ it.first.name }, { it.second }))
@@ -268,7 +272,7 @@ private fun buildDashboardAnalysisSnapshot(
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, crossMarketLeadLagEvidence, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
+        crossMarketReports, crossMarketLeadLagEvidence, crossMarketLeadLagBacktests, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
         com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
     )
 }
@@ -433,6 +437,7 @@ private fun RelabHome(
     val intelligenceReports = snapshot?.intelligenceReports.orEmpty()
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
     val crossMarketLeadLagEvidence = snapshot?.crossMarketLeadLagEvidence.orEmpty()
+    val crossMarketLeadLagBacktests = snapshot?.crossMarketLeadLagBacktests.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
@@ -836,6 +841,38 @@ private fun RelabHome(
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+                Text("Cross-Market Lead/Lag · chronological walk-forward validation", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Out-of-sample: each target row is predicted before it is added to history. Requires at least 5 earlier matching signals; baseline uses all earlier target outcomes. 95% Wilson intervals show sampling uncertainty, not causal certainty.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                val qualifiedLeadLagBacktests = crossMarketLeadLagBacktests
+                    .filter { it.evaluatedTargets >= 5 && it.lift != null }
+                    .sortedWith(
+                        compareByDescending<com.relab.core.CrossMarketWalkForwardReport> { it.lift }
+                            .thenByDescending { it.evaluatedTargets }
+                            .thenBy { it.targetMarket.name }
+                            .thenBy { it.sourceMarket.name }
+                    )
+                if (qualifiedLeadLagBacktests.isEmpty()) {
+                    Text(if (snapshot == null) "Running chronological lead/lag validation…" else "No lead/lag rule has 5 or more out-of-sample evaluations yet; no rule is promoted.")
+                } else {
+                    qualifiedLeadLagBacktests.take(12).forEach { item ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("${item.sourceMarket} → ${item.targetMarket} · ${item.channel}", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Walk-forward ${item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} vs baseline ${item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · lift ${item.lift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"} · n=${item.evaluatedTargets}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "95% Wilson CI ${item.confidence95Lower?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"}–${item.confidence95Upper?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · abstained ${item.abstainedTargets}/${item.requestedTargets} · source IDs ${item.distinctSourceCount}",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
                             }
                         }
                     }
