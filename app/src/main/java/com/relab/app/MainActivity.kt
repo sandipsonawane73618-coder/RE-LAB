@@ -668,32 +668,36 @@ private fun RelabHome(
                 if (showResearchTools) {
                 Button(
                     onClick = {
-                        val aiScannerRankings = researchRecords
-                            .filter { it.date.isBefore(selectedDate) }
-                            .map { it.market to it.sessionId }
-                            .distinct()
-                            .flatMap { (market, sessionId) ->
-                                listOf(com.relab.core.ReverseEngineeringSide.OPEN, com.relab.core.ReverseEngineeringSide.CLOSE).map { side ->
-                                    com.relab.core.ReverseEngineeringModel.rank(
-                                        researchRecords, market, sessionId, selectedDate, side,
-                                        limit = 5, minimumHistory = 30
-                                    )
-                                }
+                        scope.launch {
+                            val contextSummary = withContext(Dispatchers.Default) {
+                                val aiScannerRankings = researchRecords
+                                    .filter { it.date.isBefore(selectedDate) }
+                                    .map { it.market to it.sessionId }
+                                    .distinct()
+                                    .flatMap { (market, sessionId) ->
+                                        listOf(com.relab.core.ReverseEngineeringSide.OPEN, com.relab.core.ReverseEngineeringSide.CLOSE).map { side ->
+                                            com.relab.core.ReverseEngineeringModel.rank(
+                                                researchRecords, market, sessionId, selectedDate, side,
+                                                limit = 5, minimumHistory = 30
+                                            )
+                                        }
+                                    }
+                                com.relab.core.AiResearchContextBuilder.build(
+                                    observations = activeObservations,
+                                    exploratoryRecords = researchRecords,
+                                    targetDateExclusive = selectedDate,
+                                    maxRecordsPerMarketSession = 6,
+                                    maxObservationsPerMarketSession = 6,
+                                    maxChars = 20_000,
+                                    scannerRankings = aiScannerRankings
+                                )
                             }
-                        val contextSummary = com.relab.core.AiResearchContextBuilder.build(
-                            observations = activeObservations,
-                            exploratoryRecords = researchRecords,
-                            targetDateExclusive = selectedDate,
-                            maxRecordsPerMarketSession = 6,
-                            maxObservationsPerMarketSession = 6,
-                            maxChars = 20_000,
-                            scannerRankings = aiScannerRankings
-                        )
-                        context.startActivity(
-                            Intent(context, AiResearchActivity::class.java)
-                                .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
-                                .putExtra(AiResearchActivity.EXTRA_TARGET_DATE, selectedDate.toString())
-                        )
+                            context.startActivity(
+                                Intent(context, AiResearchActivity::class.java)
+                                    .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
+                                    .putExtra(AiResearchActivity.EXTRA_TARGET_DATE, selectedDate.toString())
+                            )
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Open Two-AI Research Lab") }
