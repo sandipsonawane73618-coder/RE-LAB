@@ -25,12 +25,16 @@ jobs:
           gradle-version: "8.9"
       - name: Run core unit tests
         run: gradle :core:test
+      - name: Run Android app unit tests
+        run: gradle :app:testDebugUnitTest
       - name: Upload core test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relab-core-test-results
-          path: core/build/test-results/test/*.xml
+          path: |
+            core/build/test-results/test/*.xml
+            app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
   android-debug-apk:
     runs-on: ubuntu-latest
