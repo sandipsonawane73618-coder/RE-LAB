@@ -48,7 +48,8 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     val scope = rememberCoroutineScope()
     val vault = remember { AiKeyVault(context) }
     val store = remember { AiResearchMemoryStore(context) }
-    val engine = remember { AiResearchEngine() }\n    val loopEngine = remember { AiResearchLoopEngine() }
+    val engine = remember { AiResearchEngine() }
+    val loopEngine = remember { AiResearchLoopEngine() }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
     var question by remember { mutableStateOf("Find reproducible logic patterns, challenge assumptions, and propose leakage-free tests. Treat predictions as experimental.") }
@@ -58,10 +59,13 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<AiResearchResult?>(null) }
     var history by remember { mutableStateOf<List<AiResearchEntry>>(emptyList()) }
-    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }\n    var pendingLoop by remember { mutableStateOf<AiResearchLoopSession?>(null) }\n    var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
+    var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
+    var pendingLoop by remember { mutableStateOf<AiResearchLoopSession?>(null) }
+    var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
     LaunchedEffect(Unit) {
         history = withContext(Dispatchers.IO) { store.latest() }
-        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }\n        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
+        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
         keyStatus = "Gemini: " + (if (vault.hasKey(AiKeyVault.GEMINI)) "saved securely" else "not configured")
         keyStatus += " · Groq: " + (if (vault.hasKey(AiKeyVault.GROQ)) "saved securely" else "not configured")
     }
@@ -171,8 +175,8 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
                         Button(enabled = !busy && question.isNotBlank() && evidence.isNotBlank(), onClick = {
                             scope.launch {
                                 try {
-                                    val prior = history.take(3).joinToString("\\n\\n") {
-                                        "Earlier note (UNVERIFIED): " + it.question.take(250) + "\\n" + it.finalSynthesis.take(800)
+                                    val prior = history.take(3).joinToString("\n\n") {
+                                        "Earlier note (UNVERIFIED): " + it.question.take(250) + "\n" + it.finalSynthesis.take(800)
                                     }
                                     val session = withContext(Dispatchers.IO) {
                                         store.createLoopSession(question, evidence, prior, AiResearchLoopEngine.DEFAULT_MAX_ROUNDS)
