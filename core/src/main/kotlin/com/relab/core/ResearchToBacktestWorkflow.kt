@@ -197,7 +197,7 @@ data class ResearchToBacktestReport(
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id }).forEach { result ->
             val proposal = result.proposal
-            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)}")
+            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
         }
         appendLine("Verification is historical evidence only, not a guarantee or calibrated future probability.")
     }
