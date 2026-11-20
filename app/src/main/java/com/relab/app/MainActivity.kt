@@ -174,6 +174,12 @@ private data class ReverseModelDashboardSet(
     val jodi: List<com.relab.core.ReverseEngineeringJodiCandidate>
 )
 
+private data class PatternEvidenceDashboardSet(
+    val market: com.relab.core.Market,
+    val sessionId: String,
+    val rankedEvidence: List<com.relab.core.RankedPatternEvidence>
+)
+
 private data class DashboardAnalysisSnapshot(
     val activeObservations: List<com.relab.core.SourceObservation>,
     val groups: List<com.relab.core.ReconciliationGroup>,
@@ -186,6 +192,7 @@ private data class DashboardAnalysisSnapshot(
     val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
+    val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
     val sourceTiming: List<com.relab.core.SourceTimingSummary>
 )
@@ -236,6 +243,16 @@ private fun buildDashboardAnalysisSnapshot(
         )
     }
 
+    val patternEvidenceSets = marketSessions.map { (market, sessionId) ->
+        PatternEvidenceDashboardSet(
+            market, sessionId,
+            com.relab.core.ReverseEngineeringModel.rankPatternEvidence(
+                researchRecords, market, sessionId, targetDate,
+                windowLengths = 2..5, minimumEvaluations = 3, recentOccurrenceWindow = 20
+            ).take(5)
+        )
+    }
+
     val reverseModelArtifacts = com.relab.core.ReverseEngineeringCsvExporter.exportAll(
         reverseModelSets.flatMap { listOf(it.open, it.close) },
         emptyList(),
@@ -247,7 +264,7 @@ private fun buildDashboardAnalysisSnapshot(
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, candidateSets, reverseModelSets, reverseModelArtifacts,
+        crossMarketReports, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
         com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
     )
 }
@@ -413,6 +430,7 @@ private fun RelabHome(
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
+    val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
 
@@ -809,6 +827,40 @@ private fun RelabHome(
                             backtestError = reverseBacktestError.takeIf { reverseBacktestBusyKey == null && reverseBacktestResults[backtestKey] == null },
                             onRunBacktest = { reverseBacktestRequest = set }
                         )
+                    }
+                    Text("Pattern Evidence Database · chronological validation", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Exact 2–5 row sequences ranked by walk-forward lift over the same-channel global-frequency baseline. Recency and rolling hit-rate stability adjust ranking; insufficient samples are never promoted as proven signals.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    patternEvidenceSets.forEach { evidenceSet ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${evidenceSet.market.name} · ${evidenceSet.sessionId}", style = MaterialTheme.typography.titleSmall)
+                                if (evidenceSet.rankedEvidence.isEmpty()) {
+                                    Text("Not enough valid chart rows for pattern evidence.")
+                                } else {
+                                    evidenceSet.rankedEvidence.forEach { ranked ->
+                                        val item = ranked.evidence
+                                        val lift = item.baselineLift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"
+                                        val hit = item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"
+                                        val baseline = item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"
+                                        Text(
+                                            "${item.channel} · ${item.windowLength} rows · ${item.pattern}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            "${ranked.assessment} · hit $hit vs baseline $baseline · lift $lift · n=${item.evaluatedOccurrences} · age=${item.ageInChartRows} rows",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Recent ${item.recentHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · weighted ${item.recencyWeightedHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · rolling σ ${item.rollingHitRateStdDev?.let { "%.3f".format(it) } ?: "n/a"} · rank ${"%.2f".format(ranked.rankScore)}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
