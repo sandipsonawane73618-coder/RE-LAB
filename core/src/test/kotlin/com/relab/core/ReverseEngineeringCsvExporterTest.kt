@@ -46,6 +46,9 @@ class ReverseEngineeringCsvExporterTest {
         assertTrue(artifacts.getValue("reverse-model-family-rankings.csv").contains("family_sequence"))
         assertTrue(artifacts.getValue("reverse-model-jodi-rankings.csv").contains("36"))
         assertTrue(artifacts.getValue("reverse-model-walk-forward.csv").contains("exact_top10_rate"))
+        assertTrue(artifacts.getValue("reverse-model-walk-forward.csv").contains("global_exact_top1_rate"))
+        assertTrue(artifacts.getValue("reverse-model-walk-forward.csv").contains("weekday_exact_top10_rate"))
+        assertTrue(artifacts.getValue("reverse-model-walk-forward.csv").contains("previous_transition_family_rate"))
     }
 
     @Test fun csvEscapesNotesAndRetainsAbstentionRows() {

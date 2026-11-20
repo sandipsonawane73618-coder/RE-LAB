@@ -1,3 +1,4 @@
+import csv
 import tempfile
 import unittest
 from datetime import date
@@ -26,6 +27,130 @@ class WalkForwardBacktestTests(unittest.TestCase):
     def test_empty_market_abstains_without_fake_accuracy(self):
         result = backtest.evaluate_market([], "KALYAN", minimum_history=1)
         self.assertEqual({}, result)
+
+
+    def test_eligible_csv_rejects_malformed_published_chart_results(self):
+        cases = (
+            ("12-34-567", "main", "Invalid result"),
+            ("123-4-567", "main", "Invalid result"),
+            ("123-45-67", "main", "Invalid result"),
+            ("123-45-567", "   ", "Missing session ID"),
+        )
+        for result, session_id, message in cases:
+            with self.subTest(result=result, session_id=session_id):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "eligible.csv"
+                    with path.open("w", newline="", encoding="utf-8") as handle:
+                        writer = csv.DictWriter(
+                            handle,
+                            fieldnames=("market", "status", "date", "session_id", "result"),
+                        )
+                        writer.writeheader()
+                        writer.writerow({
+                            "market": "SRIDEVI",
+                            "status": "PUBLISHED",
+                            "date": "2026-01-01",
+                            "session_id": session_id,
+                            "result": result,
+                        })
+                    with self.assertRaisesRegex(ValueError, message):
+                        backtest.read_eligible(path)
+
+    def test_eligible_csv_accepts_zero_padded_chart_values_and_trimmed_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "eligible.csv"
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("market", "status", "date", "session_id", "result"),
+                )
+                writer.writeheader()
+                writer.writerow({
+                    "market": " sridevi ",
+                    "status": " published ",
+                    "date": "2026-01-01",
+                    "session_id": " main ",
+                    "result": " 007-05-009 ",
+                })
+            rows = backtest.read_eligible(path)
+        self.assertEqual("007", rows["SRIDEVI"][0]["open"])
+        self.assertEqual("009", rows["SRIDEVI"][0]["close"])
+        self.assertEqual("main", rows["SRIDEVI"][0]["session_id"])
+
+
+    def test_feature_ablation_uses_same_held_out_targets_as_full_model(self):
+        rows = [
+            {
+                "date": date.fromordinal(date(2026, 1, 1).toordinal() + index),
+                "session_id": "main",
+                "open": f"{index % 10}{(index + 1) % 10}{(index + 2) % 10}",
+                "close": f"{(index + 3) % 10}{(index + 4) % 10}{(index + 5) % 10}",
+            }
+            for index in range(12)
+        ]
+        result = backtest.evaluate_market(rows, "SRIDEVI", minimum_history=5)["main:open"]
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["exact_only"]["tested_targets"])
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["family_only"]["tested_targets"])
+        self.assertEqual(result["tested_targets"], result["feature_ablation_top10"]["no_exact"]["tested_targets"])
+        self.assertTrue(all(
+            0.0 <= item["top10_hit_rate"] <= 1.0
+            for item in result["feature_ablation_top10"].values()
+        ))
+
+
+    def test_weight_tuning_uses_disjoint_chronological_validation_and_test_windows(self):
+        rows = [
+            {
+                "date": date.fromordinal(date(2026, 1, 1).toordinal() + index),
+                "session_id": "main",
+                "open": f"{index % 10}{(index + 1) % 10}{(index + 2) % 10}",
+                "close": f"{(index + 3) % 10}{(index + 4) % 10}{(index + 5) % 10}",
+            }
+            for index in range(100)
+        ]
+        result = backtest.evaluate_market(rows, "SRIDEVI", minimum_history=5)["main:open"]
+        validation = result["tuning_validation"]["balanced_default"]
+        held_out = result["tuning_test"]["balanced_default"]
+        self.assertEqual(15, validation["tested_targets"])
+        self.assertEqual(15, held_out["tested_targets"])
+        self.assertEqual(15, result["tuning_test_baseline"]["tested_targets"])
+        self.assertEqual(10, len(result["feature_ablation_top10"]))
+        self.assertIn("balanced_default", result["feature_ablation_top10"])
+        self.assertIn("exact_primary_combined", result["feature_ablation_top10"])
+
+    def test_exact_primary_tiebreak_preserves_frequency_priority_and_uses_secondary_evidence(self):
+        exact = backtest.Counter()
+        families = backtest.Counter({"111": 5})
+        weekdays = backtest.Counter()
+        transitions = backtest.Counter()
+        _, lexical_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "111",
+            weights=(0.0, 0.0, 0.0, 0.0), lexical_tiebreak=True,
+        )
+        _, secondary_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "111",
+            weights=(0.0, 1.0, 0.0, 0.0), exact_primary_tiebreak=True,
+        )
+        self.assertEqual(backtest.rank_exact_frequency(exact, "111"), lexical_rank)
+        self.assertLess(secondary_rank, lexical_rank)
+
+    def test_ablation_lexical_tiebreak_does_not_reintroduce_excluded_features(self):
+        exact = backtest.Counter()
+        families = backtest.Counter({"111": 10})
+        weekdays = backtest.Counter()
+        transitions = backtest.Counter()
+        _, contaminated_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "000",
+            limit=1, weights=(1.0, 0.0, 0.0, 0.0),
+        )
+        top, isolated_rank = backtest.rank_pannas(
+            exact, families, weekdays, transitions, "000", "000",
+            limit=1, weights=(1.0, 0.0, 0.0, 0.0), lexical_tiebreak=True,
+        )
+        self.assertEqual(["000"], top)
+        self.assertEqual(1, isolated_rank)
+        self.assertGreater(contaminated_rank, isolated_rank)
+
 
 
 if __name__ == "__main__":

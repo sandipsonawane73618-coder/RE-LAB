@@ -93,3 +93,11 @@ The script does not fetch websites. Save the page yourself, pass the real retrie
 - `.github/workflows/` — CI and APK build.
 
 The initial repository setup will be followed by a source and data audit before historical records are imported.
+
+## Two-AI research collaboration
+
+The optional AI Research Lab runs a three-stage, user-triggered review: Gemini 3.8 Flash drafts a logic/pattern analysis, Groq GPT-OSS 120B independently challenges it, and Gemini reconciles the two while preserving unresolved disagreements. Previous notes are included only as explicitly unverified hypotheses. The AI notebook is stored separately from the immutable chart-observation ledger.
+
+Provider credentials are entered by the user in the app and encrypted locally with AES-256-GCM using a non-exportable Android Keystore key. No provider key is committed to the repository or embedded as a build-time constant. The app pre-fills only a compact count/coverage summary; the user chooses what additional evidence to send. Each run makes three API calls and requires both provider keys. Free-tier availability, model access and rate limits depend on the provider account and may change.
+
+AI-generated notes remain UNVERIFIED until independently checked with reproducible code and chronological, leakage-free tests. This is memory-assisted research, not model-weight training and not a guaranteed prediction system.

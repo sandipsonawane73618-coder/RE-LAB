@@ -188,6 +188,15 @@ def extract_rows(
             )
         for offset, parts in enumerate(daily_groups):
             chart_date = start + timedelta(days=offset)
+            # Current weekly chart pages can include the full Monday-Sunday
+            # layout before the week has finished. Future slots are not
+            # historical observations and must never enter training/backtests.
+            if chart_date > captured_at.date():
+                if not any("future chart dates excluded" in issue for issue in issues):
+                    issues.append(
+                        f"future chart dates excluded after capture date {captured_at.date().isoformat()}"
+                    )
+                continue
             raw_cell = " | ".join(parts)
             open_value, jodi_value, close_value = parts
             combined = " | ".join(parts)

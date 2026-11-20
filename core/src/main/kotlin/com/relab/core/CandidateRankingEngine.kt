@@ -118,29 +118,24 @@ object CandidateRankingEngine {
             val familyCount = familyCounts[family] ?: 0
             val weekday = weekdayCounts[family] ?: 0
             val transition = transitionCounts["$previousState>$family"] ?: 0
-            // Components are normalized independently; Jodi is deliberately not scored
-            // as an extra feature because it is mathematically derived from the Pannas.
-            val score = (
-                0.30 * exact / maxExact +
-                    0.35 * familyCount / maxFamily +
-                    0.20 * weekday / maxWeekday +
-                    0.15 * transition / maxTransition
-                ) * 100.0
+            // The latest chronological validation selected exact_only. Keep family,
+            // weekday and transition counts visible as diagnostics, but do not let
+            // unproven secondary signals override exact historical frequency.
+            // Jodi is not scored separately because it is mathematically derived.
+            val score = exact.toDouble() / maxExact * 100.0
             PannaCandidate(
                 panna, family, ChartMath.pannaType(panna), score,
                 exact, familyCount, weekday, transition
             )
         }.sortedWith(
-            compareByDescending<PannaCandidate> { it.score }
-                .thenByDescending { it.familyHistoricalCount }
-                .thenByDescending { it.exactHistoricalCount }
+            compareByDescending<PannaCandidate> { it.exactHistoricalCount }
                 .thenBy { it.panna }
         ).take(limit)
 
         return CandidateRanking(
             market, sessionId, side, targetDate, reconciled.size, minimumHistory,
             false, ranked,
-            "Ranked from prior multi-source consensus only. Score is a relative evidence index, not probability or a guarantee."
+            "Ranked by exact historical Panna frequency with deterministic lexical tie-break, matching the validation-selected exact_only baseline. Family, weekday and transition counts are descriptive diagnostics only. Score is a relative evidence index, not probability or a guarantee."
         )
     }
 

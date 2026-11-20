@@ -101,7 +101,12 @@ object ReverseEngineeringCsvExporter {
             "exact_top1_hits", "exact_top1_rate", "exact_top10_hits", "exact_top10_rate",
             "ank_top1_hits", "ank_top1_rate", "ank_top10_hits", "ank_top10_rate",
             "family_top1_hits", "family_top1_rate", "family_top10_hits", "family_top10_rate",
-            "prior_mode_family_hits", "prior_mode_family_rate"
+            "prior_mode_family_hits", "prior_mode_family_rate",
+            "global_exact_top1_hits", "global_exact_top1_rate",
+            "global_exact_top10_hits", "global_exact_top10_rate",
+            "weekday_exact_top1_hits", "weekday_exact_top1_rate",
+            "weekday_exact_top10_hits", "weekday_exact_top10_rate",
+            "previous_transition_family_hits", "previous_transition_family_rate"
         ))
         reports.forEach { report ->
             rows += listOf(
@@ -113,7 +118,12 @@ object ReverseEngineeringCsvExporter {
                 report.top10AnkHits.toString(), report.top10AnkRate.decimal(),
                 report.top1FamilyHits.toString(), report.top1FamilyRate.decimal(),
                 report.top10FamilyHits.toString(), report.top10FamilyRate.decimal(),
-                report.priorModeFamilyHits.toString(), report.priorModeFamilyRate.decimal()
+                report.priorModeFamilyHits.toString(), report.priorModeFamilyRate.decimal(),
+                report.globalExactTop1Hits.toString(), report.globalExactTop1Rate.decimal(),
+                report.globalExactTop10Hits.toString(), report.globalExactTop10Rate.decimal(),
+                report.weekdayExactTop1Hits.toString(), report.weekdayExactTop1Rate.decimal(),
+                report.weekdayExactTop10Hits.toString(), report.weekdayExactTop10Rate.decimal(),
+                report.previousTransitionFamilyHits.toString(), report.previousTransitionFamilyRate.decimal()
             )
         }
         return csv(rows)

@@ -1,6 +1,7 @@
 package com.relab.app
 
 import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -170,6 +174,12 @@ private data class ReverseModelDashboardSet(
     val jodi: List<com.relab.core.ReverseEngineeringJodiCandidate>
 )
 
+private data class PatternEvidenceDashboardSet(
+    val market: com.relab.core.Market,
+    val sessionId: String,
+    val rankedEvidence: List<com.relab.core.RankedPatternEvidence>
+)
+
 private data class DashboardAnalysisSnapshot(
     val activeObservations: List<com.relab.core.SourceObservation>,
     val groups: List<com.relab.core.ReconciliationGroup>,
@@ -180,14 +190,19 @@ private data class DashboardAnalysisSnapshot(
     val patternAnalyses: List<com.relab.core.MarketAnalysis>,
     val intelligenceReports: List<com.relab.core.MarketIntelligenceReport>,
     val crossMarketReports: List<com.relab.core.CrossMarketPairReport>,
+    val crossMarketLeadLagEvidence: List<com.relab.core.CrossMarketLeadLagEvidence>,
+    val crossMarketLeadLagBacktests: List<com.relab.core.CrossMarketWalkForwardReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
+    val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
-    val sourceTiming: List<com.relab.core.SourceTimingSummary>
+    val sourceTiming: List<com.relab.core.SourceTimingSummary>,
+    val sourceIndependence: List<com.relab.core.SourceIndependenceReport>
 )
 
 private fun buildDashboardAnalysisSnapshot(
-    observations: List<com.relab.core.SourceObservation>
+    observations: List<com.relab.core.SourceObservation>,
+    targetDate: LocalDate = LocalDate.now()
 ): DashboardAnalysisSnapshot {
     val activeObservations = observations.filter {
         it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
@@ -200,10 +215,14 @@ private fun buildDashboardAnalysisSnapshot(
     val patternAnalyses = com.relab.core.PatternAnalysis.analyze(researchRecords)
     val intelligenceReports = com.relab.core.MarketIntelligence.analyze(researchRecords)
     val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
+    val crossMarketLeadLagEvidence = com.relab.core.ReverseEngineeringModel.analyzeCrossMarketLeadLag(
+        researchRecords, targetDate, maxSourceAgeDays = 7
+    )
+    val crossMarketLeadLagBacktests = com.relab.core.ReverseEngineeringModel.backtestCrossMarketLeadLag(
+        researchRecords, targetDate, maxSourceAgeDays = 7, minimumSignalOccurrences = 5
+    )
     val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
         .sortedWith(compareBy({ it.first.name }, { it.second }))
-    val targetDate = LocalDate.now()
-
     val candidateSets = marketSessions.map { (market, sessionId) ->
         val open = com.relab.core.CandidateRankingEngine.rank(
             activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.OPEN,
@@ -221,7 +240,7 @@ private fun buildDashboardAnalysisSnapshot(
     val reverseModelSets = marketSessions.map { (market, sessionId) ->
         val open = com.relab.core.ReverseEngineeringModel.rank(
             researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.OPEN,
-            limit = 10, minimumHistory = 30
+            limit = 100, minimumHistory = 30
         )
         val close = com.relab.core.ReverseEngineeringModel.rank(
             researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
@@ -230,6 +249,16 @@ private fun buildDashboardAnalysisSnapshot(
         ReverseModelDashboardSet(
             market, sessionId, open, close,
             com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10)
+        )
+    }
+
+    val patternEvidenceSets = marketSessions.map { (market, sessionId) ->
+        PatternEvidenceDashboardSet(
+            market, sessionId,
+            com.relab.core.ReverseEngineeringModel.rankPatternEvidence(
+                researchRecords, market, sessionId, targetDate,
+                windowLengths = 2..5, minimumEvaluations = 5, recentOccurrenceWindow = 20
+            ).take(5)
         )
     }
 
@@ -244,8 +273,9 @@ private fun buildDashboardAnalysisSnapshot(
     return DashboardAnalysisSnapshot(
         activeObservations, groups, repeatedSourceRecords, repeatedPublishedResults,
         chartBuild, researchRecords, patternAnalyses, intelligenceReports,
-        crossMarketReports, candidateSets, reverseModelSets, reverseModelArtifacts,
-        com.relab.core.SourceTimingAnalytics.summarize(activeObservations)
+        crossMarketReports, crossMarketLeadLagEvidence, crossMarketLeadLagBacktests, candidateSets, reverseModelSets, patternEvidenceSets, reverseModelArtifacts,
+        com.relab.core.SourceTimingAnalytics.summarize(activeObservations),
+        com.relab.core.SourceIndependenceAudit.summarize(activeObservations)
     )
 }
 
@@ -261,18 +291,20 @@ private fun RelabHome(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showResearchTools by remember { mutableStateOf(false) }
     var rawCsv by remember { mutableStateOf(initialCsv) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var selectedDateText by remember { mutableStateOf(LocalDate.now().toString()) }
+    var dateError by remember { mutableStateOf<String?>(null) }
     var observations by remember { mutableStateOf(initialObservations) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var chartUrl by remember { mutableStateOf("") }
     var linkBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Resume an interrupted first import if one or more enabled markets are still absent.
-        val missingEnabledMarket = com.relab.core.ReverseEngineeringModel.enabledMarkets.any { market ->
-            initialObservations.none { it.market == market }
-        }
-        if (missingEnabledMarket && !linkBusy) {
+        // Refresh canonical results on every app launch. Exact re-imports are skipped by the
+        // database merger; source conflicts remain visible and each successful market persists.
+        if (!linkBusy) {
             importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
         }
     }
@@ -324,14 +356,14 @@ private fun RelabHome(
 
     // Reconciliation, pattern scans, candidate generation and chronological backtests
     // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
-    LaunchedEffect(observations) {
+    LaunchedEffect(observations, selectedDate) {
         analysisSnapshot = null
         analysisError = null
         analysisCompletedFor = null
         val rows = observations
         try {
             val computed = withContext(Dispatchers.Default) {
-                buildDashboardAnalysisSnapshot(rows)
+                buildDashboardAnalysisSnapshot(rows, selectedDate)
             }
             analysisSnapshot = computed
             analysisCompletedFor = rows
@@ -406,10 +438,14 @@ private fun RelabHome(
     val patternAnalyses = snapshot?.patternAnalyses.orEmpty()
     val intelligenceReports = snapshot?.intelligenceReports.orEmpty()
     val crossMarketReports = snapshot?.crossMarketReports.orEmpty()
+    val crossMarketLeadLagEvidence = snapshot?.crossMarketLeadLagEvidence.orEmpty()
+    val crossMarketLeadLagBacktests = snapshot?.crossMarketLeadLagBacktests.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
+    val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
+    val sourceIndependence = snapshot?.sourceIndependence.orEmpty()
 
     var reverseBacktestResults by remember {
         mutableStateOf<Map<String, Pair<com.relab.core.ReverseEngineeringBacktestReport, com.relab.core.ReverseEngineeringBacktestReport>>>(emptyMap())
@@ -601,12 +637,70 @@ private fun RelabHome(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
-                Text("5 markets · Offline chart research", style = MaterialTheme.typography.titleMedium)
+                Text("Market Predictions", style = MaterialTheme.typography.titleMedium)
+                Text("Selected date", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { selectedDate = selectedDate.minusDays(1); selectedDateText = selectedDate.toString(); dateError = null }) { Text("‹") }
+                    OutlinedTextField(value = selectedDateText, onValueChange = { value ->
+                        selectedDateText = value
+                        try { selectedDate = LocalDate.parse(value.trim()); dateError = null } catch (_: Exception) { dateError = "Use YYYY-MM-DD" }
+                    }, label = { Text("YYYY-MM-DD") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { selectedDate = selectedDate.plusDays(1); selectedDateText = selectedDate.toString(); dateError = null }) { Text("›") }
+                }
+                dateError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                if (reverseModelSets.isEmpty()) {
+                    Text("Predictions will appear when enough verified history is available.")
+                } else {
+                    reverseModelSets.forEach { set ->
+                        // Result visibility must not depend on multi-source consensus.
+                        // A valid result from one publisher is still published (unverified),
+                        // while conflicts must be shown for review rather than labelled pending.
+                        val resultGroup = groups.firstOrNull {
+                            it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
+                        }
+                        MarketPredictionSheet(set, resultGroup, selectedDate)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showResearchTools = !showResearchTools },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (showResearchTools) "Hide Research & Data Tools" else "Research & Data Tools") }
+                if (showResearchTools) {
+                Button(
+                    onClick = {
+                        val aiScannerRankings = researchRecords
+                            .filter { it.date.isBefore(selectedDate) }
+                            .map { it.market to it.sessionId }
+                            .distinct()
+                            .flatMap { (market, sessionId) ->
+                                listOf(com.relab.core.ReverseEngineeringSide.OPEN, com.relab.core.ReverseEngineeringSide.CLOSE).map { side ->
+                                    com.relab.core.ReverseEngineeringModel.rank(
+                                        researchRecords, market, sessionId, selectedDate, side,
+                                        limit = 5, minimumHistory = 30
+                                    )
+                                }
+                            }
+                        val contextSummary = com.relab.core.AiResearchContextBuilder.build(
+                            observations = activeObservations,
+                            exploratoryRecords = researchRecords,
+                            targetDateExclusive = selectedDate,
+                            maxRecordsPerMarketSession = 6,
+                            maxObservationsPerMarketSession = 6,
+                            maxChars = 20_000,
+                            scannerRankings = aiScannerRankings
+                        )
+                        context.startActivity(
+                            Intent(context, AiResearchActivity::class.java)
+                                .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, contextSummary)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open Two-AI Research Lab") }
                 Button(
                     enabled = !linkBusy,
                     onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text(if (linkBusy) "Fetching 5 markets…" else "Fetch / Refresh All 5 Markets") }
+                ) { Text(if (linkBusy) "Fetching 9 markets…" else "Fetch / Refresh All 9 Markets") }
                 Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
                 OutlinedTextField(
                     value = chartUrl,
@@ -705,7 +799,7 @@ private fun RelabHome(
                     }
                 }
                 Text("Pattern research · exploratory + verified", style = MaterialTheme.typography.titleLarge)
-                Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar. Other legacy market rows are excluded from analysis.", style = MaterialTheme.typography.bodySmall)
+                Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar · Milan Day · Milan Night · Rajdhani Day · Rajdhani Night.", style = MaterialTheme.typography.bodySmall)
                 Text(
                     "Analysis input: ${researchRecords.size} valid historical rows (${chartBuild.records.size} consensus + ${chartBuild.singleSourceUnverifiedGroups.size} single-source groups) · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
                     style = MaterialTheme.typography.bodySmall
@@ -715,15 +809,84 @@ private fun RelabHome(
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
-                Text("Cross-Market Reverse Engineering · five enabled markets", style = MaterialTheme.typography.titleLarge)
+                Text("Cross-Market Reverse Engineering · nine enabled markets", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Compares matching dates and sessions across Sridevi, Sridevi Night, Kalyan, Main Bazar and Time Bazar. Historical co-occurrence only; not a prediction or causal claim.",
+                    "Compares matching dates and sessions across all nine enabled markets. Historical co-occurrence only; not a prediction or causal claim.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (crossMarketReports.isEmpty()) {
                     Text(if (snapshot == null) "Analysing same-date cross-market relationships…" else "Cross-market comparison will appear when at least two enabled markets have valid records for the same date and session.")
                 } else {
                     crossMarketReports.forEach { CrossMarketResearchCard(it) }
+                }
+                Text("Cross-Market Lead/Lag Evidence · prior published results only", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "For each target result, uses only the latest source-market row published on an earlier chart date (maximum age 7 days). Pattern hit-rate is compared with the target market's prior global-frequency baseline. Same-day values and future rows are excluded. This is cross-market association from one canonical publisher, not independent-source confirmation or a causal claim.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                val qualifiedLeadLag = crossMarketLeadLagEvidence
+                    .filter { it.evaluatedOccurrences >= 5 && it.lift != null }
+                    .groupBy { it.targetMarket }
+                if (qualifiedLeadLag.isEmpty()) {
+                    Text(if (snapshot == null) "Checking earlier-date cross-market signals…" else "No repeated cross-market signal has enough scored observations yet; the engine abstains rather than promoting weak evidence.")
+                } else {
+                    qualifiedLeadLag.toSortedMap(compareBy { it.name }).forEach { (targetMarket, evidenceRows) ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Target: $targetMarket", style = MaterialTheme.typography.titleSmall)
+                                evidenceRows.sortedWith(
+                                    compareByDescending<com.relab.core.CrossMarketLeadLagEvidence> { it.lift }
+                                        .thenByDescending { it.evaluatedOccurrences }
+                                        .thenBy { it.sourceMarket.name }
+                                ).take(5).forEach { item ->
+                                    Text(
+                                        "${item.sourceMarket} → ${item.targetMarket} · ${item.channel} · signal ${item.sourceSignal}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        "Hit ${item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} vs baseline ${item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · lift ${item.lift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"} · n=${item.evaluatedOccurrences}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Latest source ${item.latestSourceDate} → target ${item.latestTargetDate} · source age ${item.latestSourceAgeDays} days · distinct source IDs ${item.distinctSourceCount}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("Cross-Market Lead/Lag · chronological walk-forward validation", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Out-of-sample: each target row is predicted before it is added to history. Requires at least 5 earlier matching signals; baseline uses all earlier target outcomes. 95% Wilson intervals show sampling uncertainty, not causal certainty.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                val qualifiedLeadLagBacktests = crossMarketLeadLagBacktests
+                    .filter { it.evaluatedTargets >= 5 && it.lift != null }
+                    .sortedWith(
+                        compareByDescending<com.relab.core.CrossMarketWalkForwardReport> { it.lift }
+                            .thenByDescending { it.evaluatedTargets }
+                            .thenBy { it.targetMarket.name }
+                            .thenBy { it.sourceMarket.name }
+                    )
+                if (qualifiedLeadLagBacktests.isEmpty()) {
+                    Text(if (snapshot == null) "Running chronological lead/lag validation…" else "No lead/lag rule has 5 or more out-of-sample evaluations yet; no rule is promoted.")
+                } else {
+                    qualifiedLeadLagBacktests.take(12).forEach { item ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("${item.sourceMarket} → ${item.targetMarket} · ${item.channel}", style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Walk-forward ${item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} vs baseline ${item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · lift ${item.lift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"} · n=${item.evaluatedTargets}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "95% Wilson CI ${item.confidence95Lower?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"}–${item.confidence95Upper?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · abstained ${item.abstainedTargets}/${item.requestedTargets} · source IDs ${item.distinctSourceCount}",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
                 }
                 Text("Market Intelligence · market-specific behaviour", style = MaterialTheme.typography.titleLarge)
                 Text(
@@ -741,9 +904,9 @@ private fun RelabHome(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (snapshot == null) {
-                    Text(analysisError?.let { "Research analysis error: $it" } ?: "Analysing five-market history and running chronological backtests off the UI thread…")
+                    Text(analysisError?.let { "Research analysis error: $it" } ?: "Analysing nine-market history and running chronological backtests off the UI thread…")
                 } else if (reverseModelSets.isEmpty()) {
-                    Text("No valid history is available for the five enabled markets yet.")
+                    Text("No valid history is available for the nine enabled markets yet.")
                 } else {
                     reverseModelSets.forEach { set ->
                         val backtestKey = "${set.market.name}|${set.sessionId}"
@@ -754,6 +917,40 @@ private fun RelabHome(
                             backtestError = reverseBacktestError.takeIf { reverseBacktestBusyKey == null && reverseBacktestResults[backtestKey] == null },
                             onRunBacktest = { reverseBacktestRequest = set }
                         )
+                    }
+                    Text("Pattern Evidence Database · chronological validation", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Exact 2–5 row sequences ranked by walk-forward lift over the same-channel global-frequency baseline. Recency and rolling hit-rate stability adjust ranking; insufficient samples are never promoted as proven signals.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    patternEvidenceSets.forEach { evidenceSet ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${evidenceSet.market.name} · ${evidenceSet.sessionId}", style = MaterialTheme.typography.titleSmall)
+                                if (evidenceSet.rankedEvidence.isEmpty()) {
+                                    Text("Not enough valid chart rows for pattern evidence.")
+                                } else {
+                                    evidenceSet.rankedEvidence.forEach { ranked ->
+                                        val item = ranked.evidence
+                                        val lift = item.baselineLift?.let { "%+.1f%%".format(it * 100.0) } ?: "n/a"
+                                        val hit = item.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"
+                                        val baseline = item.baselineHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"
+                                        Text(
+                                            "${item.channel} · ${item.windowLength} rows · ${item.pattern}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            "${ranked.assessment} · hit $hit vs baseline $baseline · lift $lift · n=${item.evaluatedOccurrences} · age=${item.ageInChartRows} rows",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Recent ${item.recentHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · weighted ${item.recencyWeightedHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · rolling σ ${item.rollingHitRateStdDev?.let { "%.3f".format(it) } ?: "n/a"} · rank ${"%.2f".format(ranked.rankScore)}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
@@ -776,6 +973,12 @@ private fun RelabHome(
                         }
                     }
                 }
+                Text("Independent publisher cross-check", style = MaterialTheme.typography.titleLarge)
+                if (sourceIndependence.isEmpty()) {
+                    Text(if (snapshot == null) "Auditing publisher independence…" else "No published source observations available for publisher comparison.")
+                } else {
+                    sourceIndependence.forEach { SourceIndependenceCard(it) }
+                }
                 Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
                 if (repeatedSourceRecords.isEmpty()) {
                     Text(if (snapshot == null) "Checking repeated source-record IDs…" else "No repeated source-record IDs found. Records without a source record ID are not guessed or grouped.")
@@ -797,12 +1000,95 @@ private fun RelabHome(
                     }
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
 }
 
 
+private data class PredictionDisplayCell(
+    val title: String,
+    val value: String,
+    val score: Double,
+    val passed: Boolean?
+)
+
+@Composable
+private fun MarketPredictionSheet(
+    set: ReverseModelDashboardSet,
+    resultGroup: com.relab.core.ReconciliationGroup?,
+    selectedDate: LocalDate
+) {
+    val open = set.open.candidates.take(10)
+    val close = set.close.candidates.take(10)
+    val openPannas = open.map { it.panna }
+    val closePannas = close.map { it.panna }
+    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }
+        .sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first })
+        .take(10).map { it.first.toString() }
+    val jodis = set.jodi.take(10).map { it.jodi }
+    val sangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.panna) to (o.score * c.score / 100.0) } }
+        .sortedByDescending { it.second }.take(10).map { it.first }
+    val halfSangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.ank) to (o.score * c.score / 100.0) } }
+        .sortedByDescending { it.second }.distinctBy { it.first }.take(10).map { it.first }
+    val marketName = when (set.market) {
+        com.relab.core.Market.SRIDEVI -> "Sridevi Day"
+        com.relab.core.Market.SRIDEVI_NIGHT -> "Sridevi Night"
+        com.relab.core.Market.KALYAN -> "Kalyan"
+        com.relab.core.Market.MAIN_BAZAR -> "Main Bazar"
+        com.relab.core.Market.TIME_BAZAR -> "Time Bazar"
+        else -> set.market.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+    }
+    val publishedValues = resultGroup?.observations
+        ?.filter { it.status == com.relab.core.ObservationStatus.PUBLISHED }
+        ?.mapNotNull { it.normalizedResult }
+        ?.distinct()
+        ?.sorted()
+        .orEmpty()
+    val hasPublishedResult = publishedValues.isNotEmpty()
+    Card {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleSmall)
+            if (hasPublishedResult) {
+                val conflict = publishedValues.size > 1
+                val resultLabel = when {
+                    conflict -> "RESULT CONFLICT · REVIEW SOURCES"
+                    resultGroup?.state == com.relab.core.ReconciliationState.CONSENSUS -> "RESULT PUBLISHED · VERIFIED"
+                    else -> "RESULT PUBLISHED · SINGLE SOURCE"
+                }
+                Text("$resultLabel · $selectedDate", color = if (conflict) MaterialTheme.colorScheme.error else Color(0xFF1B5E20), style = MaterialTheme.typography.labelMedium)
+                publishedValues.forEach { value ->
+                    val parts = value.split('-')
+                    if (parts.size == 3) {
+                        PredictionTableRow("Open Panna", parts[0], !conflict)
+                        PredictionTableRow("Jodi", parts[1], !conflict)
+                        PredictionTableRow("Close Panna", parts[2], !conflict)
+                    } else {
+                        PredictionTableRow("Published value", value, !conflict)
+                    }
+                }
+            } else {
+                Text("PREDICTION · ${set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                PredictionTableRow("Open Ank", openAnks.joinToString(" · "), false, true)
+                PredictionTableRow("Panna", openPannas.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Close Panna", closePannas.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Jodi", jodis.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Sangam", sangams.take(6).joinToString(" · "), false, true)
+                PredictionTableRow("Half Sangam", halfSangams.take(6).joinToString(" · "), false, true)
+                if (set.open.abstained || set.close.abstained) Text("Insufficient history for one or more groups.", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PredictionTableRow(label: String, value: String, isResult: Boolean, isPrediction: Boolean = false) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.width(88.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value.ifBlank { "—" }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = if (isResult) Color(0xFF1B5E20) else if (isPrediction) Color(0xFFB71C1C) else MaterialTheme.colorScheme.onSurface)
+    }
+}
 @Composable
 private fun CoverageReportCard(report: CoverageReport, onRangeApply: (LocalDate, LocalDate) -> Unit) {
     var startText by remember(report.market, report.sessionId, report.startDate) { mutableStateOf(report.startDate.toString()) }
@@ -1097,6 +1383,40 @@ private fun CrossMarketResearchCard(report: com.relab.core.CrossMarketPairReport
 }
 
 @Composable
+private fun SourceIndependenceCard(report: com.relab.core.SourceIndependenceReport) {
+    fun percent(value: Double?): String =
+        value?.let { "${"%.1f".format(it * 100.0)}%" } ?: "—"
+
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("${report.market} · ${report.sessionId}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Independent publishers: ${report.independentPublisherCount} · ${report.publisherIds.joinToString().ifBlank { "None" }}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Published dates: ${report.publishedDates} · multi-publisher: ${report.multiPublisherDates} · consensus: ${report.consensusDates} · single-publisher: ${report.singlePublisherDates} · conflicts: ${report.conflictDates}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (report.pairAgreements.isEmpty()) {
+                Text("No independent publisher pair overlaps yet; this market has no cross-publisher agreement measurement.", style = MaterialTheme.typography.labelSmall)
+            } else {
+                report.pairAgreements.forEach { pair ->
+                    Text(
+                        "${pair.firstPublisherId} ↔ ${pair.secondPublisherId}: agree ${pair.agreedDates}, conflict ${pair.conflictingDates}, ambiguous ${pair.ambiguousDates} / shared ${pair.sharedPublishedDates} · agreement ${percent(pair.agreementRate)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Text(
+                "Pair agreement excludes dates where either publisher has multiple distinct values. Pages/snapshots from one publisher count once.",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
         ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
@@ -1180,7 +1500,7 @@ private fun CandidateResearchCard(
     }
 }
 
-/** Fetches the five enabled markets in order and persists each successful page immediately. */
+/** Fetches all nine enabled markets in order and persists each successful page immediately. */
 private suspend fun importAllCanonicalCharts(
     save: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     updateObservations: (List<com.relab.core.SourceObservation>) -> Unit,
@@ -1192,13 +1512,17 @@ private suspend fun importAllCanonicalCharts(
         "https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php",
         "https://sattamatkajodi.com/record/kalyan-penal-chart.php",
         "https://sattamatkajodi.com/main-bazar-panel-chart.php",
-        "https://sattamatkajodi.com/time-bazar-panel-chart.php"
+        "https://sattamatkajodi.com/time-bazar-panel-chart.php",
+        "https://sattamatkajodi.com/record/milan-day-penal-chart.php",
+        "https://sattamatkajodi.com/record/milan-night-penal-chart.php",
+        "https://sattamatkajodi.com/record/rajdhani-day-penal-chart.php",
+        "https://sattamatkajodi.com/record/rajdhani-night-penal-chart.php"
     )
     val outcomes = mutableListOf<String>()
     var latestSaved: List<com.relab.core.SourceObservation>? = null
     var importedCount = 0
     updateBusy(true)
-    updateMessage("Fetching historical charts for all 5 enabled markets…")
+    updateMessage("Fetching historical charts for all 9 enabled markets…")
     try {
         for (sourceUrl in sources) {
             currentCoroutineContext().ensureActive()
@@ -1262,12 +1586,12 @@ private suspend fun importAllCanonicalCharts(
         latestSaved?.let(updateObservations)
         if (importedCount == 0) {
             updateMessage(
-                "No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 5 Markets. " +
+                "No chart rows fetched. Check internet/source availability, then tap Fetch / Refresh All 9 Markets. " +
                     outcomes.joinToString(" | ")
             )
         } else {
             updateMessage(
-                "Automatic 5-market fetch complete. Imported $importedCount observations; saved total " +
+                "Automatic 9-market fetch complete. Imported $importedCount observations; saved total " +
                     "${latestSaved?.size ?: 0}. " + outcomes.joinToString(" | ")
             )
         }

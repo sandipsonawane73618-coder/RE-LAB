@@ -61,7 +61,12 @@ data class ReverseEngineeringBacktestReport(
     val top10AnkHits: Int,
     val top1FamilyHits: Int,
     val top10FamilyHits: Int,
-    val priorModeFamilyHits: Int
+    val priorModeFamilyHits: Int,
+    val globalExactTop1Hits: Int,
+    val globalExactTop10Hits: Int,
+    val weekdayExactTop1Hits: Int,
+    val weekdayExactTop10Hits: Int,
+    val previousTransitionFamilyHits: Int
 ) {
     val top1ExactRate: Double get() = rate(top1ExactHits)
     val top10ExactRate: Double get() = rate(top10ExactHits)
@@ -70,20 +75,22 @@ data class ReverseEngineeringBacktestReport(
     val top1FamilyRate: Double get() = rate(top1FamilyHits)
     val top10FamilyRate: Double get() = rate(top10FamilyHits)
     val priorModeFamilyRate: Double get() = rate(priorModeFamilyHits)
+    val globalExactTop1Rate: Double get() = rate(globalExactTop1Hits)
+    val globalExactTop10Rate: Double get() = rate(globalExactTop10Hits)
+    val weekdayExactTop1Rate: Double get() = rate(weekdayExactTop1Hits)
+    val weekdayExactTop10Rate: Double get() = rate(weekdayExactTop10Hits)
+    val previousTransitionFamilyRate: Double get() = rate(previousTransitionFamilyHits)
     private fun rate(value: Int): Double =
         if (evaluatedTargets == 0) 0.0 else value.toDouble() / evaluatedTargets
 }
 
 /**
- * Five-market, auditable chart reverse-engineering model.
+ * Nine-market, auditable chart reverse-engineering model.
  * Uses only records strictly earlier than targetDate.
  * Scores are relative evidence indices, never calibrated probabilities.
  */
 object ReverseEngineeringModel {
-    val enabledMarkets: List<Market> = listOf(
-        Market.SRIDEVI, Market.SRIDEVI_NIGHT, Market.KALYAN,
-        Market.MAIN_BAZAR, Market.TIME_BAZAR
-    )
+    val enabledMarkets: List<Market> = Market.entries
 
     private data class CrossMarketSignal(
         val conditionalCounts: Map<String, Int>,
@@ -101,7 +108,7 @@ object ReverseEngineeringModel {
         minimumHistory: Int = 30,
         smoothingAlpha: Double = 1.0
     ): ReverseEngineeringRanking {
-        require(market in enabledMarkets) { "Only the five enabled markets can be ranked" }
+        require(market in enabledMarkets) { "Market is not enabled for reverse-engineering" }
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
         require(minimumHistory >= 1) { "Minimum history must be at least 1" }
@@ -340,7 +347,7 @@ object ReverseEngineeringModel {
         candidateLimit: Int = 10
     ): ReverseEngineeringBacktestReport {
         require(targetLimit in 1..1000) { "Target limit must be between 1 and 1000" }
-        require(market in enabledMarkets) { "Only the five enabled markets can be backtested" }
+        require(market in enabledMarkets) { "Market is not enabled for walk-forward backtesting" }
         val actualRows = records.asSequence()
             .filter { it.market == market && it.sessionId == sessionId }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
@@ -358,6 +365,11 @@ object ReverseEngineeringModel {
         var top1Family = 0
         var top10Family = 0
         var baselineFamily = 0
+        var globalExactTop1 = 0
+        var globalExactTop10 = 0
+        var weekdayExactTop1 = 0
+        var weekdayExactTop10 = 0
+        var previousTransitionFamily = 0
 
         targets.forEach { actual ->
             val ranking = rank(records, market, sessionId, actual.date, side,
@@ -378,17 +390,152 @@ object ReverseEngineeringModel {
             if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
             if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
-            val priorFamilies = actualRows.filter { it.date.isBefore(actual.date) }
-                .map { familyOf(pannaOf(it, side)) }
+            val priorRows = actualRows.filter { it.date.isBefore(actual.date) }
+            val priorFamilies = priorRows.map { familyOf(pannaOf(it, side)) }
             val modeFamily = priorFamilies.groupingBy { it }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
                 .firstOrNull()?.key
             if (modeFamily == actualFamily) baselineFamily++
+
+            // Matched baselines use only rows strictly earlier than this target.
+            fun topExact(values: List<ChartRecord>): List<String> =
+                values.groupingBy { pannaOf(it, side) }.eachCount().entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .take(candidateLimit).map { it.key }
+            val globalExact = topExact(priorRows)
+            if (globalExact.firstOrNull() == actualPanna) globalExactTop1++
+            if (actualPanna in globalExact) globalExactTop10++
+            val weekdayRows = priorRows.filter { it.date.dayOfWeek == actual.date.dayOfWeek }
+            val weekdayExact = topExact(weekdayRows)
+            if (weekdayExact.firstOrNull() == actualPanna) weekdayExactTop1++
+            if (actualPanna in weekdayExact) weekdayExactTop10++
+
+            val previousFamily = priorFamilies.lastOrNull()
+            if (previousFamily != null) {
+                val transitionOutcomes = priorFamilies.zipWithNext()
+                    .filter { (before, _) -> before == previousFamily }
+                    .map { (_, after) -> after }
+                val transitionMode = transitionOutcomes.groupingBy { it }.eachCount().entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .firstOrNull()?.key
+                if (transitionMode == actualFamily) previousTransitionFamily++
+            }
         }
         return ReverseEngineeringBacktestReport(
             market, sessionId, side, targets.size, evaluated, abstained,
-            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily
+            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily,
+            globalExactTop1, globalExactTop10, weekdayExactTop1, weekdayExactTop10,
+            previousTransitionFamily
         )
+    }
+
+    /**
+     * Returns directional pattern evidence using only valid rows before targetDate.
+     * This keeps the scanner aligned with the model's strict historical cutoff.
+     */
+    fun scanDirectionalPatterns(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        side: ReverseEngineeringSide,
+        minimumLength: Int = 3,
+        maximumStep: Int = 2
+    ): List<DirectionalPatternReport> {
+        require(market in enabledMarkets) { "Market is not enabled for directional scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        val scannerSide = when (side) {
+            ReverseEngineeringSide.OPEN -> ChartPatternSide.OPEN_PANNA
+            ReverseEngineeringSide.CLOSE -> ChartPatternSide.CLOSE_PANNA
+        }
+        return ChartPatternGridScanner.scan(earlierRows, scannerSide, minimumLength, maximumStep)
+    }
+
+    /** Directional scan of the two Jodi columns, using only earlier valid chart rows. */
+    fun scanDirectionalJodiPatterns(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        minimumLength: Int = 2,
+        maximumStep: Int = 2
+    ): List<DirectionalPatternReport> {
+        require(market in enabledMarkets) { "Market is not enabled for Jodi scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        return ChartPatternGridScanner.scan(
+            earlierRows, ChartPatternSide.JODI, minimumLength, maximumStep
+        )
+    }
+
+    /** Chronological Jodi/family evidence strictly before the requested target date. */
+    fun scanJodiFamilySequences(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        maximumWindowLength: Int = 3
+    ): List<MarketSequenceReport> {
+        require(market in enabledMarkets) { "Market is not enabled for sequence scanning" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlier = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        return JodiFamilySequenceScanner.scan(earlier, maximumWindowLength)
+    }
+
+    /** Same-date cross-market alignments from earlier observations only. */
+    fun scanCrossMarketAlignment(
+        records: List<ChartRecord>,
+        targetDate: LocalDate
+    ): List<CrossMarketSequenceEvidence> {
+        val earlier = records.filter { it.date.isBefore(targetDate) && it.market in enabledMarkets }
+        return JodiFamilySequenceScanner.crossMarketAlignment(earlier)
+    }
+
+    /** Cross-market lead/lag evidence; every source observation must predate its target result. */
+    fun analyzeCrossMarketLeadLag(
+        records: List<ChartRecord>,
+        targetDateExclusive: LocalDate,
+        maxSourceAgeDays: Long = 7
+    ): List<CrossMarketLeadLagEvidence> =
+        CrossMarketLeadLagEvidenceEngine.analyze(records, targetDateExclusive, maxSourceAgeDays)
+
+    /** Chronological out-of-sample lead/lag evaluation with matched baseline and Wilson bounds. */
+    fun backtestCrossMarketLeadLag(
+        records: List<ChartRecord>,
+        targetDateExclusive: LocalDate,
+        maxSourceAgeDays: Long = 7,
+        minimumSignalOccurrences: Int = 5
+    ): List<CrossMarketWalkForwardReport> =
+        CrossMarketLeadLagWalkForwardEvaluator.evaluate(
+            records, targetDateExclusive, maxSourceAgeDays, minimumSignalOccurrences
+        )
+
+    /** Pattern-level evidence for one market/session, using strictly earlier valid rows. */
+    fun rankPatternEvidence(
+        records: List<ChartRecord>,
+        market: Market,
+        sessionId: String,
+        targetDate: LocalDate,
+        windowLengths: IntRange = 2..5,
+        minimumEvaluations: Int = 3,
+        recentOccurrenceWindow: Int = 20
+    ): List<RankedPatternEvidence> {
+        require(market in enabledMarkets) { "Market is not enabled for pattern evidence" }
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        val earlierRows = records.filter {
+            it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDate)
+        }
+        val evidence = PatternEvidenceDatabase.analyze(
+            earlierRows, targetDate, windowLengths, recentOccurrenceWindow
+        )
+        return PatternEvidenceRanking.rank(evidence, minimumEvaluations)
     }
 
     fun deriveJodiCandidates(

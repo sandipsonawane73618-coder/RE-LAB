@@ -2,7 +2,7 @@ package com.relab.core
 
 import java.time.LocalDate
 
-/** Same-date, same-session cross-market comparisons over the five enabled markets. */
+/** Same-date, same-session cross-market comparisons across all nine chart markets. */
 data class CrossMarketRelation(
     val fromFamilySequence: String,
     val toFamilySequence: String,
@@ -40,7 +40,11 @@ object CrossMarketReverseEngineering {
         Market.SRIDEVI_NIGHT,
         Market.KALYAN,
         Market.MAIN_BAZAR,
-        Market.TIME_BAZAR
+        Market.TIME_BAZAR,
+        Market.MILAN_DAY,
+        Market.MILAN_NIGHT,
+        Market.RAJDHANI_DAY,
+        Market.RAJDHANI_NIGHT
     )
 
     private data class DateSession(val date: LocalDate, val sessionId: String)

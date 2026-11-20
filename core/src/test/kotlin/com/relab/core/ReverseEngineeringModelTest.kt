@@ -28,22 +28,19 @@ class ReverseEngineeringModelTest {
     private fun history(market: Market = Market.SRIDEVI): List<ChartRecord> =
         (0 until 40).map { row(market, it) }
 
-    @Test fun usesOnlyFiveEnabledMarketsAndAbstainsForInsufficientHistory() {
+    @Test fun supportsAllNineMarketsAndAbstainsForInsufficientHistory() {
         val result = ReverseEngineeringModel.rank(
             history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
             ReverseEngineeringSide.OPEN, minimumHistory = 50
         )
         assertTrue(result.abstained)
         assertTrue(result.candidates.isEmpty())
-        try {
-            ReverseEngineeringModel.rank(
-                listOf(row(Market.MILAN_DAY, 1)), Market.MILAN_DAY, "main",
-                LocalDate.of(2026, 2, 1), ReverseEngineeringSide.OPEN
-            )
-            fail("Disabled market must not be ranked")
-        } catch (expected: IllegalArgumentException) {
-            assertTrue(expected.message!!.contains("five enabled markets"))
-        }
+        val milan = ReverseEngineeringModel.rank(
+            listOf(row(Market.MILAN_DAY, 1)), Market.MILAN_DAY, "main",
+            LocalDate.of(2026, 2, 1), ReverseEngineeringSide.OPEN
+        )
+        assertTrue("Milan Day must be supported and abstain on insufficient history", milan.abstained)
+        assertEquals(1, milan.trainingRecords)
     }
 
     @Test fun exactAndFamilyEvidenceRankRepeatedPannaFirst() {
@@ -138,6 +135,31 @@ class ReverseEngineeringModelTest {
         assertEquals(5, result.top10AnkHits)
         assertEquals(5, result.top1FamilyHits)
         assertEquals(5, result.priorModeFamilyHits)
+        assertEquals(5, result.globalExactTop1Hits)
+        assertEquals(5, result.globalExactTop10Hits)
+        assertEquals(5, result.weekdayExactTop1Hits)
+        assertEquals(5, result.weekdayExactTop10Hits)
+        assertEquals(5, result.previousTransitionFamilyHits)
+    }
+
+    @Test fun frequencyBaselinesExcludeTargetAndFutureRows() {
+        val rows = listOf(
+            row(Market.SRIDEVI, 0, open = "111"),
+            row(Market.SRIDEVI, 1, open = "222"),
+            row(Market.SRIDEVI, 2, open = "111"),
+            row(Market.SRIDEVI, 3, open = "222"),
+            row(Market.SRIDEVI, 4, open = "333"),
+            row(Market.SRIDEVI, 5, open = "111")
+        )
+        val result = ReverseEngineeringModel.backtest(
+            rows, Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 1, minimumHistory = 5, candidateLimit = 2
+        )
+        // The final target is 111. Earlier global frequency is tied 111/222;
+        // deterministic lexical tie-break chooses 111. The target itself must not
+        // inflate its own baseline count.
+        assertEquals(1, result.globalExactTop1Hits)
+        assertEquals(1, result.globalExactTop10Hits)
     }
 
     @Test fun duplicateDatesAreRejectedBeforeTraining() {
@@ -152,4 +174,71 @@ class ReverseEngineeringModelTest {
             assertTrue(expected.message!!.contains("Duplicate dates"))
         }
     }
+
+    @Test fun directionalPatternScanUsesOnlyRowsBeforeTargetDate() {
+        val past = history()
+        val future = row(Market.SRIDEVI, 100, open = "123", close = "456").copy(sourceId = "future-only")
+        val report = ReverseEngineeringModel.scanDirectionalPatterns(
+            past + future,
+            Market.SRIDEVI,
+            "main",
+            LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN,
+            maximumStep = 1
+        ).single()
+
+        assertEquals(40, report.acceptedRecords)
+        assertEquals(0, report.rejectedRecords)
+        assertFalse(report.occurrences.any { it.sourceIds.contains(future.sourceId) })
+    }
+
+
+    @Test fun jodiFamilySequenceModelEntryPointExcludesTargetAndFutureRows() {
+        val past = history()
+        val future = row(Market.SRIDEVI, 100, open = "123", close = "456")
+            .copy(sourceId = "future-sequence-row")
+        val reports = ReverseEngineeringModel.scanJodiFamilySequences(
+            past + future, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 3, 1), maximumWindowLength = 3
+        )
+        assertEquals(1, reports.size)
+        assertEquals(40, reports.single().acceptedRecords)
+        assertFalse(reports.single().windows.any {
+            it.sourceIds.contains("future-sequence-row")
+        })
+    }
+
+    @Test fun crossMarketSequenceModelEntryPointUsesOnlyEarlierDates() {
+        val past = row(Market.SRIDEVI, 1, open = "166", close = "277")
+        val future = row(Market.KALYAN, 100, open = "166", close = "277").copy(sourceId = "future-cross-market")
+        val sameDatePrior = past.copy(market = Market.KALYAN, sourceId = "kalyan-prior")
+        val result = ReverseEngineeringModel.scanCrossMarketAlignment(
+            listOf(past, sameDatePrior, future),
+            LocalDate.of(2026, 2, 1)
+        )
+        assertEquals(1, result.size)
+        assertTrue(result.single().jodiMatch)
+        assertFalse(result.any { it.sourceIds.contains(future.sourceId) })
+    }
+
+
+    @Test fun directionalJodiScanUsesOnlyEarlierChartRows() {
+        val past = listOf(
+            row(Market.SRIDEVI, 1, open = "001", close = "002"),
+            row(Market.SRIDEVI, 2, open = "003", close = "004"),
+            row(Market.SRIDEVI, 3, open = "005", close = "006")
+        )
+        val future = row(Market.SRIDEVI, 100, open = "007", close = "008")
+            .copy(sourceId = "future-jodi")
+        val reports = ReverseEngineeringModel.scanDirectionalJodiPatterns(
+            past + future, Market.SRIDEVI, "main",
+            LocalDate.of(2026, 1, 5), minimumLength = 2, maximumStep = 1
+        )
+        assertEquals(1, reports.size)
+        assertEquals(3, reports.single().acceptedRecords)
+        assertFalse(reports.single().occurrences.any {
+            it.sourceIds.contains("future-jodi")
+        })
+    }
+
 }

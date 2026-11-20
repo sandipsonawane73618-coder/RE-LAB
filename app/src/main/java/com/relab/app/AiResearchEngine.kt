@@ -1,0 +1,154 @@
+package com.relab.app
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.relab.core.AiEvidenceCitationAuditor
+import com.relab.core.AiCitationAudit
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class AiResearchResult(val geminiAnalysis: String, val groqReview: String, val finalSynthesis: String)
+data class AiResearchCheckpoint(val geminiAnalysis: String = "", val groqReview: String = "", val finalSynthesis: String = "")
+
+/** Gemini proposes; Groq independently challenges; Gemini reconciles. Each finished stage can be persisted. */
+class AiResearchEngine internal constructor(
+    private val postRequest: (endpoint: String, headers: Map<String, String>, body: String) -> String = ::postHttp
+) {
+    fun runCrossReview(
+        geminiKey: String, groqKey: String, question: String, context: String, priorMemory: String,
+        checkpoint: AiResearchCheckpoint = AiResearchCheckpoint(),
+        onCheckpoint: (stage: String, output: String) -> Unit = { _, _ -> }
+    ): AiResearchResult {
+        require(geminiKey.isNotBlank() && groqKey.isNotBlank()) { "Save both Gemini and Groq API keys first" }
+        require(question.isNotBlank()) { "Enter a research question" }
+        val evidence = context.take(20_000); val memory = priorMemory.take(5_000); val q = question.take(3_000)
+        val evidenceRules = """
+            EVIDENCE TRACEABILITY RULES:
+            - Cite factual chart-history claims with exact supplied rows as [market/session/date/source-id].
+            - Cite aggregate scanner metrics as [SCANNER market/session/side/target-date], and label them aggregate evidence.
+            - Never invent citations, sources, chart values or sample counts. Unsupported claims must be labelled UNSUPPORTED.
+            - Distinguish PUBLISHED, PENDING, CONFLICTING and exploratory/derived records.
+            - A source ID is provenance, not proof of publisher independence.
+            - Scanner scores are relative indices, never probabilities.
+            - Report missing markets/sessions, abstentions, sample sizes and evidence-pack truncation.
+            - Separate OBSERVED, HYPOTHESIS, UNSUPPORTED and NEEDS-TEST.
+        """.trimIndent()
+        val firstPrompt = """
+            Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
+            Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
+            Recommend chronological walk-forward validation and baselines. No certainty or guaranteed predictions.
+            $evidenceRules
+            QUESTION: $q
+            EVIDENCE: $evidence
+            PRIOR AI NOTES (UNVERIFIED; never treat as facts): $memory
+        """.trimIndent()
+        val first = checkpoint.geminiAnalysis.ifBlank { callGemini(geminiKey, firstPrompt).also { onCheckpoint("GEMINI_ANALYSIS", it) } }
+        val critiquePrompt = """
+            Act as an independent reverse-engineering and statistical reviewer. Analyse original evidence independently,
+            then challenge Gemini. Find unsupported claims, confounders, leakage, duplicated or derived signals,
+            small-sample problems and alternative explanations. Do not invent data.
+            $evidenceRules
+            For every Gemini claim, mark SUPPORTED with an exact evidence citation, PARTIALLY SUPPORTED, or UNSUPPORTED.
+            Explicitly identify disagreements and alternative explanations.
+            QUESTION: $q
+            ORIGINAL EVIDENCE: $evidence
+            GEMINI ANALYSIS TO AUDIT:
+        """.trimIndent() + first.take(12_000)
+        val critique = checkpoint.groqReview.ifBlank { callGroq(groqKey, critiquePrompt).also { onCheckpoint("GROQ_REVIEW", it) } }
+        val synthesisPrompt = """
+            Reconcile both independent reviews. Preserve unresolved disagreements. Label items OBSERVED,
+            HYPOTHESIS, UNSUPPORTED or NEEDS-TEST. Give a ranked experiment plan with chronological validation and baselines.
+            Never convert speculation into fact or claim model-weight learning or certain predictions.
+            Include a claim-audit table: claim | Gemini view | Groq view | evidence citation | status.
+            Preserve unresolved disagreements and uncertainty.
+            Finish with the next 3 reproducible tests and the minimum data each test requires.
+            $evidenceRules
+            QUESTION: $q
+            EVIDENCE: $evidence
+            GEMINI:
+        """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
+        val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
+
+        // Audit every generated stage so the initial Gemini draft cannot bypass traceability checks.
+        val firstAudit = AiEvidenceCitationAuditor.audit(evidence, first)
+        val groqAudit = AiEvidenceCitationAuditor.audit(evidence, critique)
+        val finalAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
+        return AiResearchResult(
+            first + "\n\n" + formatCitationAudit("INITIAL GEMINI ANALYSIS", firstAudit),
+            critique + "\n\n" + formatCitationAudit("GROQ INDEPENDENT REVIEW", groqAudit),
+            synthesis + "\n\n" + formatCitationAudit("FINAL GEMINI SYNTHESIS", finalAudit)
+        )
+    }
+
+    private fun formatCitationAudit(stage: String, audit: AiCitationAudit): String = buildString {
+        append("DETERMINISTIC CITATION AUDIT — $stage\n")
+        append("Traceability check only; a verified reference does not prove a claim is true.\n")
+        append("Supplied evidence references: ${audit.suppliedReferences}\n")
+        append("Citations checked: ${audit.citedReferences}\n")
+        append("Verified citations: ${audit.verifiedReferences.size}\n")
+        append("Unsupported citations: ${audit.unsupportedReferences.size}")
+        if (audit.unsupportedReferences.isNotEmpty()) {
+            append("\nUnsupported reference tokens: ")
+            append(audit.unsupportedReferences.joinToString(", "))
+        }
+        if (audit.citedReferences == 0) append("\nWARNING: No machine-checkable chart/scanner citations were found.")
+    }
+
+    private fun callGemini(key: String, prompt: String): String {
+        val part = JsonObject().apply { addProperty("text", prompt) }
+        val parts = JsonArray().apply { add(part) }
+        val content = JsonObject().apply { addProperty("role", "user"); add("parts", parts) }
+        val contents = JsonArray().apply { add(content) }
+        val generationConfig = JsonObject().apply { addProperty("temperature", 0.2); addProperty("maxOutputTokens", 1400) }
+        val body = JsonObject().apply { add("contents", contents); add("generationConfig", generationConfig) }
+        val json = JsonParser.parseString(postRequest(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+            mapOf("x-goog-api-key" to key), body.toString()
+        )).asJsonObject
+        val partsResponse = json.getAsJsonArray("candidates")?.get(0)?.asJsonObject
+            ?.getAsJsonObject("content")?.getAsJsonArray("parts") ?: error("Gemini returned no text")
+        return partsResponse.mapNotNull { it.asJsonObject.get("text")?.takeUnless { value -> value.isJsonNull }?.asString }
+            .filter { it.isNotBlank() }.joinToString("\n").ifBlank { error("Gemini returned an empty response") }
+    }
+
+    private fun callGroq(key: String, prompt: String): String {
+        val system = JsonObject().apply { addProperty("role", "system"); addProperty("content", "You are a rigorous independent evidence reviewer.") }
+        val user = JsonObject().apply { addProperty("role", "user"); addProperty("content", prompt) }
+        val messages = JsonArray().apply { add(system); add(user) }
+        val body = JsonObject().apply {
+            addProperty("model", GROQ_MODEL); addProperty("temperature", 0.2); addProperty("max_tokens", 1400)
+            add("messages", messages)
+        }
+        val json = JsonParser.parseString(postRequest(
+            "https://api.groq.com/openai/v1/chat/completions",
+            mapOf("Authorization" to "Bearer " + key), body.toString()
+        )).asJsonObject
+        return json.getAsJsonArray("choices")?.get(0)?.asJsonObject
+            ?.getAsJsonObject("message")?.get("content")?.takeUnless { it.isJsonNull }?.asString
+            ?.takeIf { it.isNotBlank() } ?: error("Groq returned an empty response")
+    }
+
+    companion object { const val GROQ_MODEL = "openai/gpt-oss-120b" }
+}
+
+
+private fun postHttp(endpoint: String, headers: Map<String, String>, body: String): String {
+    val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"; connectTimeout = 20_000; readTimeout = 60_000; doOutput = true
+        setRequestProperty("Content-Type", "application/json; charset=utf-8"); setRequestProperty("Accept", "application/json")
+        headers.forEach { (name, value) -> setRequestProperty(name, value) }
+    }
+    try {
+        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val status = conn.responseCode
+        val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+        val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty().take(200_000)
+        if (status !in 200..299) {
+            val detail = runCatching { JSONObject(response).optJSONObject("error")?.optString("message") }.getOrNull()
+                ?.takeIf { it.isNotBlank() } ?: response.take(500)
+            error("AI provider HTTP " + status + ": " + detail)
+        }
+        return response
+    } finally { conn.disconnect() }
+}

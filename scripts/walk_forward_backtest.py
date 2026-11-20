@@ -10,6 +10,7 @@ import argparse
 import csv
 import heapq
 import json
+import re
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -34,15 +35,25 @@ def read_eligible(path: Path) -> dict[str, list[dict]]:
             market = row["market"].strip().upper()
             if market not in grouped:
                 raise ValueError(f"Unknown market in eligible CSV: {market}")
-            if row["status"].upper() != "PUBLISHED":
+            if row["status"].strip().upper() != "PUBLISHED":
                 raise ValueError("Eligible CSV contains a non-published row")
-            result = row["result"].split("-")
-            if len(result) != 3:
-                raise ValueError(f"Invalid result for {market} {row['date']}")
+            session_id = row["session_id"].strip()
+            if not session_id:
+                raise ValueError(f"Missing session ID for {market} {row['date']}")
+            result = [part.strip() for part in row["result"].strip().split("-")]
+            if (
+                len(result) != 3
+                or re.fullmatch(r"[0-9]{3}", result[0]) is None
+                or re.fullmatch(r"[0-9]{2}", result[1]) is None
+                or re.fullmatch(r"[0-9]{3}", result[2]) is None
+            ):
+                raise ValueError(
+                    f"Invalid result for {market} {row['date']}: expected NNN-NN-NNN"
+                )
             day = date.fromisoformat(row["date"])
             grouped[market].append({
                 "date": day,
-                "session_id": row["session_id"],
+                "session_id": session_id,
                 "open": result[0],
                 "close": result[2],
             })
@@ -63,7 +74,10 @@ CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
 
 def rank_pannas(
     exact_counts: Counter, family_counts: Counter, weekday_counts: Counter,
-    transitions: Counter, previous_state: str, actual: str, limit: int = 10
+    transitions: Counter, previous_state: str, actual: str, limit: int = 10,
+    weights: tuple[float, float, float, float] = (0.30, 0.35, 0.20, 0.15),
+    lexical_tiebreak: bool = False,
+    exact_primary_tiebreak: bool = False
 ) -> tuple[list[str], int]:
     max_exact = max(exact_counts.values(), default=1)
     max_family = max(family_counts.values(), default=1)
@@ -76,17 +90,27 @@ def rank_pannas(
         exact = exact_counts[panna]
         family_count = family_counts[family]
         score = (
-            0.30 * exact / max_exact
-            + 0.35 * family_count / max_family
-            + 0.20 * weekday_counts[family] / max_weekday
-            + 0.15 * transitions[(previous_state, family)] / max_transition
+            weights[0] * exact / max_exact
+            + weights[1] * family_count / max_family
+            + weights[2] * weekday_counts[family] / max_weekday
+            + weights[3] * transitions[(previous_state, family)] / max_transition
         ) * 100.0
-        item = (panna, score, family_count, exact)
+        secondary_score = (
+            weights[1] * family_count / max_family
+            + weights[2] * weekday_counts[family] / max_weekday
+            + weights[3] * transitions[(previous_state, family)] / max_transition
+        ) * 100.0
+        item = (panna, score, family_count, exact, secondary_score)
         scored.append(item)
         if panna == actual:
             actual_item = item
 
-    sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
+    if exact_primary_tiebreak:
+        sort_key = lambda item: (-item[3], -item[4], item[0])
+    elif lexical_tiebreak:
+        sort_key = lambda item: (-item[1], item[0])
+    else:
+        sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
     top = heapq.nsmallest(limit, scored, key=sort_key)
     actual_rank = 1 + sum(sort_key(item) < sort_key(actual_item) for item in scored)
     return [item[0] for item in top], actual_rank
@@ -137,18 +161,58 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
             history_count = 0
             ranks: list[int] = []
             baseline_ranks: list[int] = []
-            for target in session_rows:
+            ablation_ranks: dict[str, list[int]] = {
+                "exact_only": [], "family_only": [], "no_exact": [],
+                "no_weekday": [], "no_transition": [],
+            }
+            ablation_weights = {
+                "balanced_default": (0.30, 0.35, 0.20, 0.15),
+                "exact_only": (1.0, 0.0, 0.0, 0.0),
+                "family_only": (0.0, 1.0, 0.0, 0.0),
+                "no_exact": (0.0, 0.50, 0.30, 0.20),
+                "no_weekday": (0.375, 0.4375, 0.0, 0.1875),
+                "no_transition": (0.352941, 0.411765, 0.235294, 0.0),
+            }
+            exact_primary_variants = {
+                "exact_primary_family": (0.0, 1.0, 0.0, 0.0),
+                "exact_primary_weekday": (0.0, 0.0, 1.0, 0.0),
+                "exact_primary_transition": (0.0, 0.0, 0.0, 1.0),
+                "exact_primary_combined": (0.0, 0.50, 0.30, 0.20),
+            }
+            all_variants = {**ablation_weights, **exact_primary_variants}
+            tuning_validation_ranks = {name: [] for name in all_variants}
+            tuning_test_ranks = {name: [] for name in all_variants}
+            tuning_test_baseline_ranks = []
+            validation_start = int(len(session_rows) * 0.70)
+            test_start = int(len(session_rows) * 0.85)
+            for target_index, target in enumerate(session_rows):
                 # Evaluate first, then append target: no same-day or future leakage.
                 if history_count >= minimum_history:
                     actual = target[side]
+                    weekday_counts = weekday_family_counts[target["date"].weekday()]
                     _, rank = rank_pannas(
-                        exact_counts, family_counts,
-                        weekday_family_counts[target["date"].weekday()],
+                        exact_counts, family_counts, weekday_counts,
                         transitions, family_history[-1], actual, 10
                     )
                     baseline_rank = rank_exact_frequency(exact_counts, actual)
                     ranks.append(rank)
                     baseline_ranks.append(baseline_rank)
+                    for variant, weights in all_variants.items():
+                        is_exact_primary = variant in exact_primary_variants
+                        _, variant_rank = rank_pannas(
+                            exact_counts, family_counts, weekday_counts,
+                            transitions, family_history[-1], actual, 10,
+                            weights=weights,
+                            lexical_tiebreak=not is_exact_primary,
+                            exact_primary_tiebreak=is_exact_primary,
+                        )
+                        ablation_ranks.setdefault(variant, []).append(variant_rank)
+                        if validation_start <= target_index < test_start:
+                            tuning_validation_ranks[variant].append(variant_rank)
+                        elif target_index >= test_start:
+                            tuning_test_ranks[variant].append(variant_rank)
+                    if target_index >= test_start:
+                        tuning_test_baseline_ranks.append(baseline_rank)
 
                 panna = target[side]
                 family = family_sequence(panna)
@@ -160,6 +224,32 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                 weekday_family_counts[target["date"].weekday()][family] += 1
                 history_count += 1
             result = _metrics(ranks, ranks, [], baseline_ranks)
+            result["feature_ablation_top10"] = {
+                variant: {
+                    "top10_hit_rate": round(
+                        sum(1 for rank in variant_ranks if rank <= 10) / len(variant_ranks), 6
+                    ) if variant_ranks else 0.0,
+                    "mrr_top10": round(
+                        sum(1.0 / rank for rank in variant_ranks if rank <= 10) / len(variant_ranks), 6
+                    ) if variant_ranks else 0.0,
+                    "tested_targets": len(variant_ranks),
+                }
+                for variant, variant_ranks in ablation_ranks.items()
+            }
+            def tuning_metrics(rank_lists):
+                return {
+                    name: {
+                        "tested_targets": len(values),
+                        "top10_hit_rate": round(sum(rank <= 10 for rank in values) / len(values), 6) if values else 0.0,
+                        "mrr_top10": round(sum(1.0 / rank for rank in values if rank <= 10) / len(values), 6) if values else 0.0,
+                        "top10_hits": sum(rank <= 10 for rank in values),
+                        "reciprocal_rank_sum": round(sum(1.0 / rank for rank in values if rank <= 10), 6),
+                    }
+                    for name, values in rank_lists.items()
+                }
+            result["tuning_validation"] = tuning_metrics(tuning_validation_ranks)
+            result["tuning_test"] = tuning_metrics(tuning_test_ranks)
+            result["tuning_test_baseline"] = tuning_metrics({"exact_frequency": tuning_test_baseline_ranks})["exact_frequency"]
             result.update({
                 "market": market,
                 "session_id": session_id,
@@ -179,6 +269,82 @@ def evaluate(path: Path, minimum_history: int = 30) -> dict:
     results = {}
     for market in MARKETS:
         results[market] = evaluate_market(grouped[market], market, minimum_history)
+    # Select one global candidate using only the chronological validation window.
+    # The final 15% of each session is held out until after selection.
+    tuning_names = (
+        "balanced_default", "exact_only", "family_only", "no_exact",
+        "no_weekday", "no_transition", "exact_primary_family",
+        "exact_primary_weekday", "exact_primary_transition",
+        "exact_primary_combined",
+    )
+    validation_totals = {
+        name: {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
+        for name in tuning_names
+    }
+    test_totals = {
+        name: {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
+        for name in tuning_names
+    }
+    test_baseline = {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
+    for market_results in results.values():
+        for item in market_results.values():
+            for name in tuning_names:
+                for source, totals in (
+                    (item["tuning_validation"][name], validation_totals[name]),
+                    (item["tuning_test"][name], test_totals[name]),
+                ):
+                    totals["tested_targets"] += source["tested_targets"]
+                    totals["top10_hits"] += source["top10_hits"]
+                    totals["reciprocal_rank_sum"] += source["reciprocal_rank_sum"]
+            base = item["tuning_test_baseline"]
+            test_baseline["tested_targets"] += base["tested_targets"]
+            test_baseline["top10_hits"] += base["top10_hits"]
+            test_baseline["reciprocal_rank_sum"] += base["reciprocal_rank_sum"]
+
+    def selection_key(name):
+        metric = validation_totals[name]
+        count = metric["tested_targets"]
+        return (
+            metric["top10_hits"] / count if count else -1.0,
+            metric["reciprocal_rank_sum"] / count if count else -1.0,
+            name,
+        )
+
+    selected_variant = max(tuning_names, key=selection_key)
+    selected_test = test_totals[selected_variant]
+    baseline_count = test_baseline["tested_targets"]
+    selected_count = selected_test["tested_targets"]
+    tuning_report = {
+        "split": {
+            "per_market_session_chronology": True,
+            "development_prefix_fraction": 0.70,
+            "validation_fraction": 0.15,
+            "untouched_test_suffix_fraction": 0.15,
+            "minimum_history": minimum_history,
+            "selection_rule": "highest validation Top-10 hit rate; MRR@10 tie-break; deterministic variant-name tie-break",
+            "leakage_control": "candidate selected only from validation targets; final test suffix is not used for selection",
+        },
+        "validation_candidates": {
+            name: {
+                **values,
+                "top10_hit_rate": round(values["top10_hits"] / values["tested_targets"], 6) if values["tested_targets"] else 0.0,
+                "mrr_top10": round(values["reciprocal_rank_sum"] / values["tested_targets"], 6) if values["tested_targets"] else 0.0,
+            }
+            for name, values in validation_totals.items()
+        },
+        "selected_variant": selected_variant,
+        "untouched_test": {
+            "tested_targets": selected_count,
+            "top10_hit_rate": round(selected_test["top10_hits"] / selected_count, 6) if selected_count else 0.0,
+            "mrr_top10": round(selected_test["reciprocal_rank_sum"] / selected_count, 6) if selected_count else 0.0,
+            "baseline_tested_targets": baseline_count,
+            "baseline_top10_hit_rate": round(test_baseline["top10_hits"] / baseline_count, 6) if baseline_count else 0.0,
+            "baseline_mrr_top10": round(test_baseline["reciprocal_rank_sum"] / baseline_count, 6) if baseline_count else 0.0,
+            "top10_delta_vs_exact_frequency": round(
+                selected_test["top10_hits"] / selected_count - test_baseline["top10_hits"] / baseline_count, 6
+            ) if selected_count and baseline_count else 0.0,
+        },
+    }
     combined = {}
     for side in SIDES:
         side_results = [
@@ -205,6 +371,7 @@ def evaluate(path: Path, minimum_history: int = 30) -> dict:
         "source_provenance": "single canonical publisher; not multi-source verified",
         "score_interpretation": "relative evidence index, not probability or guarantee",
         "baseline": "exact historical Panna frequency with deterministic lexical tie-break",
+        "chronological_weight_tuning": tuning_report,
         "markets": results,
         "combined_by_side": combined,
     }

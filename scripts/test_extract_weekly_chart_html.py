@@ -84,6 +84,21 @@ class WeeklyExtractorNineMarketTests(unittest.TestCase):
         self.assertTrue(all(row["status"] == "MALFORMED" for row in rows))
         self.assertTrue(all(row["result"] == "" for row in rows))
 
+    def test_future_week_slots_are_excluded_at_capture_date(self):
+        html = "<table><tr><td>16/11/26 to 22/11/26</td>" + "".join(
+            "<td>123</td><td>65</td><td>456</td>" for _ in range(7)
+        ) + "</tr></table>"
+        rows, issues = MODULE.extract_rows(
+            html, market="SRIDEVI", session_id="main", source_id="canonical",
+            retrieved_at="2026-11-20T18:30:00+05:30"
+        )
+        self.assertEqual(
+            ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"],
+            [row["date"] for row in rows]
+        )
+        self.assertEqual(5, len(rows))
+        self.assertTrue(any("future chart dates excluded" in issue for issue in issues))
+
     def test_retrieval_timestamp_requires_timezone(self):
         with self.assertRaises(ValueError):
             MODULE.extract_rows(
