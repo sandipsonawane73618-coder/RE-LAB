@@ -75,6 +75,7 @@ jobs:
           emulator-boot-timeout: 360
           verbose: true
           script: |
+            set -e
             # Separate Gradle/instrumentation sessions with an explicit app force-stop
             # between them exercise real cold process relaunches with the same DB.
             for pass in 1 2 3; do
