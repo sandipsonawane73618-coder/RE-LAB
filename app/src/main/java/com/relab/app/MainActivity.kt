@@ -832,7 +832,7 @@ private fun RelabHome(
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        "Latest source ${item.latestSourceDate} → target ${item.latestTargetDate} · source age ${item.latestSourceAgeDays} days · distinct source rows ${item.distinctSourceCount}",
+                                        "Latest source ${item.latestSourceDate} → target ${item.latestTargetDate} · source age ${item.latestSourceAgeDays} days · distinct source IDs ${item.distinctSourceCount}",
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 }
