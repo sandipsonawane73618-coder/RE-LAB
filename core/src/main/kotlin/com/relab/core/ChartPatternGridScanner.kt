@@ -61,11 +61,12 @@ object ChartPatternGridScanner {
             .map { (identity, rows) ->
                 val valid = rows.mapNotNull { record ->
                     val features = ChartMath.validate(record) as? ValidationResult.Valid ?: return@mapNotNull null
-                    val panna = when (side) {
+                    val chartValue = when (side) {
                         ChartPatternSide.OPEN_PANNA -> record.openPanna
                         ChartPatternSide.CLOSE_PANNA -> record.closePanna
+                        ChartPatternSide.JODI -> record.jodi
                     }
-                    record to features.features.let { panna }
+                    record to chartValue
                 }.sortedBy { it.first.date }
 
                 require(valid.map { it.first.date }.distinct().size == valid.size) {
