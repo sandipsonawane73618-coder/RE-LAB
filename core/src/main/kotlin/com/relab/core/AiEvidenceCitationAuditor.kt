@@ -14,8 +14,8 @@ data class AiCitationAudit(
  * present in the evidence pack. A verified token proves traceability only, not truth.
  */
 object AiEvidenceCitationAuditor {
-    private val suppliedRef = Regex("""(?:EVIDENCE_REF|SCANNER_REF)=\\[([^\\]]+)]""")
-    private val citation = Regex("""\\[([^\\]]+)]""")
+    private val suppliedRef = Regex("""(?:EVIDENCE_REF|SCANNER_REF)=\[([^\]]+)]""")
+    private val citation = Regex("""\[([^\]]+)]""")
 
     fun audit(evidence: String, aiOutput: String): AiCitationAudit {
         val supplied = suppliedRef.findAll(evidence).map { normalize(it.groupValues[1]) }.toSet()
@@ -28,5 +28,5 @@ object AiEvidenceCitationAuditor {
     }
 
     private fun normalize(value: String): String =
-        value.trim().replace(Regex("""\\s+"""), "/")
+        value.trim().replace(Regex("""\s+"""), "/")
 }
