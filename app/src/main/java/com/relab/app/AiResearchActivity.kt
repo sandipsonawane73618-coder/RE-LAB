@@ -33,18 +33,27 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import com.relab.core.ReverseEngineeringModel
+import com.relab.core.ReverseEngineeringSide
+import com.relab.core.ResearchToBacktestWorkflow
 
 class AiResearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val initial = intent.getStringExtra(EXTRA_RESEARCH_CONTEXT).orEmpty()
-        setContent { AiResearchScreen(this, initial) { finish() } }
+        val targetDate = intent.getStringExtra(EXTRA_TARGET_DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: LocalDate.now()
+        setContent { AiResearchScreen(this, initial, targetDate) { finish() } }
     }
-    companion object { const val EXTRA_RESEARCH_CONTEXT = "relab.ai.RESEARCH_CONTEXT" }
+    companion object {
+        const val EXTRA_RESEARCH_CONTEXT = "relab.ai.RESEARCH_CONTEXT"
+        const val EXTRA_TARGET_DATE = "relab.ai.TARGET_DATE"
+    }
 }
 
 @Composable
-private fun AiResearchScreen(context: Context, initialContext: String, onBack: () -> Unit) {
+private fun AiResearchScreen(context: Context, initialContext: String, targetDate: LocalDate, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val vault = remember { AiKeyVault(context) }
     val store = remember { AiResearchMemoryStore(context) }
@@ -62,6 +71,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
     var pendingSession by remember { mutableStateOf<AiResearchSession?>(null) }
     var pendingLoop by remember { mutableStateOf<AiResearchLoopSession?>(null) }
     var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
+    var backtestReport by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         history = withContext(Dispatchers.IO) { store.latest() }
         pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
@@ -113,6 +123,37 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
             } finally { busy = false }
         }
     }
+    fun launchBacktest(synthesis: String) {
+        scope.launch {
+            busy = true
+            backtestReport = null
+            status = "Extracting structured AI proposals and running chronological backtests…"
+            try {
+                val parsed = AiPatternProposalParser.parse(synthesis)
+                require(parsed.proposals.isNotEmpty()) {
+                    parsed.issues.joinToString("; ").ifBlank { "AI supplied no executable pattern proposals" }
+                }
+                val report = withContext(Dispatchers.IO) {
+                    val observations = LocalObservationDatabase(context).loadObservations()
+                    val records = com.relab.core.ReconciledChartBuilder.buildExploratoryRecords(observations)
+                    val sessions = records.filter { it.date.isBefore(targetDate) }
+                        .map { it.market to it.sessionId }.distinct()
+                    val scannerRankings = sessions.flatMap { (market, session) ->
+                        ReverseEngineeringSide.entries.map { side ->
+                            ReverseEngineeringModel.rank(records, market, session, targetDate, side, limit = 10, minimumHistory = 30)
+                        }
+                    }
+                    ResearchToBacktestWorkflow.run(records, scannerRankings, parsed.proposals, targetDate)
+                }
+                backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
+                status = "Backtest completed. Only statistical evidence can change a proposal's verification status."
+            } catch (error: Exception) {
+                backtestReport = "Backtest not completed: \${error.message ?: "unknown error"}"
+                status = "No proposal was marked verified."
+            } finally { busy = false }
+        }
+    }
+
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -194,6 +235,21 @@ private fun AiResearchScreen(context: Context, initialContext: String, onBack: (
                             }
                         }
                         loopResult?.let { Text(it.report()) }
+                        if (loopResult != null || result != null) {
+                            Button(enabled = !busy, onClick = {
+                                val synthesis = loopResult?.finalSynthesis?.takeIf { it.isNotBlank() }
+                                    ?: result?.finalSynthesis.orEmpty()
+                                launchBacktest(synthesis)
+                            }, modifier = Modifier.fillMaxWidth()) { Text("Backtest AI-proposed patterns") }
+                        }
+                        backtestReport?.let {
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Chronological verification · cutoff \${targetDate} (exclusive)", style = MaterialTheme.typography.titleMedium)
+                                    Text(it)
+                                }
+                            }
+                        }
                         if (busy) Text("Each completed AI stage is saved locally. If the app closes or network drops, reopen and resume.")
                         status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
