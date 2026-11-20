@@ -135,6 +135,31 @@ class ReverseEngineeringModelTest {
         assertEquals(5, result.top10AnkHits)
         assertEquals(5, result.top1FamilyHits)
         assertEquals(5, result.priorModeFamilyHits)
+        assertEquals(5, result.globalExactTop1Hits)
+        assertEquals(5, result.globalExactTop10Hits)
+        assertEquals(5, result.weekdayExactTop1Hits)
+        assertEquals(5, result.weekdayExactTop10Hits)
+        assertEquals(5, result.previousTransitionFamilyHits)
+    }
+
+    @Test fun frequencyBaselinesExcludeTargetAndFutureRows() {
+        val rows = listOf(
+            row(Market.SRIDEVI, 0, open = "111"),
+            row(Market.SRIDEVI, 1, open = "222"),
+            row(Market.SRIDEVI, 2, open = "111"),
+            row(Market.SRIDEVI, 3, open = "222"),
+            row(Market.SRIDEVI, 4, open = "333"),
+            row(Market.SRIDEVI, 5, open = "111")
+        )
+        val result = ReverseEngineeringModel.backtest(
+            rows, Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 1, minimumHistory = 5, candidateLimit = 2
+        )
+        // The final target is 111. Earlier global frequency is tied 111/222;
+        // deterministic lexical tie-break chooses 111. The target itself must not
+        // inflate its own baseline count.
+        assertEquals(1, result.globalExactTop1Hits)
+        assertEquals(1, result.globalExactTop10Hits)
     }
 
     @Test fun duplicateDatesAreRejectedBeforeTraining() {
