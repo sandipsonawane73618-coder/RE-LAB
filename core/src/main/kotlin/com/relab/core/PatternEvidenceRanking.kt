@@ -34,13 +34,8 @@ object PatternEvidenceRanking {
         return evidence.map { item ->
             val enough = item.evaluatedOccurrences >= minimumEvaluations &&
                 item.hitRate != null && item.baselineHitRate != null
-            val support = if (!enough) {
-                item.evaluatedOccurrences.toDouble() /
-                    (item.evaluatedOccurrences + minimumEvaluations * 2.0)
-            } else {
-                item.evaluatedOccurrences.toDouble() /
-                    (item.evaluatedOccurrences + minimumEvaluations * 2.0)
-            }
+            val support = item.evaluatedOccurrences.toDouble() /
+                (item.evaluatedOccurrences + minimumEvaluations * 2.0)
             val recency = 1.0 / (1.0 + item.ageInChartRows / recencyScaleInRows)
             val volatility = (item.rollingHitRateStdDev ?: 0.5).coerceIn(0.0, 0.5)
             val stability = 1.0 - volatility
