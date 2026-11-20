@@ -41,6 +41,7 @@ class ResearchBundleExporterTest {
             "source-observations.csv", "derived-consensus-research.csv",
             "walk-forward-audit.csv", "historical-coverage-audit.csv",
             "source-publication-timing.csv", "research-manifest.json",
+            "family-movement-walk-forward.csv",
             "reverse-model-panna-rankings.csv", "reverse-model-family-rankings.csv",
             "reverse-model-jodi-rankings.csv", "reverse-model-walk-forward.csv",
             "README.txt", "bundle-index.json"
