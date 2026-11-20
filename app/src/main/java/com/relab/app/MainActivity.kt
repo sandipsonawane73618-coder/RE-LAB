@@ -859,7 +859,7 @@ private fun MarketPredictionSheet(
 ) {
     val openPanna = set.open.candidates.firstOrNull()?.panna
     val closePanna = set.close.candidates.firstOrNull()?.panna
-    val openAnk = openPanna?.let { it.sumOf(Char::digitToInt) % 10 }
+    val openAnk = openPanna?.let { it.sumOf { digit -> digit.digitToInt() } % 10 }
     val closeAnk = closePanna?.let { it.sumOf(Char::digitToInt) % 10 }
     val predictedJodi = set.jodi.firstOrNull()?.jodi
 
@@ -919,7 +919,6 @@ private fun MarketPredictionSheet(
                     }
                     val foreground = when (cell.passed) {
                         true, false -> Color.White
-                        
                         null -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     Card(
