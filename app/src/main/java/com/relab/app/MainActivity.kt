@@ -1375,7 +1375,6 @@ private fun CrossMarketResearchCard(report: com.relab.core.CrossMarketPairReport
 }
 
 @Composable
-@Composable
 private fun SourceIndependenceCard(report: com.relab.core.SourceIndependenceReport) {
     fun percent(value: Double?): String =
         value?.let { "${"%.1f".format(it * 100.0)}%" } ?: "—"
@@ -1409,6 +1408,7 @@ private fun SourceIndependenceCard(report: com.relab.core.SourceIndependenceRepo
     }
 }
 
+@Composable
 private fun SourceGroupCard(group: com.relab.core.ReconciliationGroup) {
     val resultText = when (group.state) {
         ReconciliationState.CONSENSUS -> "MULTI-SOURCE CONSENSUS · ${group.agreedResult}"
