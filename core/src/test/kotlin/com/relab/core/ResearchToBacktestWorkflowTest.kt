@@ -152,9 +152,23 @@ class ResearchToBacktestWorkflowTest {
         val result = report.assessments.single()
         assertEquals(39, result.evaluatedOccurrences)
         assertEquals(ResearchVerificationStatus.UNCERTAIN, result.status)
+        // A highly significant paired diagnostic must not override the configured
+        // minimum-sample gate used by the verification status.
+        assertNotNull(result.pairedExactPValue)
+        assertTrue(result.pairedExactPValue!! < 0.05)
         assertTrue(report.compactSummary().contains("LOW_SAMPLE_UNCERTAIN"))
+        assertTrue(report.compactSummary().contains("pairedExactP="))
         val csv = ResearchToBacktestCsvExporter.export(report)
         assertTrue(csv.contains("UNCERTAIN,LOW_SAMPLE_UNCERTAIN"))
+        val csvRows = csv.split("\\n")
+        val header = csvColumns(csvRows.first())
+        val values = csvColumns(csvRows[1])
+        assertEquals(result.patternOnlyHits.toString(), values[header.indexOf("pattern_only_hits")])
+        assertEquals(result.baselineOnlyHits.toString(), values[header.indexOf("baseline_only_hits")])
+        assertEquals(
+            String.format(java.util.Locale.ROOT, "%.6f", result.pairedExactPValue),
+            values[header.indexOf("paired_exact_p_value")]
+        )
     }
 
     @Test
