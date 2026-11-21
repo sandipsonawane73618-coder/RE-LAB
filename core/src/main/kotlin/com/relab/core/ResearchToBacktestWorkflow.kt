@@ -226,11 +226,20 @@ data class ResearchToBacktestReport(
         ResearchVerificationStatus.entries.forEach { status ->
             appendLine("$status: ${assessments.count { it.status == status }}")
         }
+        appendLine("ASSESSMENT DIAGNOSTICS: invalid proposals=${assessments.count { it.rejectionReason != null }} | statistical rejections=${assessments.count { it.status == ResearchVerificationStatus.REJECTED && it.rejectionReason == null }} | low-sample uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences < 20 }} | other uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences >= 20 }}")
+        appendLine("DATA QUALITY: invalid pre-cutoff rows=$invalidRowsBeforeCutoff | post-cutoff rows excluded=$excludedOnOrAfterCutoff")
         assessments.sortedWith(compareBy<ProposedPatternBacktest> { it.status.ordinal }
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id }).forEach { result ->
             val proposal = result.proposal
-            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)} | pairedWins=${result.patternOnlyHits} | baselineOnlyWins=${result.baselineOnlyHits} | pairedExactP=${rate(result.pairedExactPValue)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
+            val diagnostic = when {
+                result.rejectionReason != null -> "INVALID_PROPOSAL"
+                result.status == ResearchVerificationStatus.REJECTED -> "STATISTICAL_REJECTION"
+                result.status == ResearchVerificationStatus.UNCERTAIN && result.evaluatedOccurrences < 20 -> "LOW_SAMPLE_UNCERTAIN"
+                result.status == ResearchVerificationStatus.UNCERTAIN -> "INCONCLUSIVE"
+                else -> "HISTORICALLY_VERIFIED"
+            }
+            appendLine("${result.status} | ${diagnostic} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)} | pairedWins=${result.patternOnlyHits} | baselineOnlyWins=${result.baselineOnlyHits} | pairedExactP=${rate(result.pairedExactPValue)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
         }
         appendLine("Verification is historical evidence only, not a guarantee or calibrated future probability.")
     }
