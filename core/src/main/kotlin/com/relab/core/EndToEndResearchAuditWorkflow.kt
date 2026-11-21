@@ -63,7 +63,9 @@ object EndToEndResearchAuditWorkflow {
         minimumEvaluations: Int = 20,
         minimumLift: Double = 0.05,
         minimumModelHistory: Int = 30,
-        candidateLimit: Int = 10
+        candidateLimit: Int = 10,
+        sourceQuality: ChartBuildReport? = null,
+        sourceObservationCount: Int = 0
     ): EndToEndResearchAuditReport {
         require(minimumModelHistory >= 1) { "Minimum model history must be positive" }
         require(candidateLimit in 1..100) { "Candidate limit must be 1..100" }
@@ -74,7 +76,9 @@ object EndToEndResearchAuditWorkflow {
             proposals = proposals,
             targetDateExclusive = targetDateExclusive,
             minimumEvaluations = minimumEvaluations,
-            minimumLift = minimumLift
+            minimumLift = minimumLift,
+            sourceQuality = sourceQuality,
+            sourceObservationCount = sourceObservationCount
         )
 
         val eligible = records.filter {
