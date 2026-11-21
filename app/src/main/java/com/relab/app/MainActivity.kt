@@ -208,11 +208,6 @@ private data class DashboardAnalysisSnapshot(
     val crossMarketLeadLagBacktests: List<com.relab.core.CrossMarketWalkForwardReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
-    val marketWalkForwardComparisons = remember(consensusWalkForwardReport) {
-        consensusWalkForwardReport?.marketSessionReports?.let {
-            com.relab.core.MarketWalkForwardComparisonBuilder.build(it)
-        }.orEmpty()
-    }
 
     val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
@@ -777,6 +772,12 @@ private fun RelabHome(
             frozenPredictionSnapshots,
             frozenSangamAudits
         )
+    }
+
+    val marketWalkForwardComparisons = remember(consensusWalkForwardReport) {
+        consensusWalkForwardReport?.marketSessionReports?.let {
+            com.relab.core.MarketWalkForwardComparisonBuilder.build(it)
+        }.orEmpty()
     }
 
     var consensusWalkForwardReport by remember {
