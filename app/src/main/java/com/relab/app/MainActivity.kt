@@ -161,7 +161,9 @@ class MainActivity : ComponentActivity() {
                             remove("source_csv")
                             rangeKeys.forEach(::remove)
                         }.apply()
-                    }
+                    },
+                    onSavePredictionSnapshot = database::savePredictionSnapshot,
+                    onSavePredictionOutcome = database::savePredictionOutcome
                 )
             }
         }
@@ -433,7 +435,9 @@ private fun RelabHome(
     onSaveCoverageRange: (String, LocalDate, LocalDate) -> Unit,
     onSaveCsv: (String, List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     onSaveLinkObservations: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
-    onClearCsv: () -> Unit
+    onClearCsv: () -> Unit,
+    onSavePredictionSnapshot: (com.relab.core.PredictionSnapshot) -> Boolean,
+    onSavePredictionOutcome: (com.relab.core.PredictionSnapshotOutcome) -> Boolean
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -655,6 +659,79 @@ private fun RelabHome(
     val crossMarketLeadLagBacktests = snapshot?.crossMarketLeadLagBacktests.orEmpty()
     val candidateSets = snapshot?.candidateSets.orEmpty()
     val reverseModelSets = snapshot?.reverseModelSets.orEmpty()
+
+    // Freeze each target's generated rankings once, before its result is published.
+    // A later refresh can attach an outcome but can never replace the first snapshot.
+    LaunchedEffect(reverseModelSets, selectedDate, activeObservations) {
+        val targetDate = selectedDate
+        if (!targetDate.isBefore(LocalDate.now())) {
+            val serializer = GsonBuilder()
+                .registerTypeAdapter(
+                    LocalDate::class.java,
+                    com.google.gson.JsonSerializer<LocalDate> { value, _, _ ->
+                        com.google.gson.JsonPrimitive(value.toString())
+                    }
+                )
+                .create()
+            withContext(Dispatchers.IO) {
+                reverseModelSets.forEach { set ->
+                    val targetRows = activeObservations.filter {
+                        it.market == set.market &&
+                            it.sessionId == set.sessionId &&
+                            it.date == targetDate &&
+                            it.status == ObservationStatus.PUBLISHED &&
+                            !it.normalizedResult.isNullOrBlank()
+                    }
+                    if (targetRows.isEmpty()) {
+                        val historyThrough = activeObservations.asSequence()
+                            .filter {
+                                it.market == set.market &&
+                                    it.sessionId == set.sessionId &&
+                                    it.date.isBefore(targetDate) &&
+                                    it.status == ObservationStatus.PUBLISHED
+                            }
+                            .map { it.date }
+                            .maxOrNull() ?: return@forEach
+                        val payload = serializer.toJson(
+                            mapOf(
+                                "open" to set.open,
+                                "close" to set.close,
+                                "jodi" to set.jodi
+                            )
+                        )
+                        onSavePredictionSnapshot(
+                            com.relab.core.PredictionSnapshot(
+                                market = set.market,
+                                sessionId = set.sessionId,
+                                targetDate = targetDate,
+                                createdAt = Instant.now(),
+                                historyThroughDate = historyThrough,
+                                modelVersion = "reverse-engineering-v1",
+                                payloadJson = payload
+                            )
+                        )
+                    } else {
+                        val distinctResults = targetRows.mapNotNull { it.normalizedResult?.trim() }
+                            .filter { it.isNotEmpty() }.distinct()
+                        if (distinctResults.size == 1) {
+                            val publishedAt = targetRows.maxByOrNull {
+                                it.publishedAt ?: it.retrievedAt
+                            }?.let { it.publishedAt ?: it.retrievedAt } ?: Instant.now()
+                            onSavePredictionOutcome(
+                                com.relab.core.PredictionSnapshotOutcome(
+                                    snapshotKey = "${set.market.name}|${set.sessionId}|${targetDate}",
+                                    actualResult = distinctResults.single(),
+                                    publishedAt = publishedAt,
+                                    sourceStatus = "PUBLISHED"
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
