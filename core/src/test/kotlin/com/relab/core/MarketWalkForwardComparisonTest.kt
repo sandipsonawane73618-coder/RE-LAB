@@ -48,6 +48,34 @@ class MarketWalkForwardComparisonTest {
     }
 
     @Test
+    fun aggregatesChronologicalPeriodsAcrossSessionsWithoutMixingTheirCounts() {
+        val first = report(Market.KALYAN, "day", 12, 3).copy(
+            chronologicalPeriods = listOf(
+                WalkForwardPeriodReport(1, java.time.LocalDate.parse("2026-01-01"), java.time.LocalDate.parse("2026-01-04"), 4, 2, 2, 1, 2, 1, 1, 1),
+                WalkForwardPeriodReport(2, java.time.LocalDate.parse("2026-01-05"), java.time.LocalDate.parse("2026-01-08"), 4, 4, 0, 1, 2, 2, 2, 2),
+                WalkForwardPeriodReport(3, java.time.LocalDate.parse("2026-01-09"), java.time.LocalDate.parse("2026-01-12"), 4, 4, 0, 1, 2, 2, 2, 2)
+            )
+        )
+        val second = report(Market.KALYAN, "night", 12, 3).copy(
+            chronologicalPeriods = listOf(
+                WalkForwardPeriodReport(1, java.time.LocalDate.parse("2026-01-01"), java.time.LocalDate.parse("2026-01-04"), 4, 3, 1, 1, 1, 1, 1, 1),
+                WalkForwardPeriodReport(2, java.time.LocalDate.parse("2026-01-05"), java.time.LocalDate.parse("2026-01-08"), 4, 4, 0, 1, 2, 2, 2, 2),
+                WalkForwardPeriodReport(3, java.time.LocalDate.parse("2026-01-09"), java.time.LocalDate.parse("2026-01-12"), 4, 4, 0, 1, 2, 2, 2, 2)
+            )
+        )
+
+        val market = MarketWalkForwardComparisonBuilder.build(listOf(first, second)).single()
+        val early = market.chronologicalPeriods.first()
+        assertEquals(8, early.requestedTargets)
+        assertEquals(5, early.evaluatedTargets)
+        assertEquals(3, early.abstainedTargets)
+        assertEquals(2, early.exactPairTop10Hits)
+        assertEquals(0.4, early.rate(early.exactPairTop10Hits)!!, 0.000001)
+        assertEquals(java.time.LocalDate.parse("2026-01-01"), early.firstTargetDate)
+        assertEquals(java.time.LocalDate.parse("2026-01-04"), early.lastTargetDate)
+    }
+
+    @Test
     fun sampleBandsAreDescriptiveAndNoSampleHasNoRate() {
         val reports = listOf(
             report(Market.SRIDEVI, "a", 0, 0),
