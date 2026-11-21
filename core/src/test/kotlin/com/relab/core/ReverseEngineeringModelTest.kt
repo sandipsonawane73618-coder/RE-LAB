@@ -115,9 +115,10 @@ class ReverseEngineeringModelTest {
         val kalyan = (0 until 40).map { row(Market.KALYAN, it, open = "277", close = "368") }
         val result = ReverseEngineeringModel.rank(
             sridevi + kalyan, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
-            ReverseEngineeringSide.OPEN, minimumHistory = 30
+            ReverseEngineeringSide.OPEN, minimumHistory = 30,
+            includeCrossMarketEvidence = true
         )
-        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional")
         assertEquals("166", result.candidates.first().panna)
     }
 
@@ -128,11 +129,33 @@ class ReverseEngineeringModelTest {
         }
         val result = ReverseEngineeringModel.rank(
             targetHistory + sourceHistory, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
-            ReverseEngineeringSide.OPEN, minimumHistory = 30
+            ReverseEngineeringSide.OPEN, minimumHistory = 30,
+            includeCrossMarketEvidence = true
         )
 
-        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional")
         assertTrue(result.candidates.all { it.crossMarketConditionalEvidence == null })
+    }
+
+    @Test fun crossMarketEvidenceIsOptInAndCannotAlterDefaultPerMarketPrediction() {
+        val sridevi = history(Market.SRIDEVI)
+        val kalyan = (0 until 40).map { row(Market.KALYAN, it, open = "277", close = "368") }
+        val target = LocalDate.of(2026, 3, 1)
+        val baseline = ReverseEngineeringModel.rank(
+            sridevi, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+        val withOtherMarket = ReverseEngineeringModel.rank(
+            sridevi + kalyan, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+
+        assertEquals(
+            baseline.candidates.map { it.panna to it.score },
+            withOtherMarket.candidates.map { it.panna to it.score }
+        )
+        assertTrue(withOtherMarket.candidates.all { it.crossMarketConditionalEvidence == null })
+        assertFalse(withOtherMarket.activeEvidenceLayers.contains("Same-date cross-market conditional"))
     }
 
     @Test fun backtestReportsTopKAndBaselineWithoutFutureLeakage() {

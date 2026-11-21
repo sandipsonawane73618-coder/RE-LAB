@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -467,7 +470,9 @@ private fun RelabHome(
     var frozenPredictionSnapshots by remember { mutableStateOf(initialPredictionSnapshots) }
     var frozenPredictionOutcomes by remember { mutableStateOf(initialPredictionOutcomes) }
     var importMessage by remember { mutableStateOf<String?>(null) }
-    var chartUrl by remember { mutableStateOf("") }
+    var selectedChartMarket by remember { mutableStateOf(com.relab.core.Market.SRIDEVI) }
+    var chartMarketMenuExpanded by remember { mutableStateOf(false) }
+    var chartUrl by remember { mutableStateOf(canonicalChartUrl(com.relab.core.Market.SRIDEVI)) }
     var linkBusy by remember { mutableStateOf(false) }
 
     // Canonical chart fetching is explicit. Startup must never perform nine network requests.
@@ -1618,6 +1623,26 @@ private fun RelabHome(
                     }) { Text("›") }
                 }
                 dateError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                Box {
+                    OutlinedButton(onClick = { chartMarketMenuExpanded = true }) {
+                        Text("Fill chart link · ${chartMarketLabel(selectedChartMarket)}")
+                    }
+                    DropdownMenu(
+                        expanded = chartMarketMenuExpanded,
+                        onDismissRequest = { chartMarketMenuExpanded = false }
+                    ) {
+                        com.relab.core.Market.entries.forEach { market ->
+                            DropdownMenuItem(
+                                text = { Text(chartMarketLabel(market)) },
+                                onClick = {
+                                    selectedChartMarket = market
+                                    chartUrl = canonicalChartUrl(market)
+                                    chartMarketMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = chartUrl,
                     onValueChange = { chartUrl = it },
@@ -1794,19 +1819,8 @@ private fun MarketPredictionSheet(
                     Text("RESULT vs PREDICTION", style = MaterialTheme.typography.labelLarge)
                     PredictionTableRow("Actual result", actualResult, true)
                     PredictionTableRow("Top prediction", predictedResult, false, true)
-                    outcomeAudit?.let { audit ->
-                        Text(
-                            "OPEN ${exactStatus(audit.open)} · JODI ${exactStatus(audit.jodi)} · CLOSE ${exactStatus(audit.close)}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        val openFamily = open.any { familyKey(it.panna) == familyKey(actualParts[0]) }
-                        val closeFamily = close.any { familyKey(it.panna) == familyKey(actualParts[2]) }
-                        val jodiFamily = jodiCandidates.any { familyKey(it.jodi) == familyKey(actualParts[1]) }
-                        Text(
-                            "Family-only diagnostics · Open ${if (openFamily) "match" else "—"} · Jodi ${if (jodiFamily) "match" else "—"} · Close ${if (closeFamily) "match" else "—"}",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    } ?: Text("Comparing result with frozen prediction…", style = MaterialTheme.typography.labelSmall)
+                    // Detailed rank/family diagnostics remain in the backend audit.
+                    // Keep the home screen focused on actual result vs prediction.
                 } else {
                     publishedValues.forEach { PredictionTableRow("Published result", it, true) }
                     Text("Conflicting published values are not scored until reconciled.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
@@ -2244,6 +2258,22 @@ private fun CandidateResearchCard(
             }
         }
     }
+}
+
+private fun chartMarketLabel(market: com.relab.core.Market): String =
+    market.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+
+private fun canonicalChartUrl(market: com.relab.core.Market): String = when (market.name) {
+    "SRIDEVI" -> "https://sattamatkajodi.com/record/sridevi-satta-penal-chart.php"
+    "SRIDEVI_NIGHT" -> "https://sattamatkajodi.com/record/sridevi-night-satta-penal-chart.php"
+    "KALYAN" -> "https://sattamatkajodi.com/record/kalyan-penal-chart.php"
+    "MAIN_BAZAR" -> "https://sattamatkajodi.com/main-bazar-panel-chart.php"
+    "TIME_BAZAR" -> "https://sattamatkajodi.com/time-bazar-panel-chart.php"
+    "MILAN_DAY" -> "https://sattamatkajodi.com/record/milan-day-penal-chart.php"
+    "MILAN_NIGHT" -> "https://sattamatkajodi.com/record/milan-night-penal-chart.php"
+    "RAJDHANI_DAY" -> "https://sattamatkajodi.com/record/rajdhani-day-penal-chart.php"
+    "RAJDHANI_NIGHT" -> "https://sattamatkajodi.com/record/rajdhani-night-penal-chart.php"
+    else -> ""
 }
 
 /** Fetches all nine enabled markets in order and persists each successful page immediately. */

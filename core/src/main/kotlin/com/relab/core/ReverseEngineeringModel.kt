@@ -106,7 +106,8 @@ object ReverseEngineeringModel {
         knownOpenPanna: String? = null,
         limit: Int = 10,
         minimumHistory: Int = 30,
-        smoothingAlpha: Double = 1.0
+        smoothingAlpha: Double = 1.0,
+        includeCrossMarketEvidence: Boolean = false
     ): ReverseEngineeringRanking {
         require(market in enabledMarkets) { "Market is not enabled for reverse-engineering" }
         require(sessionId.isNotBlank()) { "Session ID is required" }
@@ -166,7 +167,8 @@ object ReverseEngineeringModel {
                 .map { it.second }.groupingBy { it }.eachCount()
         } else emptyMap()
 
-        val crossSignals = ReverseEngineeringModel.enabledMarkets.asSequence()
+        val crossSignals = if (!includeCrossMarketEvidence) emptyList() else
+            ReverseEngineeringModel.enabledMarkets.asSequence()
             .filter { it != market }
             .mapNotNull { sourceMarket ->
                 val sourceRows = validRows.filter { it.market == sourceMarket }.associateBy { it.date }

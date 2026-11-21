@@ -50,6 +50,31 @@ class PredictionSelfLearningEngineTest {
     }
 
     @Test
+    fun keepsOpenCloseAndJodiFamilyMovementInTheirOwnChannels() {
+        val snap = snapshot(Market.SRIDEVI, "main")
+        val outcome = PredictionSnapshotOutcome(
+            snap.snapshotKey, "111-36-222",
+            Instant.parse("2026-01-02T12:00:00Z"), "PUBLISHED"
+        )
+        val frozenAudit = FrozenSangamOutcomeAuditor.analyze(
+            snap, outcome,
+            openCandidates = listOf(candidate("666", 90.0)),
+            closeCandidates = listOf(candidate("777", 90.0)),
+            pairLimit = 100,
+            jodiCandidates = listOf(ReverseEngineeringJodiCandidate("81", 90.0, 1))
+        )
+        val feedback = PredictionSelfLearningEngine.analyze(listOf(frozenAudit)).single()
+
+        assertEquals(0, feedback.openExactHits)
+        assertEquals(1, feedback.openFamilyMovementHits)
+        assertEquals(0, feedback.closeExactHits)
+        assertEquals(1, feedback.closeFamilyMovementHits)
+        assertEquals(0, feedback.jodiExactHits)
+        assertEquals(1, feedback.jodiFamilyMovementOnlyHits)
+        assertEquals(0, feedback.reciprocalOpenCloseSwapHints)
+    }
+
+    @Test
     fun keepsFeedbackSeparateByMarketAndSession() {
         val reports = PredictionSelfLearningEngine.analyze(
             listOf(
