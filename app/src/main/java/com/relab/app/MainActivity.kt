@@ -42,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import com.relab.core.ObservationStatus
 import com.relab.core.CoverageReport
@@ -526,6 +527,10 @@ private fun RelabHome(
             }
             analysisSnapshot = computed
             analysisCompletedFor = rows
+        } catch (cancelled: CancellationException) {
+            // LaunchedEffect is expected to cancel when its inputs change or the screen leaves.
+            // Cancellation is lifecycle control, not an analysis failure; never surface it as an error.
+            throw cancelled
         } catch (error: Exception) {
             analysisError = error.message ?: "Unknown analysis error"
             analysisCompletedFor = rows
@@ -584,11 +589,15 @@ private fun RelabHome(
                 )
             }
             coverageCompletedFor = cacheKey
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             coverageReports = emptyList()
             coverageError = error.message ?: "Unknown coverage audit error"
         } finally {
-            coverageLoading = false
+            // Only the still-active effect owns this state; a cancelled effect must not
+            // overwrite the loading state of a newer analysis generation.
+            if (currentCoroutineContext().isActive) coverageLoading = false
         }
     }
 
@@ -657,11 +666,15 @@ private fun RelabHome(
                 com.relab.core.ReverseEngineeringCsvExporter.exportAll(
                     emptyList(), listOf(reports.first, reports.second), emptyList()
                 )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             reverseBacktestError = error.message ?: "Unknown walk-forward validation error"
         } finally {
-            reverseBacktestBusyKey = null
-            reverseBacktestRequest = null
+            if (currentCoroutineContext().isActive) {
+                reverseBacktestBusyKey = null
+                reverseBacktestRequest = null
+            }
         }
     }
 
