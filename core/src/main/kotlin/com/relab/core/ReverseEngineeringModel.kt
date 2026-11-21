@@ -298,7 +298,7 @@ object ReverseEngineeringModel {
             if (weekdayRows.isNotEmpty()) add("Target weekday")
             if (history.size >= 2) add("Previous-state transition")
             if (openCloseCounts.isNotEmpty()) add("Known open-to-close conditional")
-            if (crossSignals.isNotEmpty()) add("Lagged cross-market conditional")
+            if (crossSignals.isNotEmpty()) add("Same-date cross-market conditional")
         }
 
         val ranked = candidates.map { candidate ->
