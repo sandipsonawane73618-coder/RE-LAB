@@ -118,7 +118,7 @@ class ReverseEngineeringModelTest {
             ReverseEngineeringSide.OPEN, minimumHistory = 30,
             includeCrossMarketEvidence = true
         )
-        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional")
+        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
         assertEquals("166", result.candidates.first().panna)
     }
 
@@ -133,7 +133,7 @@ class ReverseEngineeringModelTest {
             includeCrossMarketEvidence = true
         )
 
-        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional")
+        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
         assertTrue(result.candidates.all { it.crossMarketConditionalEvidence == null })
     }
 
