@@ -33,7 +33,7 @@ class SangamWalkForwardEvaluatorTest {
     fun excludesTargetAndFutureRowsFromEvaluationWindow() {
         val records = (1..35).map(::row) + row(40)
         val report = SangamWalkForwardEvaluator.evaluate(
-            records, LocalDate.of(2026, 3, 1), minimumHistory = 30
+            records, LocalDate.of(2026, 1, 1).plusDays(40), minimumHistory = 30
         ).single()
         assertEquals(35, report.requestedTargets)
         assertEquals(5, report.evaluatedTargets)
