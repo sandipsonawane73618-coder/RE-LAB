@@ -55,6 +55,62 @@ data class EndToEndResearchAuditReport(
  * to consensus. Each target is evaluated with strictly earlier rows only.
  */
 object EndToEndResearchAuditWorkflow {
+    /**
+     * Deterministic-first entry point: build scanner rankings directly from the
+     * reconciled chart records, then run evidence analysis and walk-forward tests.
+     * AI proposals are optional enrichment; an empty list is a valid normal run.
+     */
+    fun runDeterministic(
+        records: List<ChartRecord>,
+        targetDateExclusive: LocalDate,
+        proposals: List<ResearchPatternProposal> = emptyList(),
+        minimumEvaluations: Int = 20,
+        minimumLift: Double = 0.05,
+        minimumScannerHistory: Int = 30,
+        minimumModelHistory: Int = 30,
+        candidateLimit: Int = 10,
+        sourceQuality: ChartBuildReport? = null,
+        sourceObservationCount: Int = 0
+    ): EndToEndResearchAuditReport {
+        require(minimumScannerHistory >= 1) { "Minimum scanner history must be positive" }
+        require(candidateLimit in 1..100) { "Candidate limit must be 1..100" }
+
+        val eligibleIdentities = records.asSequence()
+            .filter { it.date.isBefore(targetDateExclusive) }
+            .filter { ChartMath.validate(it) is ValidationResult.Valid }
+            .map { it.market to it.sessionId }
+            .distinct()
+            .sortedWith(compareBy<Pair<Market, String>>({ it.first.name }, { it.second }))
+            .toList()
+
+        val scannerRankings = eligibleIdentities.flatMap { (market, sessionId) ->
+            listOf(ReverseEngineeringSide.OPEN, ReverseEngineeringSide.CLOSE).map { side ->
+                ReverseEngineeringModel.rank(
+                    records = records,
+                    market = market,
+                    sessionId = sessionId,
+                    targetDate = targetDateExclusive,
+                    side = side,
+                    limit = candidateLimit,
+                    minimumHistory = minimumScannerHistory
+                )
+            }
+        }
+
+        return run(
+            records = records,
+            scannerRankings = scannerRankings,
+            proposals = proposals,
+            targetDateExclusive = targetDateExclusive,
+            minimumEvaluations = minimumEvaluations,
+            minimumLift = minimumLift,
+            minimumModelHistory = minimumModelHistory,
+            candidateLimit = candidateLimit,
+            sourceQuality = sourceQuality,
+            sourceObservationCount = sourceObservationCount
+        )
+    }
+
     fun run(
         records: List<ChartRecord>,
         scannerRankings: List<ReverseEngineeringRanking>,
