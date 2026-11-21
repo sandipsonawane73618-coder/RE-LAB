@@ -208,7 +208,8 @@ private data class DashboardAnalysisSnapshot(
 private data class DashboardAnalysisCacheEntry(
     val cacheKey: String,
     val snapshot: DashboardAnalysisSnapshot,
-    val coverageReports: List<com.relab.core.CoverageReport>
+    val coverageReports: List<com.relab.core.CoverageReport>,
+    val marketCacheKeys: Map<String, String> = emptyMap()
 )
 
 private object DashboardAnalysisCache {
@@ -244,16 +245,34 @@ private object DashboardAnalysisCache {
             .joinToString("") { "%02x".format(it) }
     }
 
-    fun read(context: android.content.Context, expectedKey: String): DashboardAnalysisCacheEntry? {
+    fun read(context: android.content.Context, expectedKey: String): DashboardAnalysisCacheEntry? =
+        readLatest(context)?.takeIf { it.cacheKey == expectedKey }
+
+    fun readLatest(context: android.content.Context): DashboardAnalysisCacheEntry? {
         val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
         if (!file.isFile) return null
         return try {
             gson.fromJson(file.readText(Charsets.UTF_8), DashboardAnalysisCacheEntry::class.java)
-                ?.takeIf { it.cacheKey == expectedKey }
         } catch (_: Exception) {
             null
         }
     }
+
+    fun marketKeys(
+        observations: List<com.relab.core.SourceObservation>,
+        targetDate: LocalDate
+    ): Map<String, String> = observations
+        .filter { it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets }
+        .groupBy { it.market to it.sessionId }
+        .map { (identity, rows) ->
+            val identityKey = "${identity.first.name}|${identity.second}"
+            val input = "dashboard-market-analysis-v1|$targetDate|$identityKey|${SourceCsvExporter.export(rows)}"
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(input.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            identityKey to digest
+        }
+        .toMap()
 
     fun write(context: android.content.Context, entry: DashboardAnalysisCacheEntry) {
         val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
@@ -266,7 +285,9 @@ private object DashboardAnalysisCache {
 
 private fun buildDashboardAnalysisSnapshot(
     observations: List<com.relab.core.SourceObservation>,
-    targetDate: LocalDate = LocalDate.now()
+    targetDate: LocalDate = LocalDate.now(),
+    previousEntry: DashboardAnalysisCacheEntry? = null,
+    marketCacheKeys: Map<String, String> = DashboardAnalysisCache.marketKeys(observations, targetDate)
 ): DashboardAnalysisSnapshot {
     val activeObservations = observations.filter {
         it.market in com.relab.core.ReverseEngineeringModel.enabledMarkets
@@ -288,39 +309,65 @@ private fun buildDashboardAnalysisSnapshot(
     val marketSessions = researchRecords.map { it.market to it.sessionId }.distinct()
         .sortedWith(compareBy({ it.first.name }, { it.second }))
     val candidateSets = marketSessions.map { (market, sessionId) ->
-        val open = com.relab.core.CandidateRankingEngine.rank(
-            activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.OPEN,
-            limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
-            prebuiltRecords = researchRecords
-        )
-        val close = com.relab.core.CandidateRankingEngine.rank(
-            activeObservations, market, sessionId, targetDate, com.relab.core.PannaSide.CLOSE,
-            limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
-            prebuiltRecords = researchRecords
-        )
-        Triple(open, close, com.relab.core.CandidateRankingEngine.deriveJodiCandidates(open.candidates, close.candidates, 10))
+        val identityKey = "${market.name}|$sessionId"
+        val reusable = previousEntry?.takeIf {
+            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+        }?.snapshot?.candidateSets?.firstOrNull {
+            it.first.market == market && it.first.sessionId == sessionId
+        }
+        reusable ?: run {
+            val marketRecords = researchRecords.filter { it.market == market && it.sessionId == sessionId }
+            val marketObservations = activeObservations.filter { it.market == market && it.sessionId == sessionId }
+            val open = com.relab.core.CandidateRankingEngine.rank(
+                marketObservations, market, sessionId, targetDate, com.relab.core.PannaSide.OPEN,
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+                prebuiltRecords = marketRecords
+            )
+            val close = com.relab.core.CandidateRankingEngine.rank(
+                marketObservations, market, sessionId, targetDate, com.relab.core.PannaSide.CLOSE,
+                limit = 10, minimumHistory = 5, allowSingleSourceExploration = true,
+                prebuiltRecords = marketRecords
+            )
+            Triple(open, close, com.relab.core.CandidateRankingEngine.deriveJodiCandidates(open.candidates, close.candidates, 10))
+        }
     }
 
     val reverseModelSets = marketSessions.map { (market, sessionId) ->
-        val open = com.relab.core.ReverseEngineeringModel.rank(
-            researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.OPEN,
-            limit = 100, minimumHistory = 30
-        )
-        val close = com.relab.core.ReverseEngineeringModel.rank(
-            researchRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
-            limit = 10, minimumHistory = 30
-        )
-        ReverseModelDashboardSet(
-            market, sessionId, open, close,
-            com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10)
-        )
+        val identityKey = "${market.name}|$sessionId"
+        val reusable = previousEntry?.takeIf {
+            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+        }?.snapshot?.reverseModelSets?.firstOrNull {
+            it.market == market && it.sessionId == sessionId
+        }
+        reusable ?: run {
+            val marketRecords = researchRecords.filter { it.market == market && it.sessionId == sessionId }
+            val open = com.relab.core.ReverseEngineeringModel.rank(
+                marketRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.OPEN,
+                limit = 100, minimumHistory = 30
+            )
+            val close = com.relab.core.ReverseEngineeringModel.rank(
+                marketRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
+                limit = 10, minimumHistory = 30
+            )
+            ReverseModelDashboardSet(
+                market, sessionId, open, close,
+                com.relab.core.ReverseEngineeringModel.deriveJodiCandidates(open.candidates, close.candidates, 10)
+            )
+        }
     }
 
     val patternEvidenceSets = marketSessions.map { (market, sessionId) ->
-        PatternEvidenceDashboardSet(
+        val identityKey = "${market.name}|$sessionId"
+        val reusable = previousEntry?.takeIf {
+            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+        }?.snapshot?.patternEvidenceSets?.firstOrNull {
+            it.market == market && it.sessionId == sessionId
+        }
+        reusable ?: PatternEvidenceDashboardSet(
             market, sessionId,
             com.relab.core.ReverseEngineeringModel.rankPatternEvidence(
-                researchRecords, market, sessionId, targetDate,
+                researchRecords.filter { it.market == market && it.sessionId == sessionId },
+                market, sessionId, targetDate,
                 windowLengths = 2..5, minimumEvaluations = 5, recentOccurrenceWindow = 20
             ).take(5)
         )
@@ -445,8 +492,14 @@ private fun RelabHome(
         coverageLoading = true
         coverageError = null
         try {
+            val previousEntry = withContext(Dispatchers.IO) {
+                DashboardAnalysisCache.readLatest(context)
+            }
+            val marketKeys = withContext(Dispatchers.Default) {
+                DashboardAnalysisCache.marketKeys(rows, selectedDate)
+            }
             val computed = withContext(Dispatchers.Default) {
-                buildDashboardAnalysisSnapshot(rows, selectedDate)
+                buildDashboardAnalysisSnapshot(rows, selectedDate, previousEntry, marketKeys)
             }
             analysisSnapshot = computed
             analysisCompletedFor = rows
@@ -501,7 +554,10 @@ private fun RelabHome(
             withContext(Dispatchers.IO) {
                 DashboardAnalysisCache.write(
                     context,
-                    DashboardAnalysisCacheEntry(cacheKey, completedSnapshot, computed)
+                    DashboardAnalysisCacheEntry(
+                        cacheKey, completedSnapshot, computed,
+                        DashboardAnalysisCache.marketKeys(rowsForCache, selectedDate)
+                    )
                 )
             }
             coverageCompletedFor = cacheKey
