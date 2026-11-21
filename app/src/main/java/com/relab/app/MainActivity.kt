@@ -537,19 +537,24 @@ private fun RelabHome(
             val computed = withContext(Dispatchers.Default) {
                 buildDashboardAnalysisSnapshot(rows, selectedDate, previousEntry, marketKeys)
             }
+            analysisSnapshot = computed
+            analysisCompletedFor = rows
             // Persist the expensive market-analysis snapshot before the separate
             // coverage audit starts. If Android closes the app during coverage,
             // the next launch restores this snapshot instead of rebuilding markets.
-            withContext(Dispatchers.IO) {
-                DashboardAnalysisCache.write(
-                    context,
-                    DashboardAnalysisCacheEntry(
-                        cacheKey, computed, emptyList(), marketKeys, coverageComplete = false
+            try {
+                withContext(Dispatchers.IO) {
+                    DashboardAnalysisCache.write(
+                        context,
+                        DashboardAnalysisCacheEntry(
+                            cacheKey, computed, emptyList(), marketKeys, coverageComplete = false
+                        )
                     )
-                )
+                }
+            } catch (cacheError: Exception) {
+                // A cache write failure must not turn a successful analysis into a failure.
+                android.util.Log.w("RE-LAB", "Could not persist dashboard analysis cache", cacheError)
             }
-            analysisSnapshot = computed
-            analysisCompletedFor = rows
         } catch (cancelled: CancellationException) {
             // LaunchedEffect is expected to cancel when its inputs change or the screen leaves.
             // Cancellation is lifecycle control, not an analysis failure; never surface it as an error.
