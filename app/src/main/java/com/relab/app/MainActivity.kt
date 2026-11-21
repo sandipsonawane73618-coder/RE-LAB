@@ -670,14 +670,17 @@ private fun RelabHome(
                     onClick = {
                         scope.launch {
                             val contextSummary = withContext(Dispatchers.Default) {
-                                val aiScannerRankings = researchRecords
+                                // Keep the scanner evidence sent to AI on the same
+                                // multi-source consensus basis used by independent backtesting.
+                                val consensusRecords = com.relab.core.ReconciledChartBuilder.build(activeObservations).records
+                                val aiScannerRankings = consensusRecords
                                     .filter { it.date.isBefore(selectedDate) }
                                     .map { it.market to it.sessionId }
                                     .distinct()
                                     .flatMap { (market, sessionId) ->
                                         listOf(com.relab.core.ReverseEngineeringSide.OPEN, com.relab.core.ReverseEngineeringSide.CLOSE).map { side ->
                                             com.relab.core.ReverseEngineeringModel.rank(
-                                                researchRecords, market, sessionId, selectedDate, side,
+                                                consensusRecords, market, sessionId, selectedDate, side,
                                                 limit = 5, minimumHistory = 30
                                             )
                                         }
