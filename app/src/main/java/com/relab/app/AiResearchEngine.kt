@@ -113,7 +113,7 @@ class AiResearchEngine internal constructor(
         val parts = JsonArray().apply { add(part) }
         val content = JsonObject().apply { addProperty("role", "user"); add("parts", parts) }
         val contents = JsonArray().apply { add(content) }
-        val generationConfig = JsonObject().apply { addProperty("temperature", 0.2); addProperty("maxOutputTokens", 1400) }
+        val generationConfig = JsonObject().apply { addProperty("maxOutputTokens", 1400) }
         val body = JsonObject().apply { add("contents", contents); add("generationConfig", generationConfig) }
         val json = JsonParser.parseString(postRequest(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
