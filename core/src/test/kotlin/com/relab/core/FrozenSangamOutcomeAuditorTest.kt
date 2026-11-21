@@ -64,6 +64,24 @@ class FrozenSangamOutcomeAuditorTest {
     }
 
     @Test
+    fun recordsReciprocalOpenCloseSwapAndJodiFamilyMovementSeparately() {
+        val report = FrozenSangamOutcomeAuditor.analyze(
+            snapshot(), outcome(),
+            openCandidates = listOf(candidate("222", 90.0), candidate("345", 70.0)),
+            closeCandidates = listOf(candidate("111", 90.0), candidate("456", 70.0)),
+            pairLimit = 100,
+            jodiCandidates = listOf(ReverseEngineeringJodiCandidate("81", 90.0, 1))
+        )
+
+        assertNull(report.openPannaAudit.exactRank)
+        assertNull(report.closePannaAudit.exactRank)
+        assertEquals(1, report.actualOpenRankInCloseCandidates)
+        assertEquals(1, report.actualCloseRankInOpenCandidates)
+        assertNull(report.jodiExactRank)
+        assertEquals(1, report.jodiFamilyMovementRank)
+    }
+
+    @Test
     fun rejectsOutcomeForDifferentSnapshot() {
         try {
             FrozenSangamOutcomeAuditor.analyze(
