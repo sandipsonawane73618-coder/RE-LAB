@@ -773,6 +773,28 @@ private fun RelabHome(
         )
     }
 
+    var consensusWalkForwardReport by remember {
+        mutableStateOf<com.relab.core.ConsensusWalkForwardValidationReport?>(null)
+    }
+    var consensusWalkForwardError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(activeObservations) {
+        consensusWalkForwardReport = null
+        consensusWalkForwardError = null
+        try {
+            consensusWalkForwardReport = withContext(Dispatchers.Default) {
+                com.relab.core.ConsensusWalkForwardValidator.evaluate(
+                    activeObservations,
+                    targetDateExclusive = LocalDate.now(),
+                    minimumHistory = 30
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            consensusWalkForwardError = error.message ?: "Historical validation failed"
+        }
+    }
+
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
@@ -1063,6 +1085,28 @@ private fun RelabHome(
                                 )
                             }
                             Text("Family and positional near-hit rates are diagnostic only, not exact hits or winning probabilities. No calibration claim is made.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Historical Consensus Walk-Forward Benchmark", style = MaterialTheme.typography.titleMedium)
+                        Text("Independent chronological benchmark from reconciled chart history. Only multi-publisher consensus rows are scored; each target uses earlier dates only.", style = MaterialTheme.typography.bodySmall)
+                        when {
+                            consensusWalkForwardError != null -> Text("Validation error: $consensusWalkForwardError", color = MaterialTheme.colorScheme.error)
+                            consensusWalkForwardReport == null -> Text("Calculating historical benchmark…", style = MaterialTheme.typography.bodySmall)
+                            else -> {
+                                val report = consensusWalkForwardReport!!
+                                Text("Cutoff before ${report.targetDateExclusive} · Minimum prior history: ${report.minimumHistory}", style = MaterialTheme.typography.labelSmall)
+                                Text("Consensus rows: ${report.consensusRecordCount} · Evaluated: ${report.evaluatedTargets}/${report.requestedTargets} · Abstained: ${report.abstainedTargets}", style = MaterialTheme.typography.bodySmall)
+                                Text("Excluded from scoring — conflicts: ${report.conflictGroupCount} · Single-source: ${report.singleSourceUnverifiedGroupCount} · No result: ${report.noPublishedResultGroupCount} · Invalid: ${report.invalidGroupCount}", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "Sangam exact Top 10: ${report.exactPairTop10Hits}/${report.evaluatedTargets} (${report.rate(report.exactPairTop10Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"}) · Top 100: ${report.exactPairTop100Hits}/${report.evaluatedTargets}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text("Open family Top 10: ${report.openFamilyTop10Hits}/${report.evaluatedTargets} · Close family Top 10: ${report.closeFamilyTop10Hits}/${report.evaluatedTargets} · Jodi diagnostic: ${report.jodiDiagnosticMatches}/${report.evaluatedTargets}", style = MaterialTheme.typography.bodySmall)
+                                Text("Compare this historical benchmark separately from the frozen-snapshot scorecard above; cohorts differ. Family/Jodi diagnostics are not exact hits or winning probabilities.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
