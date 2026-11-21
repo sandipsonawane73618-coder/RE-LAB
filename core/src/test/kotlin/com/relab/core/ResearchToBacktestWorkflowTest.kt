@@ -287,11 +287,11 @@ class ResearchToBacktestWorkflowTest {
         val rows = repeatedRows()
         val valid = ResearchPatternProposal(
             "csv-valid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "111>222",
-            rationale = "sequence, with \\"quoted\\" evidence"
+            rationale = "sequence, with \"quoted\" evidence"
         )
         val invalid = ResearchPatternProposal(
             "csv-invalid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "bad",
-            rationale = "invalid, \\"quoted\\" proposal"
+            rationale = "invalid, \"quoted\" proposal"
         )
         val report = ResearchToBacktestWorkflow.run(
             records = rows,
@@ -306,7 +306,7 @@ class ResearchToBacktestWorkflowTest {
         csvRows.drop(1).forEach { line ->
             assertEquals(header.size, csvColumns(line).size)
         }
-        assertTrue(csvRows.any { it.contains("\\"sequence, with \\"\\"quoted\\"\\" evidence\\"") })
+        assertTrue(csvRows.any { it.contains("\"sequence, with \"\"quoted\"\" evidence\"") })
     }
 
 
