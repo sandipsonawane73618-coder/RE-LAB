@@ -25,6 +25,9 @@ data class ProposedPatternBacktest(
     val hits: Int,
     val misses: Int,
     val baselineHits: Int,
+    val patternOnlyHits: Int,
+    val baselineOnlyHits: Int,
+    val pairedExactPValue: Double?,
     val hitRate: Double?,
     val baselineHitRate: Double?,
     val lift: Double?,
@@ -89,6 +92,8 @@ object ProposedPatternBacktester {
         var evaluated = 0
         var hits = 0
         var baselineHits = 0
+        var patternOnlyHits = 0
+        var baselineOnlyHits = 0
         rows.forEachIndexed { index, row ->
             val actual = normalize(value(row))
             if (index >= tokens.size) {
@@ -99,8 +104,12 @@ object ProposedPatternBacktester {
                         val prediction = mode(matchedOutcomes)
                         val baselinePrediction = mode(history)
                         evaluated++
-                        if (prediction == actual) hits++
-                        if (baselinePrediction == actual) baselineHits++
+                        val patternCorrect = prediction == actual
+                        val baselineCorrect = baselinePrediction == actual
+                        if (patternCorrect) hits++
+                        if (baselineCorrect) baselineHits++
+                        if (patternCorrect && !baselineCorrect) patternOnlyHits++
+                        if (!patternCorrect && baselineCorrect) baselineOnlyHits++
                     }
                 }
             }
@@ -136,6 +145,9 @@ object ProposedPatternBacktester {
             hits = hits,
             misses = misses,
             baselineHits = baselineHits,
+            patternOnlyHits = patternOnlyHits,
+            baselineOnlyHits = baselineOnlyHits,
+            pairedExactPValue = pairedExactBinomialPValue(patternOnlyHits, baselineOnlyHits),
             hitRate = hitRate,
             baselineHitRate = baselineRate,
             lift = if (hitRate != null && baselineRate != null) hitRate - baselineRate else null,
@@ -150,6 +162,20 @@ object ProposedPatternBacktester {
     private fun mode(values: List<String>): String = values.groupingBy { it }.eachCount()
         .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .first().key
+
+    /** Two-sided exact binomial test on discordant paired predictions. */
+    private fun pairedExactBinomialPValue(patternWins: Int, baselineWins: Int): Double? {
+        val discordant = patternWins + baselineWins
+        if (discordant == 0) return null
+        val smaller = minOf(patternWins, baselineWins)
+        val weights = DoubleArray(discordant + 1)
+        val center = discordant / 2
+        weights[center] = 1.0
+        for (k in center downTo 1) weights[k - 1] = weights[k] * k / (discordant - k + 1)
+        for (k in center until discordant) weights[k + 1] = weights[k] * (discordant - k) / (k + 1)
+        val tail = (0..smaller).sumOf { weights[it] } / weights.sum()
+        return (2.0 * tail).coerceAtMost(1.0)
+    }
 
     /** Two-sided 95% Wilson interval for a binomial proportion. */
     private fun wilson(successes: Int, trials: Int): Pair<Double, Double> {
@@ -204,7 +230,7 @@ data class ResearchToBacktestReport(
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id }).forEach { result ->
             val proposal = result.proposal
-            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
+            appendLine("${result.status} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)} | pairedWins=${result.patternOnlyHits} | baselineOnlyWins=${result.baselineOnlyHits} | pairedExactP=${rate(result.pairedExactPValue)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
         }
         appendLine("Verification is historical evidence only, not a guarantee or calibrated future probability.")
     }
@@ -283,7 +309,7 @@ object ResearchToBacktestCsvExporter {
         val header = listOf(
             "proposal_id", "source", "market", "session", "channel", "pattern", "outcome_mode",
             "support_occurrences", "evaluated_occurrences", "abstained_occurrences", "hits", "misses",
-            "baseline_hits", "hit_rate", "baseline_hit_rate", "lift", "wilson_lower_95",
+            "baseline_hits", "pattern_only_hits", "baseline_only_hits", "paired_exact_p_value", "hit_rate", "baseline_hit_rate", "lift", "wilson_lower_95",
             "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "rejection_reason", "rationale"
         )
         val rows = report.assessments.map { result ->
@@ -292,7 +318,7 @@ object ResearchToBacktestCsvExporter {
                 p.id, p.source, p.market.name, p.sessionId, p.channel.name, p.pattern, p.outcomeMode.name,
                 result.supportOccurrences.toString(), result.evaluatedOccurrences.toString(),
                 result.abstainedOccurrences.toString(), result.hits.toString(), result.misses.toString(),
-                result.baselineHits.toString(), result.hitRate.csvRate(), result.baselineHitRate.csvRate(),
+                result.baselineHits.toString(), result.patternOnlyHits.toString(), result.baselineOnlyHits.toString(), result.pairedExactPValue.csvRate(), result.hitRate.csvRate(), result.baselineHitRate.csvRate(),
                 result.lift.csvRate(), result.wilsonLowerBound.csvRate(), result.wilsonUpperBound.csvRate(),
                 result.baselineWilsonLowerBound.csvRate(), result.baselineWilsonUpperBound.csvRate(),
                 result.status.name, result.rejectionReason.orEmpty(), p.rationale
