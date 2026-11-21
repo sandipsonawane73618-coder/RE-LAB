@@ -43,7 +43,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import com.relab.core.ReverseEngineeringModel
 import com.relab.core.ReverseEngineeringSide
-import com.relab.core.ResearchToBacktestWorkflow
+import com.relab.core.EndToEndResearchAuditWorkflow
 import com.relab.core.ResearchToBacktestCsvExporter
 
 class AiResearchActivity : ComponentActivity() {
@@ -80,6 +80,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
     var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
     var backtestReport by remember { mutableStateOf<String?>(null) }
     var backtestCsv by remember { mutableStateOf<String?>(null) }
+    var walkForwardCsv by remember { mutableStateOf<String?>(null) }
     val csvExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
@@ -95,6 +96,25 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     status = "Backtest CSV exported successfully."
                 } catch (error: Exception) {
                     status = "CSV export failed: " + (error.message ?: "unknown error")
+                }
+            }
+        }
+    }
+    val walkForwardCsvExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            val csv = walkForwardCsv.orEmpty()
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(csv.toByteArray(Charsets.UTF_8))
+                        } ?: error("Could not open the selected destination")
+                    }
+                    status = "Multi-model walk-forward CSV exported successfully."
+                } catch (error: Exception) {
+                    status = "Walk-forward CSV export failed: " + (error.message ?: "unknown error")
                 }
             }
         }
@@ -190,7 +210,8 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             busy = true
             backtestReport = null
             backtestCsv = null
-            status = "Extracting structured AI proposals and running chronological backtests…"
+            walkForwardCsv = null
+            status = "Extracting AI proposals and running the complete chronological research audit…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
                 val report = withContext(Dispatchers.IO) {
@@ -205,10 +226,18 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                             ReverseEngineeringModel.rank(records, market, session, targetDate, side, limit = 10, minimumHistory = 30)
                         }
                     }
-                    ResearchToBacktestWorkflow.run(records, scannerRankings, parsed.proposals, targetDate)
+                    EndToEndResearchAuditWorkflow.run(
+                        records = records,
+                        scannerRankings = scannerRankings,
+                        proposals = parsed.proposals,
+                        targetDateExclusive = targetDate,
+                        minimumModelHistory = 30,
+                        candidateLimit = 10
+                    )
                 }
                 backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
-                backtestCsv = ResearchToBacktestCsvExporter.export(report)
+                backtestCsv = ResearchToBacktestCsvExporter.export(report.research)
+                walkForwardCsv = EndToEndResearchAuditWorkflow.exportWalkForwardCsv(report)
                 status = if (parsed.proposals.isEmpty()) {
                     "Research report completed; AI supplied no executable patterns. Scanner and Pattern Evidence DB results are still available. " +
                         parsed.issues.joinToString("; ")
@@ -338,9 +367,16 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                                     if (!backtestCsv.isNullOrBlank()) {
                                         OutlinedButton(
                                             enabled = !busy,
-                                            onClick = { csvExportLauncher.launch("relab-backtest-" + targetDate + ".csv") },
+                                            onClick = { csvExportLauncher.launch("relab-research-verification-" + targetDate + ".csv") },
                                             modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Export verification CSV") }
+                                        ) { Text("Export research verification CSV") }
+                                    }
+                                    if (!walkForwardCsv.isNullOrBlank()) {
+                                        OutlinedButton(
+                                            enabled = !busy,
+                                            onClick = { walkForwardCsvExportLauncher.launch("relab-multi-model-walk-forward-" + targetDate + ".csv") },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Export multi-model walk-forward CSV") }
                                     }
                                 }
                             }
