@@ -47,6 +47,8 @@ class CrossMarketLeadLagWalkForwardEvaluatorTest {
         assertTrue(report.confidence95Lower!! < report.hitRate!!)
         assertTrue(report.confidence95Upper!! >= report.hitRate!!)
         assertEquals(3, report.distinctSourceCount)
+        assertEquals(3, report.distinctSourceObservationCount)
+        assertEquals(CrossMarketEvidenceLevel.LOW_SAMPLE, report.evidenceLevel)
     }
 
     @Test fun sameDayFutureAndStaleSourcesCannotCreatePredictions() {
