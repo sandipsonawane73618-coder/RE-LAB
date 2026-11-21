@@ -6,6 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.relab.core.Market
 import com.relab.core.ObservationStatus
+import com.relab.core.PredictionSnapshot
+import com.relab.core.PredictionSnapshotOutcome
 import com.relab.core.SourceObservation
 import com.relab.core.SourceObservationMerger
 import java.time.Instant
@@ -44,6 +46,7 @@ class LocalObservationDatabase(context: Context) :
             "CREATE INDEX idx_observations_market_session_date " +
                 "ON $TABLE_OBSERVATIONS(market, session_id, chart_date)"
         )
+        createPredictionTables(db)
         db.execSQL(
             """
             CREATE TABLE $TABLE_METADATA (
@@ -57,7 +60,77 @@ class LocalObservationDatabase(context: Context) :
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Schema changes must be additive. Never silently discard a user's history.
         if (oldVersion < 2) {
-            // Reserved for the next additive schema migration.
+            createPredictionTables(db)
+        }
+    }
+
+    private fun createPredictionTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_PREDICTION_SNAPSHOTS (
+                snapshot_key TEXT PRIMARY KEY NOT NULL,
+                market TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                target_date TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                history_through_date TEXT NOT NULL,
+                model_version TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_PREDICTION_OUTCOMES (
+                snapshot_key TEXT PRIMARY KEY NOT NULL,
+                actual_result TEXT NOT NULL,
+                published_at TEXT NOT NULL,
+                source_status TEXT NOT NULL
+            )
+            """.trimIndent()
+        )
+    }
+
+    /** First-write-wins: later recomputations can never rewrite a frozen prediction. */
+    fun savePredictionSnapshot(snapshot: PredictionSnapshot): Boolean {
+        val values = ContentValues().apply {
+            put("snapshot_key", snapshot.snapshotKey)
+            put("market", snapshot.market.name)
+            put("session_id", snapshot.sessionId)
+            put("target_date", snapshot.targetDate.toString())
+            put("created_at", snapshot.createdAt.toString())
+            put("history_through_date", snapshot.historyThroughDate.toString())
+            put("model_version", snapshot.modelVersion)
+            put("payload_json", snapshot.payloadJson)
+            put("payload_sha256", snapshot.payloadSha256)
+        }
+        return writableDatabase.insertWithOnConflict(
+            TABLE_PREDICTION_SNAPSHOTS, null, values, SQLiteDatabase.CONFLICT_IGNORE
+        ) != -1L
+    }
+
+    /** An outcome is stored separately and only for an already-frozen prediction. */
+    fun savePredictionOutcome(outcome: PredictionSnapshotOutcome): Boolean {
+        val database = writableDatabase
+        database.query(
+            TABLE_PREDICTION_SNAPSHOTS, arrayOf("snapshot_key"),
+            "snapshot_key = ?", arrayOf(outcome.snapshotKey), null, null, null
+        ).use { if (!it.moveToFirst()) return false }
+        val values = ContentValues().apply {
+            put("snapshot_key", outcome.snapshotKey)
+            put("actual_result", outcome.actualResult)
+            put("published_at", outcome.publishedAt.toString())
+            put("source_status", outcome.sourceStatus)
+        }
+        return database.insertWithOnConflict(
+            TABLE_PREDICTION_OUTCOMES, null, values, SQLiteDatabase.CONFLICT_IGNORE
+        ) != -1L
+    }
+
+    fun loadPredictionSnapshotCount(): Int {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM $TABLE_PREDICTION_SNAPSHOTS", null).use {
+            return if (it.moveToFirst()) it.getInt(0) else 0
         }
     }
 
@@ -194,9 +267,11 @@ class LocalObservationDatabase(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "relab_local_history.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         private const val TABLE_OBSERVATIONS = "source_observations"
         private const val TABLE_METADATA = "app_metadata"
+        private const val TABLE_PREDICTION_SNAPSHOTS = "prediction_snapshots"
+        private const val TABLE_PREDICTION_OUTCOMES = "prediction_outcomes"
         private const val KEY_SOURCE_CSV = "source_csv"
         private const val KEY_IMPORTED_AT = "imported_at"
     }
