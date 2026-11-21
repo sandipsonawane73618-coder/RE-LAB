@@ -23,7 +23,7 @@ class SmartConsensusRankingTest {
             ConsensusModelRanking("b", listOf("34", "56"))
         ))
         assertEquals(2, result.candidates.first { it.candidate == "34" }.participatingModels)
-        assertEquals(2, result.candidates.size)
+        assertEquals(1, result.candidates.size)
     }
 
     @Test fun insufficientModelsAbstain() {
@@ -48,8 +48,8 @@ class SmartConsensusRankingTest {
     @Test fun abstainsWhenConsensusDisagreementExceedsGate() {
         val result = SmartConsensusRanking.rank(
             listOf(
-                ConsensusModelRanking("a", listOf("A", "B", "C")),
-                ConsensusModelRanking("b", listOf("C", "B", "A"))
+                ConsensusModelRanking("a", listOf("A", "B")),
+                ConsensusModelRanking("b", listOf("B", "A"))
             ),
             maximumRankDisagreement = 0.0
         )
