@@ -458,6 +458,7 @@ private fun RelabHome(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showResearchTools by remember { mutableStateOf(false) }
+    var showLegacyDashboard by remember { mutableStateOf(false) }
     var rawCsv by remember { mutableStateOf(initialCsv) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var selectedDateText by remember { mutableStateOf(LocalDate.now().toString()) }
@@ -765,8 +766,12 @@ private fun RelabHome(
                     .create()
                 val open = parser.fromJson(json.getAsJsonObject("open"), com.relab.core.ReverseEngineeringRanking::class.java)
                 val close = parser.fromJson(json.getAsJsonObject("close"), com.relab.core.ReverseEngineeringRanking::class.java)
+                val jodi = json.getAsJsonArray("jodi").map {
+                    parser.fromJson(it, com.relab.core.ReverseEngineeringJodiCandidate::class.java)
+                }
                 com.relab.core.FrozenSangamOutcomeAuditor.analyze(
-                    frozen, outcome, open.candidates, close.candidates, pairLimit = 100
+                    frozen, outcome, open.candidates, close.candidates,
+                    pairLimit = 100, jodiCandidates = jodi
                 )
             }.getOrNull()
         }.sortedByDescending { it.targetDate }
@@ -777,6 +782,9 @@ private fun RelabHome(
             frozenPredictionSnapshots,
             frozenSangamAudits
         )
+    }
+    val selfLearningFeedback = remember(frozenSangamAudits) {
+        com.relab.core.PredictionSelfLearningEngine.analyze(frozenSangamAudits)
     }
 
     var consensusWalkForwardReport by remember {
@@ -998,6 +1006,7 @@ private fun RelabHome(
 
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            if (showLegacyDashboard) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Market Predictions", style = MaterialTheme.typography.titleMedium)
@@ -1555,6 +1564,139 @@ private fun RelabHome(
                 }
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            }
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
+                Text("Predictions", style = MaterialTheme.typography.titleMedium)
+                if (startupLoading) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp), strokeWidth = 2.dp)
+                        Text(startupStatus, style = MaterialTheme.typography.bodySmall)
+                    }
+                } else if (analysisError != null) {
+                    Text("Analysis is continuing in the background.", style = MaterialTheme.typography.bodySmall)
+                }
+                Text("Target date", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    OutlinedButton(onClick = {
+                        selectedDate = selectedDate.minusDays(1)
+                        selectedDateText = selectedDate.toString()
+                        dateError = null
+                    }) { Text("‹") }
+                    OutlinedTextField(
+                        value = selectedDateText,
+                        onValueChange = { value ->
+                            selectedDateText = value
+                            try {
+                                selectedDate = LocalDate.parse(value.trim())
+                                dateError = null
+                            } catch (_: Exception) {
+                                dateError = "Use YYYY-MM-DD"
+                            }
+                        },
+                        label = { Text("YYYY-MM-DD") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(onClick = {
+                        selectedDate = selectedDate.plusDays(1)
+                        selectedDateText = selectedDate.toString()
+                        dateError = null
+                    }) { Text("›") }
+                }
+                dateError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                OutlinedTextField(
+                    value = chartUrl,
+                    onValueChange = { chartUrl = it },
+                    label = { Text("Chart link") },
+                    placeholder = { Text("Paste supported market chart URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    enabled = chartUrl.isNotBlank() && !linkBusy,
+                    onClick = {
+                        val cleanUrl = chartUrl.trim()
+                        val detected = com.relab.core.Market.fromSourceUrl(cleanUrl)
+                        if (detected == null) {
+                            importMessage = "Unsupported chart link. Check the market chart URL."
+                        } else {
+                            scope.launch {
+                                importChartLink(
+                                    cleanUrl, detected, onSaveLinkObservations,
+                                    { observations = it }, { importMessage = it }, { linkBusy = it }
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (linkBusy) "Fetching chart…" else "Fetch chart link") }
+                Button(
+                    enabled = !linkBusy,
+                    onClick = {
+                        scope.launch {
+                            val contextSummary = withContext(Dispatchers.Default) {
+                                val consensusRecords = com.relab.core.ReconciledChartBuilder.build(activeObservations).records
+                                val aiScannerRankings = consensusRecords
+                                    .filter { it.date.isBefore(selectedDate) }
+                                    .map { it.market to it.sessionId }
+                                    .distinct()
+                                    .flatMap { (market, sessionId) ->
+                                        listOf(
+                                            com.relab.core.ReverseEngineeringSide.OPEN,
+                                            com.relab.core.ReverseEngineeringSide.CLOSE
+                                        ).map { side ->
+                                            com.relab.core.ReverseEngineeringModel.rank(
+                                                consensusRecords, market, sessionId, selectedDate, side,
+                                                limit = 5, minimumHistory = 30
+                                            )
+                                        }
+                                    }
+                                com.relab.core.AiResearchContextBuilder.build(
+                                    observations = activeObservations,
+                                    exploratoryRecords = researchRecords,
+                                    targetDateExclusive = selectedDate,
+                                    maxRecordsPerMarketSession = 6,
+                                    maxObservationsPerMarketSession = 6,
+                                    maxChars = 20_000,
+                                    scannerRankings = aiScannerRankings
+                                )
+                            }
+                            val feedback = selfLearningFeedback.joinToString("\n") { it.compactSummary() }
+                            val enrichedContext = if (feedback.isBlank()) contextSummary else
+                                contextSummary + "\n\nFROZEN PREDICTION SELF-LEARNING FEEDBACK (diagnostic only):\n" + feedback
+                            context.startActivity(
+                                Intent(context, AiResearchActivity::class.java)
+                                    .putExtra(AiResearchActivity.EXTRA_RESEARCH_CONTEXT, enrichedContext)
+                                    .putExtra(AiResearchActivity.EXTRA_TARGET_DATE, selectedDate.toString())
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open Two-AI Research Lab") }
+                importMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (reverseModelSets.isEmpty()) {
+                    Text("Predictions will appear when enough valid chart history is available.")
+                } else {
+                    reverseModelSets.forEach { set ->
+                        val resultGroup = groups.firstOrNull {
+                            it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
+                        }
+                        MarketPredictionSheet(set, resultGroup, selectedDate)
+                    }
                 }
             }
         }
