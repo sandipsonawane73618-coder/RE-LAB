@@ -95,6 +95,35 @@ class AiResearchContextBuilderTest {
         assertFalse(context.contains("target=2026-02-02"))
     }
 
+    @Test fun patternEvidenceInAiPackUsesOnlyMultiSourceConsensusRows() {
+        val observations = (0..5).flatMap { day ->
+            listOf(
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-a"),
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-b")
+            )
+        }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it) }
+        val context = AiResearchContextBuilder.build(
+            observations, exploratory, LocalDate.of(2026, 2, 1)
+        )
+        assertTrue(context.contains("eligible multi-source consensus records: 6"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — EXACT MODE (MULTI-SOURCE CONSENSUS"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — FAMILY MOVEMENT MODE (MULTI-SOURCE CONSENSUS"))
+        assertFalse(context.contains("Exploratory rows only; not a prediction"))
+    }
+
+    @Test fun singleSourceExploratoryRowsCannotPopulateAiPatternEvidenceDb() {
+        val observations = (0..5).map { observation(Market.SRIDEVI, it) }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it) }
+        val context = AiResearchContextBuilder.build(
+            observations, exploratory, LocalDate.of(2026, 2, 1)
+        )
+        assertTrue(context.contains("eligible multi-source consensus records: 0"))
+        assertTrue(context.contains("No eligible multi-source consensus exact-pattern evidence"))
+        assertTrue(context.contains("No eligible multi-source consensus family-movement evidence"))
+        assertTrue(context.contains("CHART RECORDS"))
+    }
+
     @Test fun enforcesCharacterLimit() {
         val observations = ReverseEngineeringModel.enabledMarkets.flatMap { market ->
             (0..30).map { observation(market, it) }
