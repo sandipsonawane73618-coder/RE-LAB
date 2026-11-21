@@ -26,15 +26,12 @@ class AiResearchLoopWorker(
 
     override suspend fun doWork(): Result {
         val loopId = inputData.getString(KEY_LOOP_ID) ?: return Result.failure()
+        val taskType = inputData.getString(KEY_TASK_TYPE) ?: TASK_LOOP
         createNotificationChannel()
         setForeground(foregroundInfo("Starting saved research loop…"))
 
         val store = AiResearchMemoryStore(applicationContext)
         return try {
-            val session = withContext(Dispatchers.IO) {
-                store.latestResumableLoop()?.takeIf { it.id == loopId }
-                    ?: error("Saved research loop is missing or already completed")
-            }
             val keys = withContext(Dispatchers.IO) {
                 AiKeyVault(applicationContext).let {
                     it.read(AiKeyVault.GEMINI).orEmpty() to it.read(AiKeyVault.GROQ).orEmpty()
@@ -44,21 +41,55 @@ class AiResearchLoopWorker(
                 "Save both Gemini and Groq API keys before background research"
             }
 
-            val completed = withContext(Dispatchers.IO) {
-                AiResearchLoopEngine().run(
-                    keys.first, keys.second, session.question, session.evidence,
-                    session.priorMemory, session.maxRounds, session.checkpoint()
-                ) { round, stage, output ->
-                    store.saveLoopStage(loopId, round, stage, output)
-                    updateNotification("Round $round/${session.maxRounds} · $stage checkpoint saved")
+            when (taskType) {
+                TASK_LOOP -> {
+                    val session = withContext(Dispatchers.IO) {
+                        store.latestResumableLoop()?.takeIf { it.id == loopId }
+                            ?: error("Saved research loop is missing or already completed")
+                    }
+                    val completed = withContext(Dispatchers.IO) {
+                        AiResearchLoopEngine().run(
+                            keys.first, keys.second, session.question, session.evidence,
+                            session.priorMemory, session.maxRounds, session.checkpoint()
+                        ) { round, stage, output ->
+                            store.saveLoopStage(loopId, round, stage, output)
+                            updateNotification("Round $round/${session.maxRounds} · $stage checkpoint saved")
+                        }
+                    }
+                    withContext(Dispatchers.IO) { store.markLoopCompleted(loopId, completed) }
+                    updateNotification("Research completed · all ${completed.rounds.size} rounds saved")
                 }
+                TASK_SESSION -> {
+                    val session = withContext(Dispatchers.IO) {
+                        store.latestResumable()?.takeIf { it.id == loopId }
+                            ?: error("Saved research session is missing or already completed")
+                    }
+                    val completed = withContext(Dispatchers.IO) {
+                        AiResearchEngine().runCrossReview(
+                            keys.first, keys.second, session.question, session.evidence,
+                            session.priorMemory, session.checkpoint()
+                        ) { stage, output ->
+                            store.saveStage(loopId, stage, output)
+                            updateNotification("Cross-review · $stage checkpoint saved")
+                        }
+                    }
+                    withContext(Dispatchers.IO) {
+                        store.markCompleted(loopId, session.question, completed)
+                    }
+                    updateNotification("Cross-review completed · all stages saved")
+                }
+                else -> error("Unknown background research task")
             }
-            withContext(Dispatchers.IO) { store.markLoopCompleted(loopId, completed) }
-            updateNotification("Research completed · all ${completed.rounds.size} rounds saved")
             Result.success()
         } catch (error: Exception) {
             withContext(Dispatchers.IO) {
-                runCatching { store.markLoopInterrupted(loopId, error.message ?: "Background research failed") }
+                runCatching {
+                    if (taskType == TASK_SESSION) {
+                        store.markInterrupted(loopId, error.message ?: "Background research failed")
+                    } else {
+                        store.markLoopInterrupted(loopId, error.message ?: "Background research failed")
+                    }
+                }
             }
             updateNotification("Paused safely · saved stages are ready to resume")
             if (runAttemptCount < MAX_RETRIES && shouldRetry(error)) Result.retry() else Result.failure()
@@ -115,6 +146,9 @@ class AiResearchLoopWorker(
 
     companion object {
         const val KEY_LOOP_ID = "research_loop_id"
+        const val KEY_TASK_TYPE = "research_task_type"
+        const val TASK_LOOP = "LOOP"
+        const val TASK_SESSION = "SESSION"
         const val UNIQUE_WORK_NAME = "relab-auto-research-loop"
         private const val CHANNEL_ID = "relab_background_research"
         private const val NOTIFICATION_ID = 73021
@@ -123,9 +157,16 @@ class AiResearchLoopWorker(
 }
 
 object AiResearchBackgroundWork {
-    fun enqueue(context: Context, loopId: String) {
+    fun enqueueLoop(context: Context, loopId: String) = enqueue(context, loopId, AiResearchLoopWorker.TASK_LOOP)
+
+    fun enqueueSession(context: Context, sessionId: String) = enqueue(context, sessionId, AiResearchLoopWorker.TASK_SESSION)
+
+    private fun enqueue(context: Context, id: String, taskType: String) {
         val request = OneTimeWorkRequestBuilder<AiResearchLoopWorker>()
-            .setInputData(workDataOf(AiResearchLoopWorker.KEY_LOOP_ID to loopId))
+            .setInputData(workDataOf(
+                AiResearchLoopWorker.KEY_LOOP_ID to id,
+                AiResearchLoopWorker.KEY_TASK_TYPE to taskType
+            ))
             .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
