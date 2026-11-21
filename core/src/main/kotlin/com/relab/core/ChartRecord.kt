@@ -107,7 +107,13 @@ object ChartMath {
         val closeAnk = closeDigits.sum() % 10
         val expectedJodi = "$openAnk$closeAnk"
         if (record.jodi != expectedJodi) {
-            return ValidationResult.Invalid(listOf("Jodi mismatch: expected $expectedJodi from Panna sums"))
+            val reversedSideJodi = "$closeAnk$openAnk"
+            val reason = if (openAnk != closeAnk && record.jodi == reversedSideJodi) {
+                "Possible Open/Close Panna swap: Jodi $record.jodi matches reversed Panna sums; expected $expectedJodi"
+            } else {
+                "Jodi mismatch: expected $expectedJodi from Open/Close Panna sums"
+            }
+            return ValidationResult.Invalid(listOf(reason))
         }
         val openFamilies = openDigits.map(::family)
         val closeFamilies = closeDigits.map(::family)
