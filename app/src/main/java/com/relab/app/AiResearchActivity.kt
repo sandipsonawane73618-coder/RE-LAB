@@ -238,6 +238,12 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                             Text("Saved research session: " + session.state + " · " +
                                 (if (session.finalSynthesis.isNotBlank()) "final synthesis saved" else if (session.groqReview.isNotBlank()) "Groq review saved" else if (session.geminiAnalysis.isNotBlank()) "Gemini analysis saved" else "waiting for first stage"),
                                 style = MaterialTheme.typography.bodySmall)
+                            if (session.geminiAnalysis.isBlank() && session.groqReview.isBlank() && session.finalSynthesis.isBlank()) {
+                                Text("No stage checkpoint exists yet. Resume will retry the first Gemini stage.", style = MaterialTheme.typography.bodySmall)
+                            }
+                            session.lastError?.takeIf { it.isNotBlank() }?.let {
+                                Text("Last error: " + it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
                             OutlinedButton(enabled = !busy, onClick = { launchResearch(session) }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Resume research from saved stage")
                             }
@@ -257,8 +263,21 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                             }
                         }, modifier = Modifier.fillMaxWidth()) { Text("Start Auto Research Loop · 3 rounds") }
                         pendingLoop?.let { session ->
-                            Text("Saved auto loop: " + session.state + " · " + session.rounds.count { it.checkpoint.finalSynthesis.isNotBlank() } +
-                                "/" + session.maxRounds + " rounds fully checkpointed", style = MaterialTheme.typography.bodySmall)
+                            Text("Saved auto loop: " + session.state + " · " + session.rounds.count {
+                                it.checkpoint.geminiAnalysis.isNotBlank() && it.checkpoint.groqReview.isNotBlank() &&
+                                    it.checkpoint.finalSynthesis.isNotBlank()
+                            } + "/" + session.maxRounds + " rounds fully checkpointed", style = MaterialTheme.typography.bodySmall)
+                            session.rounds.firstOrNull { it.checkpoint.finalSynthesis.isBlank() }?.let { round ->
+                                val stage = when {
+                                    round.checkpoint.geminiAnalysis.isBlank() -> "Gemini pending"
+                                    round.checkpoint.groqReview.isBlank() -> "Groq review pending"
+                                    else -> "Final synthesis pending"
+                                }
+                                Text("Resume point: Round " + round.roundNumber + " · " + stage, style = MaterialTheme.typography.bodySmall)
+                            }
+                            session.lastError?.takeIf { it.isNotBlank() }?.let {
+                                Text("Last error: " + it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
                             OutlinedButton(enabled = !busy, onClick = { launchAutoLoop(session) }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Resume auto loop from saved stage")
                             }
