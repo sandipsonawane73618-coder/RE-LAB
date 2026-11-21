@@ -256,4 +256,58 @@ class ResearchToBacktestWorkflowTest {
     }
 
 
+    private fun csvColumns(line: String): List<String> {
+        val columns = mutableListOf<String>()
+        val field = StringBuilder()
+        var quoted = false
+        var index = 0
+        while (index < line.length) {
+            val char = line[index]
+            when {
+                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> {
+                    field.append('"')
+                    index++
+                }
+                char == '"' -> quoted = !quoted
+                char == ',' && !quoted -> {
+                    columns += field.toString()
+                    field.setLength(0)
+                }
+                else -> field.append(char)
+            }
+            index++
+        }
+        check(!quoted) { "Unclosed CSV quote" }
+        columns += field.toString()
+        return columns
+    }
+
+    @Test
+    fun proposalCsvRowsMatchHeaderWidthAndEscapeQuotedFields() {
+        val rows = repeatedRows()
+        val valid = ResearchPatternProposal(
+            "csv-valid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "111>222",
+            rationale = "sequence, with \\"quoted\\" evidence"
+        )
+        val invalid = ResearchPatternProposal(
+            "csv-invalid", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "bad",
+            rationale = "invalid, \\"quoted\\" proposal"
+        )
+        val report = ResearchToBacktestWorkflow.run(
+            records = rows,
+            scannerRankings = emptyList(),
+            proposals = listOf(valid, invalid),
+            targetDateExclusive = LocalDate.of(2026, 1, 1).plusDays(120)
+        )
+        val csvRows = ResearchToBacktestCsvExporter.export(report).split("\\n")
+        val header = csvColumns(csvRows.first())
+        assertEquals(27, header.size)
+        assertEquals(3, csvRows.size)
+        csvRows.drop(1).forEach { line ->
+            assertEquals(header.size, csvColumns(line).size)
+        }
+        assertTrue(csvRows.any { it.contains("\\"sequence, with \\"\\"quoted\\"\\" evidence\\"") })
+    }
+
+
 }
