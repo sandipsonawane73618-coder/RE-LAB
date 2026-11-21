@@ -743,7 +743,6 @@ private fun RelabHome(
                 frozenPredictionSnapshots = onLoadPredictionSnapshots()
                 frozenPredictionOutcomes = onLoadPredictionOutcomes()
             }
-        }
     }
 
     val frozenSangamAudits = remember(frozenPredictionSnapshots, frozenPredictionOutcomes) {
