@@ -23,13 +23,64 @@ class SmartConsensusRankingTest {
             ConsensusModelRanking("b", listOf("34", "56"))
         ))
         assertEquals(2, result.candidates.first { it.candidate == "34" }.participatingModels)
-        assertEquals(1, result.candidates.first { it.candidate == "12" }.participatingModels)
+        assertEquals(2, result.candidates.size)
     }
 
     @Test fun insufficientModelsAbstain() {
         val result = SmartConsensusRanking.rank(listOf(ConsensusModelRanking("only", listOf("123"))))
         assertTrue(result.abstained)
         assertTrue(result.candidates.isEmpty())
+    }
+
+    @Test fun abstainsWhenNoCandidateHasEnoughIndependentSupport() {
+        val result = SmartConsensusRanking.rank(
+            listOf(
+                ConsensusModelRanking("a", listOf("12", "34")),
+                ConsensusModelRanking("b", listOf("56", "78"))
+            ),
+            minimumCandidateSupport = 2
+        )
+        assertTrue(result.abstained)
+        assertTrue(result.candidates.isEmpty())
+        assertTrue(result.note.contains("No probability or prediction"))
+    }
+
+    @Test fun abstainsWhenConsensusDisagreementExceedsGate() {
+        val result = SmartConsensusRanking.rank(
+            listOf(
+                ConsensusModelRanking("a", listOf("A", "B", "C")),
+                ConsensusModelRanking("b", listOf("C", "B", "A"))
+            ),
+            maximumRankDisagreement = 0.0
+        )
+        assertTrue(result.abstained)
+        assertTrue(result.candidates.isEmpty())
+    }
+
+    @Test fun filtersLowRelativeScoreAndKeepsStrongConsensus() {
+        val result = SmartConsensusRanking.rank(
+            listOf(
+                ConsensusModelRanking("a", listOf("A", "B")),
+                ConsensusModelRanking("b", listOf("A", "B")),
+                ConsensusModelRanking("c", listOf("A", "C"))
+            ),
+            minimumRelativeScore = 70.0
+        )
+        assertFalse(result.abstained)
+        assertEquals("A", result.candidates.first().candidate)
+        assertTrue(result.candidates.none { it.candidate == "B" || it.candidate == "C" })
+    }
+
+    @Test fun rejectsInvalidAbstentionThresholds() {
+        assertFails {
+            SmartConsensusRanking.rank(emptyList(), minimumCandidateSupport = 0)
+        }
+        assertFails {
+            SmartConsensusRanking.rank(emptyList(), minimumRelativeScore = Double.NaN)
+        }
+        assertFails {
+            SmartConsensusRanking.rank(emptyList(), maximumRankDisagreement = -1.0)
+        }
     }
 
     @Test fun rejectsDuplicateModelIdsAndCandidates() {
