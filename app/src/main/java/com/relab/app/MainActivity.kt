@@ -209,7 +209,7 @@ private data class DashboardAnalysisCacheEntry(
     val cacheKey: String,
     val snapshot: DashboardAnalysisSnapshot,
     val coverageReports: List<com.relab.core.CoverageReport>,
-    val marketCacheKeys: Map<String, String> = emptyMap()
+    val marketCacheKeys: Map<String, String>? = null
 )
 
 private object DashboardAnalysisCache {
@@ -302,7 +302,7 @@ private fun buildDashboardAnalysisSnapshot(
         .mapNotNull { (identity, marketRecords) ->
             val identityKey = "${identity.first.name}|${identity.second}"
             val reusable = previousEntry?.takeIf {
-                it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+                it.marketCacheKeys?.get(identityKey) == marketCacheKeys[identityKey]
             }?.snapshot?.patternAnalyses?.firstOrNull {
                 it.market == identity.first && it.sessionId == identity.second
             }
@@ -313,7 +313,7 @@ private fun buildDashboardAnalysisSnapshot(
         .mapNotNull { (identity, marketRecords) ->
             val identityKey = "${identity.first.name}|${identity.second}"
             val reusable = previousEntry?.takeIf {
-                it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+                it.marketCacheKeys?.get(identityKey) == marketCacheKeys[identityKey]
             }?.snapshot?.intelligenceReports?.firstOrNull {
                 it.market == identity.first && it.sessionId == identity.second
             }
@@ -331,7 +331,7 @@ private fun buildDashboardAnalysisSnapshot(
     val candidateSets = marketSessions.map { (market, sessionId) ->
         val identityKey = "${market.name}|$sessionId"
         val reusable = previousEntry?.takeIf {
-            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+            it.marketCacheKeys?.get(identityKey) == marketCacheKeys[identityKey]
         }?.snapshot?.candidateSets?.firstOrNull {
             it.first.market == market && it.first.sessionId == sessionId
         }
@@ -355,7 +355,7 @@ private fun buildDashboardAnalysisSnapshot(
     val reverseModelSets = marketSessions.map { (market, sessionId) ->
         val identityKey = "${market.name}|$sessionId"
         val reusable = previousEntry?.takeIf {
-            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+            it.marketCacheKeys?.get(identityKey) == marketCacheKeys[identityKey]
         }?.snapshot?.reverseModelSets?.firstOrNull {
             it.market == market && it.sessionId == sessionId
         }
@@ -379,7 +379,7 @@ private fun buildDashboardAnalysisSnapshot(
     val patternEvidenceSets = marketSessions.map { (market, sessionId) ->
         val identityKey = "${market.name}|$sessionId"
         val reusable = previousEntry?.takeIf {
-            it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+            it.marketCacheKeys?.get(identityKey) == marketCacheKeys[identityKey]
         }?.snapshot?.patternEvidenceSets?.firstOrNull {
             it.market == market && it.sessionId == sessionId
         }
