@@ -172,17 +172,29 @@ object ProposedPatternBacktester {
         .first().key
 
     /** Two-sided exact binomial test on discordant paired predictions. */
-    private fun pairedExactBinomialPValue(patternWins: Int, baselineWins: Int): Double? {
-        val discordant = patternWins + baselineWins
-        if (discordant == 0) return null
-        val smaller = minOf(patternWins, baselineWins)
-        val weights = DoubleArray(discordant + 1)
-        val center = discordant / 2
-        weights[center] = 1.0
-        for (k in center downTo 1) weights[k - 1] = weights[k] * k / (discordant - k + 1)
-        for (k in center until discordant) weights[k + 1] = weights[k] * (discordant - k) / (k + 1)
-        val tail = (0..smaller).sumOf { weights[it] } / weights.sum()
-        return (2.0 * tail).coerceAtMost(1.0)
+    internal fun pairedExactBinomialPValue(patternWins: Int, baselineWins: Int): Double? {
+        require(patternWins >= 0 && baselineWins >= 0) { "Paired win counts must be non-negative" }
+        val discordant = patternWins.toLong() + baselineWins.toLong()
+        if (discordant == 0L) return null
+        val smaller = minOf(patternWins, baselineWins).toLong()
+        // Sum the lower binomial tail in log space: O(1) memory and no
+        // factorial/combination overflow for large discordant sample counts.
+        val logTwo = kotlin.math.ln(2.0)
+        var logChoose = 0.0
+        var logTailNumerator = Double.NEGATIVE_INFINITY
+        for (k in 0L..smaller) {
+            if (k > 0L) {
+                logChoose += kotlin.math.ln((discordant - k + 1).toDouble()) - kotlin.math.ln(k.toDouble())
+            }
+            val term = logChoose
+            logTailNumerator = if (logTailNumerator == Double.NEGATIVE_INFINITY) term
+            else {
+                val high = maxOf(logTailNumerator, term)
+                high + kotlin.math.ln(kotlin.math.exp(logTailNumerator - high) + kotlin.math.exp(term - high))
+            }
+        }
+        val logTail = logTailNumerator - discordant.toDouble() * logTwo
+        return (2.0 * kotlin.math.exp(logTail)).coerceIn(0.0, 1.0)
     }
 
     /** Two-sided 95% Wilson interval for a binomial proportion. */
