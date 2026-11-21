@@ -107,8 +107,31 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(report.compactSummary().contains("statistical rejections=0"))
         assertTrue(report.compactSummary().contains("HISTORICALLY_VERIFIED"))
         assertTrue(report.compactSummary().contains("INVALID_PROPOSAL"))
-        assertTrue(ResearchToBacktestCsvExporter.export(report).contains("rejection_reason"))
+        val csv = ResearchToBacktestCsvExporter.export(report)
+        assertTrue(csv.contains("diagnostic_category"))
+        assertTrue(csv.contains("INVALID_PROPOSAL"))
+        assertTrue(csv.contains("HISTORICALLY_VERIFIED"))
+        assertTrue(csv.contains("rejection_reason"))
     }
+    @Test
+    fun lowSampleDiagnosticUsesConfiguredMinimumAndAppearsInCsv() {
+        val rows = repeatedRows()
+        val proposal = ResearchPatternProposal(
+            "low-sample", Market.SRIDEVI, "main", PatternEvidenceChannel.OPEN_PANNA, "111>222"
+        )
+        val report = ResearchToBacktestWorkflow.run(
+            records = rows, scannerRankings = emptyList(), proposals = listOf(proposal),
+            targetDateExclusive = LocalDate.of(2026, 1, 1).plusDays(120),
+            minimumEvaluations = 100
+        )
+        val result = report.assessments.single()
+        assertEquals(39, result.evaluatedOccurrences)
+        assertEquals(ResearchVerificationStatus.UNCERTAIN, result.status)
+        assertTrue(report.compactSummary().contains("LOW_SAMPLE_UNCERTAIN"))
+        val csv = ResearchToBacktestCsvExporter.export(report)
+        assertTrue(csv.contains("UNCERTAIN,LOW_SAMPLE_UNCERTAIN"))
+    }
+
     @Test
     fun targetDateAndFutureRowsAreExcluded() {
         val rows = listOf(
