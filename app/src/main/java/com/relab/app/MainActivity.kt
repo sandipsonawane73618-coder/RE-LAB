@@ -1016,6 +1016,16 @@ private fun RelabHome(
                                             " · Open family: ${audit.openFamilySequenceMatchCount} · Close family: ${audit.closeFamilySequenceMatchCount} · Jodi matches: ${audit.jodiMatchCount}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                    Text(
+                                        "Open panna ${item.openPannaAudit.actualPanna}: exact rank ${item.openPannaAudit.exactRank ?: "—"} · nearest: " +
+                                            item.openPannaAudit.nearestCandidates.take(3).joinToString { "${it.panna} (#${it.rank}, family ${it.matchingFamilyPositions}/3, digits ${it.matchingDigitPositions}/3)" },
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "Close panna ${item.closePannaAudit.actualPanna}: exact rank ${item.closePannaAudit.exactRank ?: "—"} · nearest: " +
+                                            item.closePannaAudit.nearestCandidates.take(3).joinToString { "${it.panna} (#${it.rank}, family ${it.matchingFamilyPositions}/3, digits ${it.matchingDigitPositions}/3)" },
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                             }
                             Text("Only immutable saved predictions are scored. Family and Jodi matches are diagnostics, never exact Sangam hits.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
