@@ -1122,6 +1122,16 @@ private fun RelabHome(
                                         "Sangam exact Top 10: ${market.exactPairTop10Hits}/${market.evaluatedTargets} (${market.rate(market.exactPairTop10Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"}) · Top 100: ${market.exactPairTop100Hits}/${market.evaluatedTargets} (${market.rate(market.exactPairTop100Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"})",
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                    market.chronologicalPeriods.forEach { period ->
+                                        Text(
+                                            "Period ${period.period} · ${period.firstTargetDate ?: "N/A"} to ${period.lastTargetDate ?: "N/A"} · evaluated ${period.evaluatedTargets}/${period.requestedTargets} · abstained ${period.abstainedTargets}",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Text(
+                                            "Exact Top 10: ${period.exactPairTop10Hits}/${period.evaluatedTargets} (${period.rate(period.exactPairTop10Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"}) · Top 100: ${period.exactPairTop100Hits}/${period.evaluatedTargets} (${period.rate(period.exactPairTop100Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"})",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                                 Text("Sample bands are descriptive only: <30 very small, 30–99 early, 100–299 broader, 300+ larger. A larger sample does not prove an edge; markets are not ranked by hit rate.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("Compare this historical benchmark separately from the frozen-snapshot scorecard above; cohorts differ. Family/Jodi diagnostics are not exact hits or winning probabilities.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
