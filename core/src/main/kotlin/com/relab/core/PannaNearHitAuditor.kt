@@ -25,6 +25,10 @@ data class PannaNearHitAuditReport(
     val nearestCandidates: List<PannaNearHitComparison>,
     val exactHitCount: Int,
     val familySequenceHitCount: Int,
+    val familySequenceTop10Hit: Boolean,
+    val familySequenceTop100Hit: Boolean,
+    val positionalNearHitTop10: Boolean,
+    val positionalNearHitTop100: Boolean,
     val diagnosticNote: String
 ) {
     val hasExactHit: Boolean get() = exactRank != null
@@ -89,6 +93,14 @@ object PannaNearHitAuditor {
             nearestCandidates = comparisons,
             exactHitCount = if (exactRank == null) 0 else 1,
             familySequenceHitCount = ordered.count { family(it.panna) == actualFamily },
+            familySequenceTop10Hit = ordered.take(10).any { family(it.panna) == actualFamily },
+            familySequenceTop100Hit = ordered.take(100).any { family(it.panna) == actualFamily },
+            positionalNearHitTop10 = ordered.take(10).any { candidate ->
+                (0..2).count { candidate.panna[it] == actualPanna[it] } >= 2
+            },
+            positionalNearHitTop100 = ordered.take(100).any { candidate ->
+                (0..2).count { candidate.panna[it] == actualPanna[it] } >= 2
+            },
             diagnosticNote = "Exact, family, positional, reverse, panna-type and ank proximity are separate diagnostics. Near/family matches are not exact hits, probabilities, or evidence of predictive advantage."
         )
     }
