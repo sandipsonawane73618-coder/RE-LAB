@@ -380,7 +380,9 @@ private fun buildDashboardAnalysisSnapshot(
             )
             val close = com.relab.core.ReverseEngineeringModel.rank(
                 marketRecords, market, sessionId, targetDate, com.relab.core.ReverseEngineeringSide.CLOSE,
-                limit = 10, minimumHistory = 30
+                // Keep a wider diagnostic pool so an actual result outside the visible top-10
+                // can still receive a real rank and evidence-layer comparison.
+                limit = 100, minimumHistory = 30
             )
             ReverseModelDashboardSet(
                 market, sessionId, open, close,
