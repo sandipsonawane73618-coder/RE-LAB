@@ -248,7 +248,7 @@ class ReverseEngineeringModelTest {
             row(Market.SRIDEVI, it, open = "999", close = "000", session = "late")
         }
         val otherMarket = (0 until 40).map {
-            row(Market.KALYAN, it, open = "888", close = "111", session = "main")
+            row(Market.KALYAN, it, open = "888", close = "111", session = "late")
         }
         val target = LocalDate.of(2026, 3, 1)
         val baseline = ReverseEngineeringModel.rank(
