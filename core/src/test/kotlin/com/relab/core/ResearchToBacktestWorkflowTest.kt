@@ -23,6 +23,31 @@ class ResearchToBacktestWorkflowTest {
     }
 
     @Test
+    fun pairedExactBinomialHandlesBalancedAndOneSidedDiscordance() {
+        assertNull(ProposedPatternBacktester.pairedExactBinomialPValue(0, 0))
+        assertEquals(1.0, ProposedPatternBacktester.pairedExactBinomialPValue(5, 5)!!, 1e-12)
+        assertEquals(0.0625, ProposedPatternBacktester.pairedExactBinomialPValue(5, 0)!!, 1e-12)
+        assertEquals(0.0625, ProposedPatternBacktester.pairedExactBinomialPValue(0, 5)!!, 1e-12)
+        assertEquals(0.001953125, ProposedPatternBacktester.pairedExactBinomialPValue(10, 0)!!, 1e-12)
+    }
+
+    @Test
+    fun pairedExactBinomialIsBoundedAndMemorySafeForLargeCounts() {
+        val balanced = ProposedPatternBacktester.pairedExactBinomialPValue(100_000, 100_000)!!
+        assertTrue(balanced in 0.99..1.0)
+        val oneSided = ProposedPatternBacktester.pairedExactBinomialPValue(100_000, 0)!!
+        assertTrue(oneSided in 0.0..1.0)
+        assertTrue(oneSided.isFinite())
+    }
+
+    @Test
+    fun pairedExactBinomialRejectsNegativeCounts() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ProposedPatternBacktester.pairedExactBinomialPValue(-1, 2)
+        }
+    }
+
+    @Test
     fun repeatedAiPatternIsBacktestedChronologicallyAgainstPriorOnlyBaseline() {
         val rows = repeatedRows()
         val proposal = ResearchPatternProposal(
