@@ -251,6 +251,15 @@ object ResearchToBacktestWorkflow {
         }
         val beforeCutoff = records.filter { it.date.isBefore(targetDateExclusive) }
         val eligible = beforeCutoff.filter { ChartMath.validate(it) is ValidationResult.Valid }
+        val availableSessions = eligible.map { it.market to it.sessionId }.toSet()
+        require(scannerRankings.all { (it.market to it.sessionId) in availableSessions }) {
+            "Scanner rankings must reference a market/session present in eligible consensus history"
+        }
+        require(scannerRankings.all { ranking ->
+            ranking.trainingRecords <= eligible.count { it.market == ranking.market && it.sessionId == ranking.sessionId }
+        }) {
+            "Scanner training record count cannot exceed eligible consensus rows for its market/session"
+        }
         val coveredMarketSessions = eligible.map { it.market to it.sessionId }.distinct().size
         val exactEvidence = PatternEvidenceDatabase.analyze(
             eligible, targetDateExclusive, outcomeMode = PatternOutcomeMode.EXACT
