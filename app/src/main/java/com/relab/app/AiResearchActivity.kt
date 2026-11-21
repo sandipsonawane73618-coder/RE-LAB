@@ -218,7 +218,8 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     val observations = LocalObservationDatabase(context).loadObservations()
                     // Verification uses only multi-source consensus rows. Exploratory/single-source
                     // records may inform AI hypotheses but cannot independently verify them.
-                    val records = com.relab.core.ReconciledChartBuilder.build(observations).records
+                    val chartBuild = com.relab.core.ReconciledChartBuilder.build(observations)
+                    val records = chartBuild.records
                     val sessions = records.filter { it.date.isBefore(targetDate) }
                         .map { it.market to it.sessionId }.distinct()
                     val scannerRankings = sessions.flatMap { (market, session) ->
@@ -232,7 +233,9 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         proposals = parsed.proposals,
                         targetDateExclusive = targetDate,
                         minimumModelHistory = 30,
-                        candidateLimit = 10
+                        candidateLimit = 10,
+                        sourceQuality = chartBuild,
+                        sourceObservationCount = observations.size
                     )
                     // Large report formatting and CSV serialization stay off the main thread.
                     audit to Triple(
