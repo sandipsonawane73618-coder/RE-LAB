@@ -774,12 +774,6 @@ private fun RelabHome(
         )
     }
 
-    val marketWalkForwardComparisons = remember(consensusWalkForwardReport) {
-        consensusWalkForwardReport?.marketSessionReports?.let {
-            com.relab.core.MarketWalkForwardComparisonBuilder.build(it)
-        }.orEmpty()
-    }
-
     var consensusWalkForwardReport by remember {
         mutableStateOf<com.relab.core.ConsensusWalkForwardValidationReport?>(null)
     }
@@ -800,6 +794,12 @@ private fun RelabHome(
         } catch (error: Exception) {
             consensusWalkForwardError = error.message ?: "Historical validation failed"
         }
+    }
+
+    val marketWalkForwardComparisons = remember(consensusWalkForwardReport) {
+        consensusWalkForwardReport?.marketSessionReports?.let {
+            com.relab.core.MarketWalkForwardComparisonBuilder.build(it)
+        }.orEmpty()
     }
 
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
