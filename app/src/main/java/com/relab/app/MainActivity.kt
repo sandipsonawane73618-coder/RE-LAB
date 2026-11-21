@@ -210,7 +210,8 @@ private data class DashboardAnalysisCacheEntry(
     val cacheKey: String,
     val snapshot: DashboardAnalysisSnapshot,
     val coverageReports: List<com.relab.core.CoverageReport>,
-    val marketCacheKeys: Map<String, String>? = null
+    val marketCacheKeys: Map<String, String>? = null,
+    val coverageComplete: Boolean = false
 )
 
 private object DashboardAnalysisCache {
@@ -251,9 +252,13 @@ private object DashboardAnalysisCache {
 
     fun readLatest(context: android.content.Context): DashboardAnalysisCacheEntry? {
         val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
-        if (!file.isFile) return null
+        val atomicFile = android.util.AtomicFile(file)
         return try {
-            gson.fromJson(file.readText(Charsets.UTF_8), DashboardAnalysisCacheEntry::class.java)
+            atomicFile.openRead().bufferedReader(Charsets.UTF_8).use {
+                gson.fromJson(it, DashboardAnalysisCacheEntry::class.java)
+            }
+        } catch (_: java.io.FileNotFoundException) {
+            null
         } catch (_: Exception) {
             null
         }
@@ -276,11 +281,18 @@ private object DashboardAnalysisCache {
         .toMap()
 
     fun write(context: android.content.Context, entry: DashboardAnalysisCacheEntry) {
-        val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
-        val temporary = File(context.filesDir, "dashboard-analysis-cache-v1.tmp")
-        temporary.writeText(gson.toJson(entry), Charsets.UTF_8)
-        if (file.exists() && !file.delete()) error("Could not replace previous analysis cache")
-        if (!temporary.renameTo(file)) error("Could not commit analysis cache")
+        val atomicFile = android.util.AtomicFile(
+            File(context.filesDir, "dashboard-analysis-cache-v1.json")
+        )
+        var output: java.io.FileOutputStream? = null
+        try {
+            output = atomicFile.startWrite()
+            output.write(gson.toJson(entry).toByteArray(Charsets.UTF_8))
+            atomicFile.finishWrite(output)
+        } catch (error: Exception) {
+            output?.let(atomicFile::failWrite)
+            throw error
+        }
     }
 }
 
@@ -503,9 +515,9 @@ private fun RelabHome(
             coverageReports = cached.coverageReports
             analysisError = null
             analysisCompletedFor = rows
-            coverageCompletedFor = cacheKey
+            coverageCompletedFor = if (cached.coverageComplete) cacheKey else null
             coverageError = null
-            coverageLoading = false
+            coverageLoading = !cached.coverageComplete
             return@LaunchedEffect
         }
 
@@ -524,6 +536,17 @@ private fun RelabHome(
             }
             val computed = withContext(Dispatchers.Default) {
                 buildDashboardAnalysisSnapshot(rows, selectedDate, previousEntry, marketKeys)
+            }
+            // Persist the expensive market-analysis snapshot before the separate
+            // coverage audit starts. If Android closes the app during coverage,
+            // the next launch restores this snapshot instead of rebuilding markets.
+            withContext(Dispatchers.IO) {
+                DashboardAnalysisCache.write(
+                    context,
+                    DashboardAnalysisCacheEntry(
+                        cacheKey, computed, emptyList(), marketKeys, coverageComplete = false
+                    )
+                )
             }
             analysisSnapshot = computed
             analysisCompletedFor = rows
@@ -584,7 +607,8 @@ private fun RelabHome(
                     context,
                     DashboardAnalysisCacheEntry(
                         cacheKey, completedSnapshot, computed,
-                        DashboardAnalysisCache.marketKeys(rowsForCache, selectedDate)
+                        DashboardAnalysisCache.marketKeys(rowsForCache, selectedDate),
+                        coverageComplete = true
                     )
                 )
             }
