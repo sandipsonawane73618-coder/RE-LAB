@@ -297,8 +297,28 @@ private fun buildDashboardAnalysisSnapshot(
     val repeatedPublishedResults = com.relab.core.SourceObservationMerger.auditRepeatedPublishedResultsAcrossDates(activeObservations)
     val chartBuild = com.relab.core.ReconciledChartBuilder.build(activeObservations)
     val researchRecords = com.relab.core.ReconciledChartBuilder.buildExploratoryRecords(activeObservations)
-    val patternAnalyses = com.relab.core.PatternAnalysis.analyze(researchRecords)
-    val intelligenceReports = com.relab.core.MarketIntelligence.analyze(researchRecords)
+    val patternAnalyses = researchRecords.groupBy { it.market to it.sessionId }
+        .entries.sortedWith(compareBy({ it.key.first.name }, { it.key.second }))
+        .mapNotNull { (identity, marketRecords) ->
+            val identityKey = "${identity.first.name}|${identity.second}"
+            val reusable = previousEntry?.takeIf {
+                it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+            }?.snapshot?.patternAnalyses?.firstOrNull {
+                it.market == identity.first && it.sessionId == identity.second
+            }
+            reusable ?: com.relab.core.PatternAnalysis.analyze(marketRecords).singleOrNull()
+        }
+    val intelligenceReports = researchRecords.groupBy { it.market to it.sessionId }
+        .entries.sortedWith(compareBy({ it.key.first.name }, { it.key.second }))
+        .mapNotNull { (identity, marketRecords) ->
+            val identityKey = "${identity.first.name}|${identity.second}"
+            val reusable = previousEntry?.takeIf {
+                it.marketCacheKeys[identityKey] == marketCacheKeys[identityKey]
+            }?.snapshot?.intelligenceReports?.firstOrNull {
+                it.market == identity.first && it.sessionId == identity.second
+            }
+            reusable ?: com.relab.core.MarketIntelligence.analyze(marketRecords).singleOrNull()
+        }
     val crossMarketReports = com.relab.core.CrossMarketReverseEngineering.analyze(researchRecords)
     val crossMarketLeadLagEvidence = com.relab.core.ReverseEngineeringModel.analyzeCrossMarketLeadLag(
         researchRecords, targetDate, maxSourceAgeDays = 7
