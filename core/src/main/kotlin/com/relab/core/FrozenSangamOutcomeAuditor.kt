@@ -13,7 +13,9 @@ data class FrozenSangamOutcomeAudit(
     val modelVersion: String,
     val publishedAt: java.time.Instant,
     val sourceStatus: String,
-    val audit: SangamOutcomeAuditReport
+    val audit: SangamOutcomeAuditReport,
+    val openPannaAudit: PannaNearHitAuditReport,
+    val closePannaAudit: PannaNearHitAuditReport
 )
 
 object FrozenSangamOutcomeAuditor {
@@ -39,6 +41,8 @@ object FrozenSangamOutcomeAuditor {
         ) {
             "Published result must use openPanna-jodi-closePanna format"
         }
+        val openPannaAudit = PannaNearHitAuditor.analyze(parts[0], openCandidates, nearestLimit = 5)
+        val closePannaAudit = PannaNearHitAuditor.analyze(parts[2], closeCandidates, nearestLimit = 5)
         val audit = SangamOutcomeAuditor.analyze(
             actualOpenPanna = parts[0],
             actualClosePanna = parts[2],
@@ -57,7 +61,9 @@ object FrozenSangamOutcomeAuditor {
             modelVersion = snapshot.modelVersion,
             publishedAt = outcome.publishedAt,
             sourceStatus = outcome.sourceStatus,
-            audit = audit
+            audit = audit,
+            openPannaAudit = openPannaAudit,
+            closePannaAudit = closePannaAudit
         )
     }
 }
