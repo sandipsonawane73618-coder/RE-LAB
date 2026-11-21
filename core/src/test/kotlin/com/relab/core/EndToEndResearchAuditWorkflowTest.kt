@@ -55,8 +55,8 @@ class EndToEndResearchAuditWorkflowTest {
         report.multiModelWalkForward.forEach { result ->
             assertEquals(3, result.models.size)
             assertEquals(90, result.consensus.requestedTargets)
-            assertEquals(90, result.models.sumOf { it.requestedTargets })
-            assertTrue(result.note.contains("strictly earlier"))
+            assertTrue(result.models.all { it.requestedTargets == 90 })
+            assertTrue(result.note.contains("after scoring"))
         }
         assertTrue(report.compactSummary().contains("MULTI-MODEL WALK-FORWARD AUDIT"))
         val csv = EndToEndResearchAuditWorkflow.exportWalkForwardCsv(report)
