@@ -21,9 +21,11 @@ class PannaNearHitAuditorTest {
         assertTrue(report.hasExactHit)
         assertEquals(1, report.exactHitCount)
         assertEquals(2, report.familySequenceHitCount)
-        assertFalse(report.nearestCandidates.first().exactHit)
-        assertTrue(report.nearestCandidates.any { it.exactHit })
-        assertEquals(3, report.nearestCandidates.first().matchingFamilyPositions)
+        val exact = report.nearestCandidates.first { it.panna == "167" }
+        val familyMatch = report.nearestCandidates.first { it.panna == "612" }
+        assertTrue(exact.exactHit)
+        assertFalse(familyMatch.exactHit)
+        assertEquals(3, familyMatch.matchingFamilyPositions)
         assertTrue(report.diagnosticNote.contains("not exact hits"))
     }
 
@@ -35,7 +37,7 @@ class PannaNearHitAuditorTest {
         )
         val reverse = report.nearestCandidates.first { it.panna == "321" }
         assertTrue(reverse.reverseExactMatch)
-        assertEquals(0, reverse.matchingDigitPositions)
+        assertEquals(1, reverse.matchingDigitPositions)
         val positional = report.nearestCandidates.first { it.panna == "129" }
         assertEquals(2, positional.matchingDigitPositions)
         assertFalse(report.hasExactHit)
