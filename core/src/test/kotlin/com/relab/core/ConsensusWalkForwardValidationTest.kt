@@ -16,7 +16,7 @@ class ConsensusWalkForwardValidationTest {
     ) = SourceObservation(
         market = Market.SRIDEVI,
         sessionId = "main",
-        date = LocalDate.of(2026, 1, 1).plusDays(day.toLong()),
+        date = LocalDate.of(2026, 1, 1).plusDays((day - 1).toLong()),
         sourceId = source,
         sourceRecordId = "$source-$day",
         retrievedAt = retrieved.plusSeconds(day.toLong()),
