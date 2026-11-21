@@ -299,7 +299,7 @@ class ResearchToBacktestWorkflowTest {
             proposals = listOf(valid, invalid),
             targetDateExclusive = LocalDate.of(2026, 1, 1).plusDays(120)
         )
-        val csvRows = ResearchToBacktestCsvExporter.export(report).split("\\n")
+        val csvRows = ResearchToBacktestCsvExporter.export(report).split("\n")
         val header = csvColumns(csvRows.first())
         assertEquals(27, header.size)
         assertEquals(3, csvRows.size)
