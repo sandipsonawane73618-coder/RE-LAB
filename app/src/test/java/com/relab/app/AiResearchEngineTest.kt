@@ -30,10 +30,10 @@ class AiResearchEngineTest {
         )
 
         assertEquals(3, requests.size)
-        val geminiRequest = org.json.JSONObject(requestBodies.first())
-        val generationConfig = geminiRequest.getJSONObject("generationConfig")
-        assertEquals(1400, generationConfig.getInt("maxOutputTokens"))
-        assertFalse("Gemini 3.8 Flash request must not send unsupported temperature", generationConfig.has("temperature"))
+        val geminiRequest = com.google.gson.JsonParser.parseString(requestBodies.first()).asJsonObject
+        val generationConfig = geminiRequest.getAsJsonObject("generationConfig")
+        assertEquals(1400, generationConfig.get("maxOutputTokens").asInt)
+        assertFalse("Gemini request must not send unsupported temperature", generationConfig.has("temperature"))
         assertEquals(listOf("GEMINI_ANALYSIS", "GROQ_REVIEW", "FINAL_SYNTHESIS"), checkpoints)
         assertTrue(result.geminiAnalysis.contains("INITIAL GEMINI ANALYSIS"))
         assertTrue(result.geminiAnalysis.contains("Verified citations: 1"))
