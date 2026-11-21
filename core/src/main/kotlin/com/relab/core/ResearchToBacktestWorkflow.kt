@@ -218,6 +218,12 @@ data class ResearchToBacktestReport(
     val invalidRowsBeforeCutoff: Int = 0,
     val coveredMarketSessions: Int = 0,
     val minimumEvaluationsRequired: Int = 20,
+    val sourceObservationCount: Int = 0,
+    val sourceConsensusGroups: Int = 0,
+    val sourceConflictGroups: Int = 0,
+    val sourceSingleSourceGroups: Int = 0,
+    val sourceNoPublishedGroups: Int = 0,
+    val sourceInvalidGroups: Int = 0,
     val exactPatternEvidence: List<PatternEvidenceRecord>,
     val familyPatternEvidence: List<PatternEvidenceRecord>,
     val rankedExactPatternEvidence: List<RankedPatternEvidence>,
@@ -229,6 +235,7 @@ data class ResearchToBacktestReport(
         appendLine("RESEARCH-TO-BACKTEST REPORT")
         appendLine("Target cutoff (exclusive): $targetDateExclusive")
         appendLine("DATASET AUDIT: provided=$datasetRecordsProvided | valid consensus rows before cutoff=$validConsensusRowsBeforeCutoff | excluded on/after cutoff=$excludedOnOrAfterCutoff | invalid before cutoff=$invalidRowsBeforeCutoff | covered market/sessions=$coveredMarketSessions")
+        appendLine("SOURCE RECONCILIATION: observations=$sourceObservationCount | consensus=$sourceConsensusGroups | conflicts=$sourceConflictGroups | single-source-unverified=$sourceSingleSourceGroups | no-published=$sourceNoPublishedGroups | invalid-consensus=$sourceInvalidGroups")
         appendLine("Scanner rankings: ${scannerRankings.size}")
         scannerRankings.take(12).forEach { ranking ->
             val candidates = ranking.candidates.take(3).joinToString("; ") { it.panna + " (" + rate(it.score) + ")" }
@@ -268,7 +275,9 @@ object ResearchToBacktestWorkflow {
         proposals: List<ResearchPatternProposal>,
         targetDateExclusive: LocalDate,
         minimumEvaluations: Int = 20,
-        minimumLift: Double = 0.05
+        minimumLift: Double = 0.05,
+        sourceQuality: ChartBuildReport? = null,
+        sourceObservationCount: Int = 0
     ): ResearchToBacktestReport {
         require(scannerRankings.all { it.targetDate == targetDateExclusive }) {
             "Scanner rankings must use the same exclusive target date as the backtest"
@@ -332,6 +341,12 @@ object ResearchToBacktestWorkflow {
             invalidRowsBeforeCutoff = beforeCutoff.size - eligible.size,
             coveredMarketSessions = coveredMarketSessions,
             minimumEvaluationsRequired = minimumEvaluations,
+            sourceObservationCount = sourceObservationCount,
+            sourceConsensusGroups = sourceQuality?.records?.size ?: 0,
+            sourceConflictGroups = sourceQuality?.conflictGroups?.size ?: 0,
+            sourceSingleSourceGroups = sourceQuality?.singleSourceUnverifiedGroups?.size ?: 0,
+            sourceNoPublishedGroups = sourceQuality?.noPublishedResultGroups?.size ?: 0,
+            sourceInvalidGroups = sourceQuality?.invalidGroups?.size ?: 0,
             exactPatternEvidence = exactEvidence,
             familyPatternEvidence = familyEvidence,
             rankedExactPatternEvidence = rankedExact,
