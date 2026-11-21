@@ -103,6 +103,10 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(rejected.rejectionReason.orEmpty().contains("exactly 3 digits"))
         assertEquals(ResearchVerificationStatus.VERIFIED, verified.status)
         assertTrue(report.compactSummary().contains("REASON="))
+        assertTrue(report.compactSummary().contains("invalid proposals=1"))
+        assertTrue(report.compactSummary().contains("statistical rejections=0"))
+        assertTrue(report.compactSummary().contains("HISTORICALLY_VERIFIED"))
+        assertTrue(report.compactSummary().contains("INVALID_PROPOSAL"))
         assertTrue(ResearchToBacktestCsvExporter.export(report).contains("rejection_reason"))
     }
     @Test
