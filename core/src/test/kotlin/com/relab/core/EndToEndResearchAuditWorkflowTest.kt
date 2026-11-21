@@ -27,6 +27,39 @@ class EndToEndResearchAuditWorkflowTest {
         )
     }
 
+    @Test fun deterministicEntryPointRunsScannerAndEvidenceWithoutAnyAiProposal() {
+        val data = rows()
+        val cutoff = LocalDate.of(2026, 1, 1).plusDays(120)
+        val report = EndToEndResearchAuditWorkflow.runDeterministic(
+            records = data,
+            targetDateExclusive = cutoff,
+            minimumScannerHistory = 30,
+            minimumModelHistory = 30
+        )
+        assertEquals(2, report.research.scannerRankings.size)
+        assertTrue(report.research.scannerRankings.all { !it.abstained && it.candidates.isNotEmpty() })
+        assertTrue(report.research.exactPatternEvidence.isNotEmpty())
+        assertTrue(report.research.familyPatternEvidence.isNotEmpty())
+        assertTrue(report.research.assessments.isEmpty())
+        assertTrue(report.compactSummary().contains("No executable AI proposals were supplied"))
+        assertTrue(report.compactSummary().contains("Scanner rankings: 2"))
+    }
+
+    @Test fun deterministicEntryPointAbstainsWhenScannerHistoryIsInsufficientAndAiIsAbsent() {
+        val data = rows().take(6)
+        val cutoff = LocalDate.of(2026, 1, 1).plusDays(120)
+        val report = EndToEndResearchAuditWorkflow.runDeterministic(
+            records = data,
+            targetDateExclusive = cutoff,
+            minimumScannerHistory = 30,
+            minimumModelHistory = 30
+        )
+        assertEquals(2, report.research.scannerRankings.size)
+        assertTrue(report.research.scannerRankings.all { it.abstained && it.candidates.isEmpty() })
+        assertTrue(report.research.assessments.isEmpty())
+        assertTrue(report.research.scannerRankings.all { it.note.contains("Insufficient earlier valid history") })
+    }
+
     @Test fun connectsResearchEvidenceAiAssessmentAndAllThreeModelChannels() {
         val data = rows()
         val cutoff = LocalDate.of(2026, 1, 1).plusDays(120)
