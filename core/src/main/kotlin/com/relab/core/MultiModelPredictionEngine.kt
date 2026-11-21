@@ -93,6 +93,21 @@ class MultiModelPredictionEngine(
         require(history.map { it.date }.distinct().size == history.size) {
             "Duplicate dates must be reconciled before multi-model prediction"
         }
+        return predictFromEarlierHistory(history, market, sessionId, targetDate, channel, limit)
+    }
+
+    /**
+     * Fast path for chronological evaluators: history must already be valid, sorted,
+     * unique, and contain only rows for this market/session strictly before targetDate.
+     * This avoids re-filtering, re-validating, and sorting the full dataset for every
+     * walk-forward target.
+     */
+    internal fun predictFromEarlierHistory(
+        history: List<ChartRecord>, market: Market, sessionId: String, targetDate: LocalDate,
+        channel: PredictionChannel, limit: Int = 10
+    ): MultiModelPrediction {
+        require(sessionId.isNotBlank()) { "Session ID is required" }
+        require(limit in 1..100) { "Candidate limit must be 1..100" }
         // Keep empty model outputs visible: the evaluator must count their abstentions.
         val predictions = if (history.size < minimumHistory) emptyList() else models.map { model ->
             ModelPrediction(model.id, model.rank(history, channel, limit).distinct().take(limit),
