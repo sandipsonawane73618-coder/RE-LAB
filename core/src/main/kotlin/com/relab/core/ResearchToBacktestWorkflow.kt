@@ -197,6 +197,7 @@ data class ResearchToBacktestReport(
     val excludedOnOrAfterCutoff: Int = 0,
     val invalidRowsBeforeCutoff: Int = 0,
     val coveredMarketSessions: Int = 0,
+    val minimumEvaluationsRequired: Int = 20,
     val exactPatternEvidence: List<PatternEvidenceRecord>,
     val familyPatternEvidence: List<PatternEvidenceRecord>,
     val rankedExactPatternEvidence: List<RankedPatternEvidence>,
@@ -226,7 +227,7 @@ data class ResearchToBacktestReport(
         ResearchVerificationStatus.entries.forEach { status ->
             appendLine("$status: ${assessments.count { it.status == status }}")
         }
-        appendLine("ASSESSMENT DIAGNOSTICS: invalid proposals=${assessments.count { it.rejectionReason != null }} | statistical rejections=${assessments.count { it.status == ResearchVerificationStatus.REJECTED && it.rejectionReason == null }} | low-sample uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences < 20 }} | other uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences >= 20 }}")
+        appendLine("ASSESSMENT DIAGNOSTICS: invalid proposals=${assessments.count { it.rejectionReason != null }} | statistical rejections=${assessments.count { it.status == ResearchVerificationStatus.REJECTED && it.rejectionReason == null }} | low-sample uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences < minimumEvaluationsRequired }} | other uncertain=${assessments.count { it.status == ResearchVerificationStatus.UNCERTAIN && it.evaluatedOccurrences >= minimumEvaluationsRequired }}")
         appendLine("DATA QUALITY: invalid pre-cutoff rows=$invalidRowsBeforeCutoff | post-cutoff rows excluded=$excludedOnOrAfterCutoff")
         assessments.sortedWith(compareBy<ProposedPatternBacktest> { it.status.ordinal }
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
@@ -316,6 +317,7 @@ object ResearchToBacktestWorkflow {
             excludedOnOrAfterCutoff = records.size - beforeCutoff.size,
             invalidRowsBeforeCutoff = beforeCutoff.size - eligible.size,
             coveredMarketSessions = coveredMarketSessions,
+            minimumEvaluationsRequired = minimumEvaluations,
             exactPatternEvidence = exactEvidence,
             familyPatternEvidence = familyEvidence,
             rankedExactPatternEvidence = rankedExact,
