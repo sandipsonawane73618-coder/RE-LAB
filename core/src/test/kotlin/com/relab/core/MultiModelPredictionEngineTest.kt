@@ -35,6 +35,21 @@ class MultiModelPredictionEngineTest {
         assertEquals(before.consensus.candidates, withFuture.consensus.candidates)
     }
 
+    @Test fun chronologicalFastPathMatchesPublicFilteredPrediction() {
+        val rows = (0 until 18).map { row(it, if (it % 3 == 0) "111" else "222") }
+        val target = LocalDate.of(2026, 1, 19)
+        val engine = MultiModelPredictionEngine(minimumHistory = 5)
+        val expected = engine.predict(rows, Market.SRIDEVI, "main", target, PredictionChannel.OPEN_PANNA)
+        val actual = engine.predictFromEarlierHistory(
+            history = rows,
+            market = Market.SRIDEVI,
+            sessionId = "main",
+            targetDate = target,
+            channel = PredictionChannel.OPEN_PANNA
+        )
+        assertEquals(expected, actual)
+    }
+
     @Test fun insufficientHistoryAbstainsInsteadOfGuessing() {
         val result = MultiModelPredictionEngine(minimumHistory = 6).predict(
             (0 until 5).map { row(it, "111") }, Market.SRIDEVI, "main",
