@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -61,7 +62,6 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
     val vault = remember { AiKeyVault(context) }
     val store = remember { AiResearchMemoryStore(context) }
     val engine = remember { AiResearchEngine() }
-    val loopEngine = remember { AiResearchLoopEngine() }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
     var question by remember { mutableStateOf("Find reproducible logic patterns, challenge assumptions, and propose leakage-free tests. Treat predictions as experimental.") }
@@ -101,6 +101,41 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
         keyStatus = "Gemini: " + (if (vault.hasKey(AiKeyVault.GEMINI)) "saved securely" else "not configured")
         keyStatus += " · Groq: " + (if (vault.hasKey(AiKeyVault.GROQ)) "saved securely" else "not configured")
+
+        var previousWorkState: androidx.work.WorkInfo.State? = null
+        while (true) {
+            val workState = withContext(Dispatchers.IO) {
+                androidx.work.WorkManager.getInstance(context)
+                    .getWorkInfosForUniqueWork(AiResearchLoopWorker.UNIQUE_WORK_NAME)
+                    .get().firstOrNull()?.state
+            }
+            busy = workState == androidx.work.WorkInfo.State.ENQUEUED ||
+                workState == androidx.work.WorkInfo.State.RUNNING ||
+                workState == androidx.work.WorkInfo.State.BLOCKED
+            if (workState != previousWorkState) {
+                when (workState) {
+                    androidx.work.WorkInfo.State.ENQUEUED -> status = "Background research queued. You can leave the app."
+                    androidx.work.WorkInfo.State.RUNNING -> status = "Background research is running. You can close this screen; progress is saved."
+                    androidx.work.WorkInfo.State.SUCCEEDED -> {
+                        history = withContext(Dispatchers.IO) { store.latest() }
+                        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+                        status = "Background Auto Research completed. All results remain UNVERIFIED until backtested."
+                    }
+                    androidx.work.WorkInfo.State.FAILED -> {
+                        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+                        status = pendingLoop?.lastError?.let { "Background research paused: " + it }
+                            ?: "Background research failed. Saved checkpoints are preserved."
+                    }
+                    androidx.work.WorkInfo.State.CANCELLED -> {
+                        pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
+                        status = "Background research cancelled. Saved checkpoints are preserved."
+                    }
+                    else -> Unit
+                }
+                previousWorkState = workState
+            }
+            delay(1500)
+        }
     }
     fun launchResearch(session: AiResearchSession) {
         scope.launch {
@@ -123,27 +158,15 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
         }
     }
     fun launchAutoLoop(session: AiResearchLoopSession) {
-        scope.launch {
-            busy = true; result = null; loopResult = null
-            status = "Auto Research Loop running — Researcher → Auditor → improvement…"
-            try {
-                val keys = withContext(Dispatchers.IO) { vault.read(AiKeyVault.GEMINI) to vault.read(AiKeyVault.GROQ) }
-                val completed = withContext(Dispatchers.IO) {
-                    loopEngine.run(
-                        keys.first.orEmpty(), keys.second.orEmpty(), session.question, session.evidence,
-                        session.priorMemory, session.maxRounds, session.checkpoint()
-                    ) { round, stage, output -> store.saveLoopStage(session.id, round, stage, output) }
-                }
-                withContext(Dispatchers.IO) { store.markLoopCompleted(session.id, completed) }
-                loopResult = completed
-                history = withContext(Dispatchers.IO) { store.latest() }
-                pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
-                status = "Auto Research Loop complete. Results remain UNVERIFIED until independently tested."
-            } catch (e: Exception) {
-                withContext(Dispatchers.IO) { store.markLoopInterrupted(session.id, e.message ?: "Network or provider error") }
-                pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
-                status = "Auto loop paused safely. Completed round stages are saved; tap Resume auto loop to continue."
-            } finally { busy = false }
+        result = null
+        loopResult = null
+        busy = true
+        status = "Queueing persistent background research. The app can be closed while it runs."
+        try {
+            AiResearchBackgroundWork.enqueue(context, session.id)
+        } catch (error: Exception) {
+            busy = false
+            status = "Could not queue background research: " + (error.message ?: "unknown error")
         }
     }
     fun launchBacktest(synthesis: String) {
@@ -305,7 +328,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                                 }
                             }
                         }
-                        if (busy) Text("Each completed AI stage is saved locally. If the app closes or network drops, reopen and resume.")
+                        if (busy) Text("Background worker is active. You may leave or close the app; saved stages and the foreground notification track progress.")
                         status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
