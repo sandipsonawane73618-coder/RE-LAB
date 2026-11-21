@@ -214,7 +214,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             status = "Extracting AI proposals and running the complete chronological research audit…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
-                val report = withContext(Dispatchers.IO) {
+                val (report, exports) = withContext(Dispatchers.IO) {
                     val observations = LocalObservationDatabase(context).loadObservations()
                     // Verification uses only multi-source consensus rows. Exploratory/single-source
                     // records may inform AI hypotheses but cannot independently verify them.
@@ -226,7 +226,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                             ReverseEngineeringModel.rank(records, market, session, targetDate, side, limit = 10, minimumHistory = 30)
                         }
                     }
-                    EndToEndResearchAuditWorkflow.run(
+                    val audit = EndToEndResearchAuditWorkflow.run(
                         records = records,
                         scannerRankings = scannerRankings,
                         proposals = parsed.proposals,
@@ -234,10 +234,16 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         minimumModelHistory = 30,
                         candidateLimit = 10
                     )
+                    // Large report formatting and CSV serialization stay off the main thread.
+                    audit to Triple(
+                        audit.compactSummary(),
+                        ResearchToBacktestCsvExporter.export(audit.research),
+                        EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
+                    )
                 }
-                backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
-                backtestCsv = ResearchToBacktestCsvExporter.export(report.research)
-                walkForwardCsv = EndToEndResearchAuditWorkflow.exportWalkForwardCsv(report)
+                backtestReport = exports.first + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
+                backtestCsv = exports.second
+                walkForwardCsv = exports.third
                 status = if (parsed.proposals.isEmpty()) {
                     "Research report completed; AI supplied no executable patterns. Scanner and Pattern Evidence DB results are still available. " +
                         parsed.issues.joinToString("; ")
