@@ -61,6 +61,13 @@ import com.relab.core.SourceObservationMerger
 import com.relab.core.SourceTimingAnalytics
 import com.relab.core.SourceReconciliation
 import java.time.LocalDate
+import java.time.Instant
+import java.security.MessageDigest
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonSerializer
+import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -200,6 +207,63 @@ private data class DashboardAnalysisSnapshot(
     val sourceIndependence: List<com.relab.core.SourceIndependenceReport>
 )
 
+private data class DashboardAnalysisCacheEntry(
+    val cacheKey: String,
+    val snapshot: DashboardAnalysisSnapshot,
+    val coverageReports: List<com.relab.core.CoverageReport>
+)
+
+private object DashboardAnalysisCache {
+    private val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(LocalDate::class.java, JsonSerializer<LocalDate> { value, _, _ ->
+            com.google.gson.JsonPrimitive(value.toString())
+        })
+        .registerTypeAdapter(LocalDate::class.java, JsonDeserializer<LocalDate> { json, _, _ ->
+            LocalDate.parse(json.asString)
+        })
+        .registerTypeAdapter(Instant::class.java, JsonSerializer<Instant> { value, _, _ ->
+            com.google.gson.JsonPrimitive(value.toString())
+        })
+        .registerTypeAdapter(Instant::class.java, JsonDeserializer<Instant> { json, _, _ ->
+            Instant.parse(json.asString)
+        })
+        .create()
+
+    fun key(
+        observations: List<com.relab.core.SourceObservation>,
+        targetDate: LocalDate,
+        ranges: Map<String, Pair<LocalDate, LocalDate>>
+    ): String {
+        val stableRows = SourceCsvExporter.export(observations)
+        val rangeText = ranges.toSortedMap().entries.joinToString("|") {
+            "${it.key}=${it.value.first},${it.value.second}"
+        }
+        val input = "dashboard-analysis-v1|$targetDate|$rangeText|$stableRows"
+        return MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    fun read(context: android.content.Context, expectedKey: String): DashboardAnalysisCacheEntry? {
+        val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
+        if (!file.isFile) return null
+        return try {
+            gson.fromJson(file.readText(Charsets.UTF_8), DashboardAnalysisCacheEntry::class.java)
+                ?.takeIf { it.cacheKey == expectedKey }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun write(context: android.content.Context, entry: DashboardAnalysisCacheEntry) {
+        val file = File(context.filesDir, "dashboard-analysis-cache-v1.json")
+        val temporary = File(context.filesDir, "dashboard-analysis-cache-v1.tmp")
+        temporary.writeText(gson.toJson(entry), Charsets.UTF_8)
+        if (file.exists() && !file.delete()) error("Could not replace previous analysis cache")
+        if (!temporary.renameTo(file)) error("Could not commit analysis cache")
+    }
+}
+
 private fun buildDashboardAnalysisSnapshot(
     observations: List<com.relab.core.SourceObservation>,
     targetDate: LocalDate = LocalDate.now()
@@ -301,13 +365,7 @@ private fun RelabHome(
     var chartUrl by remember { mutableStateOf("") }
     var linkBusy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        // Refresh canonical results on every app launch. Exact re-imports are skipped by the
-        // database merger; source conflicts remain visible and each successful market persists.
-        if (!linkBusy) {
-            importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it })
-        }
-    }
+    // Canonical chart fetching is explicit. Startup must never perform nine network requests.
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -353,14 +411,39 @@ private fun RelabHome(
     var analysisSnapshot by remember { mutableStateOf<DashboardAnalysisSnapshot?>(null) }
     var analysisError by remember { mutableStateOf<String?>(null) }
     var analysisCompletedFor by remember { mutableStateOf<List<com.relab.core.SourceObservation>?>(null) }
+    var coverageReports by remember { mutableStateOf<List<com.relab.core.CoverageReport>>(emptyList()) }
+    var coverageLoading by remember { mutableStateOf(true) }
+    var coverageError by remember { mutableStateOf<String?>(null) }
+    var coverageCompletedFor by remember { mutableStateOf<String?>(null) }
 
-    // Reconciliation, pattern scans, candidate generation and chronological backtests
-    // operate on thousands of rows. Keep the complete analysis off the Compose/UI thread.
-    LaunchedEffect(observations, selectedDate) {
+    // Reuse a durable analysis snapshot when the exact dataset/date/settings are unchanged.
+    // On a cache miss, compute off the UI thread and persist the completed result below.
+    LaunchedEffect(observations, selectedDate, coverageRangeOverrides) {
+        val rows = observations
+        val ranges = coverageRangeOverrides
+        val cacheKey = withContext(Dispatchers.Default) {
+            DashboardAnalysisCache.key(rows, selectedDate, ranges)
+        }
+        val cached = withContext(Dispatchers.IO) {
+            DashboardAnalysisCache.read(context, cacheKey)
+        }
+        if (cached != null) {
+            analysisSnapshot = cached.snapshot
+            coverageReports = cached.coverageReports
+            analysisError = null
+            analysisCompletedFor = rows
+            coverageCompletedFor = cacheKey
+            coverageError = null
+            coverageLoading = false
+            return@LaunchedEffect
+        }
+
         analysisSnapshot = null
         analysisError = null
         analysisCompletedFor = null
-        val rows = observations
+        coverageCompletedFor = null
+        coverageLoading = true
+        coverageError = null
         try {
             val computed = withContext(Dispatchers.Default) {
                 buildDashboardAnalysisSnapshot(rows, selectedDate)
@@ -373,14 +456,15 @@ private fun RelabHome(
         }
     }
 
-    var coverageReports by remember { mutableStateOf<List<com.relab.core.CoverageReport>>(emptyList()) }
-    var coverageLoading by remember { mutableStateOf(true) }
-    var coverageError by remember { mutableStateOf<String?>(null) }
-
     // Run coverage only after the main analysis snapshot finishes. Running both
     // full-history pipelines at once doubled peak memory on cold launches.
-    LaunchedEffect(observations, coverageRangeOverrides, analysisCompletedFor, analysisSnapshot, analysisError) {
-        // Do not analyse a new dataset using the previous launch's snapshot.
+    LaunchedEffect(observations, selectedDate, coverageRangeOverrides, analysisCompletedFor, analysisSnapshot, analysisError) {
+        val rowsForCache = observations
+        val rangesForCache = coverageRangeOverrides
+        val cacheKey = withContext(Dispatchers.Default) {
+            DashboardAnalysisCache.key(rowsForCache, selectedDate, rangesForCache)
+        }
+        if (coverageCompletedFor == cacheKey) return@LaunchedEffect
         if (analysisCompletedFor != observations) {
             coverageLoading = true
             return@LaunchedEffect
@@ -413,6 +497,14 @@ private fun RelabHome(
                     .sortedWith(compareBy<com.relab.core.CoverageReport> { it.market.name }.thenBy { it.sessionId })
             }
             coverageReports = computed
+            val completedSnapshot = analysisSnapshot ?: return@LaunchedEffect
+            withContext(Dispatchers.IO) {
+                DashboardAnalysisCache.write(
+                    context,
+                    DashboardAnalysisCacheEntry(cacheKey, completedSnapshot, computed)
+                )
+            }
+            coverageCompletedFor = cacheKey
         } catch (error: Exception) {
             coverageReports = emptyList()
             coverageError = error.message ?: "Unknown coverage audit error"
@@ -620,17 +712,11 @@ private fun RelabHome(
     }
 
     val startupLoading = linkBusy || (snapshot == null && analysisError == null) || coverageLoading
-    if (startupLoading) {
-        val startupStatus = when {
-            linkBusy -> "Fetching all five market charts…"
-            snapshot == null -> "Building the reverse-engineering analysis…"
-            else -> "Completing historical coverage audit…"
-        }
-        StartupLoadingScreen(
-            status = startupStatus,
-            detail = importMessage ?: "Loading saved history and preparing the research workspace."
-        )
-        return
+    val startupStatus = when {
+        linkBusy -> "Refreshing all 9 markets…"
+        snapshot == null && analysisError == null -> "Building analysis in background…"
+        coverageLoading -> "Completing coverage audit in background…"
+        else -> "Analysis ready"
     }
 
     MaterialTheme {
@@ -638,6 +724,23 @@ private fun RelabHome(
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("RE-LAB", style = MaterialTheme.typography.headlineLarge)
                 Text("Market Predictions", style = MaterialTheme.typography.titleMedium)
+                if (startupLoading) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp), strokeWidth = 2.dp)
+                        Text(startupStatus, style = MaterialTheme.typography.bodySmall)
+                    }
+                } else if (analysisError != null) {
+                    Text("Analysis error: $analysisError", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    enabled = !linkBusy,
+                    onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (linkBusy) "Fetching 9 markets…" else "Fetch / Refresh All 9 Markets") }
                 Text("Selected date", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = { selectedDate = selectedDate.minusDays(1); selectedDateText = selectedDate.toString(); dateError = null }) { Text("‹") }
@@ -704,11 +807,6 @@ private fun RelabHome(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Open Two-AI Research Lab") }
-                Button(
-                    enabled = !linkBusy,
-                    onClick = { scope.launch { importAllCanonicalCharts(onSaveLinkObservations, { observations = it }, { importMessage = it }, { linkBusy = it }) } },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(if (linkBusy) "Fetching 9 markets…" else "Fetch / Refresh All 9 Markets") }
                 Text("Paste any supported chart URL. RE-LAB detects the market from its exact source path.")
                 OutlinedTextField(
                     value = chartUrl,
@@ -796,7 +894,7 @@ private fun RelabHome(
                         Text("Malformed rows: $malformed   Conflicting dates: $conflicts")
                         Text("Reconciled date groups: ${groups.size}")
                         if (currentReport == null) {
-                            Text("No CSV backup is loaded. Historical charts are fetched automatically when the local dataset is empty; manual import is optional.")
+                            Text("No saved chart history. Import a CSV/bundle or use Fetch / Refresh All 9 Markets when you want to download charts.")
                         }
                         if (currentReport != null && currentReport.issues.isNotEmpty()) {
                             Text("Import row issues: ${currentReport.issues.size}")
