@@ -30,6 +30,25 @@ class SangamWalkForwardEvaluatorTest {
     }
 
     @Test
+    fun reportsThreeChronologicalPeriodsWithoutChangingOverallTotals() {
+        val records = (1..36).map(::row)
+        val report = SangamWalkForwardEvaluator.evaluate(
+            records, LocalDate.of(2026, 3, 1), minimumHistory = 3
+        ).single()
+
+        assertEquals(3, report.chronologicalPeriods.size)
+        assertEquals(listOf(12, 12, 12), report.chronologicalPeriods.map { it.requestedTargets })
+        assertEquals(33, report.chronologicalPeriods.sumOf { it.evaluatedTargets })
+        assertEquals(3, report.chronologicalPeriods.sumOf { it.abstainedTargets })
+        assertEquals(report.evaluatedTargets, report.chronologicalPeriods.sumOf { it.evaluatedTargets })
+        assertEquals(report.exactPairTop10Hits, report.chronologicalPeriods.sumOf { it.exactPairTop10Hits })
+        assertEquals(1, report.chronologicalPeriods.first().period)
+        assertEquals(3, report.chronologicalPeriods.last().period)
+        assertTrue(report.chronologicalPeriods[0].lastTargetDate!!.isBefore(report.chronologicalPeriods[1].firstTargetDate))
+        assertTrue(report.chronologicalPeriods[1].lastTargetDate!!.isBefore(report.chronologicalPeriods[2].firstTargetDate))
+    }
+
+    @Test
     fun excludesTargetAndFutureRowsFromEvaluationWindow() {
         val records = (1..35).map(::row) + row(40)
         val report = SangamWalkForwardEvaluator.evaluate(
