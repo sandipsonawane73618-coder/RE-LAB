@@ -10,7 +10,7 @@ class AnkFamilyOutcomeAuditorTest {
         assertTrue(exact.exactHitWithinTopLimit)
         assertTrue(exact.familyHitWithinTopLimit)
 
-        val family = AnkFamilyOutcomeAuditor.analyze(1, 6, listOf(1, 6, 2))
+        val family = AnkFamilyOutcomeAuditor.analyze(1, 6, listOf(1, 6, 2), topLimit = 1)
         assertEquals(AnkOutcomeMatch.FAMILY_HIT, family.match)
         assertFalse(family.exactHitWithinTopLimit)
         assertTrue(family.familyHitWithinTopLimit)
