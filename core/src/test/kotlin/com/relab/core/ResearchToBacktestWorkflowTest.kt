@@ -175,4 +175,33 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(csv.contains("pattern_only_hits"))
         assertTrue(csv.contains("paired_exact_p_value"))
     }
+    @Test
+    fun workflowRejectsScannerMarketSessionOutsideConsensusRowsAndImpossibleTrainingCounts() {
+        val rows = repeatedRows()
+        val target = LocalDate.of(2026, 1, 1).plusDays(120)
+        val invalidMarketSession = ReverseEngineeringRanking(
+            market = Market.KALYAN, sessionId = "missing-session", side = ReverseEngineeringSide.OPEN,
+            targetDate = target, trainingRecords = 0, minimumHistoryRequired = 30,
+            abstained = true, candidates = emptyList(), familyCandidates = emptyList(),
+            activeEvidenceLayers = emptyList(), note = "test"
+        )
+        try {
+            ResearchToBacktestWorkflow.run(rows, listOf(invalidMarketSession), emptyList(), target)
+            fail("Scanner scope outside eligible consensus history must be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("market/session present"))
+        }
+
+        val impossibleTrainingCount = invalidMarketSession.copy(
+            market = Market.SRIDEVI, sessionId = "main", trainingRecords = rows.size + 1
+        )
+        try {
+            ResearchToBacktestWorkflow.run(rows, listOf(impossibleTrainingCount), emptyList(), target)
+            fail("Scanner training count exceeding available eligible rows must be rejected")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("training record count"))
+        }
+    }
+
+
 }
