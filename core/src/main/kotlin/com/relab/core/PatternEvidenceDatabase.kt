@@ -5,6 +5,8 @@ import java.time.temporal.ChronoUnit
 
 enum class PatternEvidenceChannel { OPEN_PANNA, CLOSE_PANNA, JODI }
 
+enum class PatternOutcomeMode { EXACT, FAMILY_MOVEMENT }
+
 data class PatternOutcomeCount(val outcome: String, val count: Int)
 
 data class PatternEvidenceRecord(
@@ -29,11 +31,12 @@ data class PatternEvidenceRecord(
     val baselineLift: Double?,
     val recencyWeightedHitRate: Double?,
     val recentHitRate: Double?,
-    val rollingHitRateStdDev: Double?
+    val rollingHitRateStdDev: Double?,
+    val outcomeMode: PatternOutcomeMode = PatternOutcomeMode.EXACT
 )
 
 /**
- * Builds auditable next-observation evidence from exact historical sequences.
+ * Builds auditable next-observation evidence from exact or family-movement sequences.
  *
  * A pattern is the previous N observed chart values in one market/session/channel.
  * Its outcome is the current row's value. Each hit/miss is scored only against
@@ -45,7 +48,8 @@ object PatternEvidenceDatabase {
         records: List<ChartRecord>,
         targetDateExclusive: LocalDate,
         windowLengths: IntRange = 2..5,
-        recentOccurrenceWindow: Int = 20
+        recentOccurrenceWindow: Int = 20,
+        outcomeMode: PatternOutcomeMode = PatternOutcomeMode.EXACT
     ): List<PatternEvidenceRecord> {
         require(!windowLengths.isEmpty() && windowLengths.first >= 1) {
             "At least one positive pattern window length is required"
@@ -73,10 +77,14 @@ object PatternEvidenceDatabase {
                 val rows = rowsUnsorted.sortedBy { it.date }
                 channels.forEach { channel ->
                     val values = rows.map { row ->
-                        when (channel) {
+                        val raw = when (channel) {
                             PatternEvidenceChannel.OPEN_PANNA -> row.openPanna
                             PatternEvidenceChannel.CLOSE_PANNA -> row.closePanna
                             PatternEvidenceChannel.JODI -> row.jodi
+                        }
+                        when (outcomeMode) {
+                            PatternOutcomeMode.EXACT -> raw
+                            PatternOutcomeMode.FAMILY_MOVEMENT -> FamilyMovementMath.key(raw)
                         }
                     }
                     windowLengths.forEach windowLoop@ { windowLength ->
@@ -183,7 +191,8 @@ object PatternEvidenceDatabase {
                                     hits.toDouble() / (hits + misses) - baselineHits.toDouble() / (hits + misses),
                                 recencyWeightedHitRate = weightedHitRate,
                                 recentHitRate = recentHitRate,
-                                rollingHitRateStdDev = rollingStdDev
+                                rollingHitRateStdDev = rollingStdDev,
+                                outcomeMode = outcomeMode
                             )
                         }
                     }

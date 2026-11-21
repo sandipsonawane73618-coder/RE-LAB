@@ -15,11 +15,13 @@ object AiResearchContextBuilder {
         maxRecordsPerMarketSession: Int = 6,
         maxObservationsPerMarketSession: Int = 6,
         maxChars: Int = 20_000,
-        scannerRankings: List<ReverseEngineeringRanking> = emptyList()
+        scannerRankings: List<ReverseEngineeringRanking> = emptyList(),
+        maxPatternEvidencePerMode: Int = 3
     ): String {
         require(maxRecordsPerMarketSession >= 0)
         require(maxObservationsPerMarketSession >= 0)
         require(maxChars >= 1)
+        require(maxPatternEvidencePerMode >= 0)
         val eligibleObservations = observations.filter {
             it.market in ReverseEngineeringModel.enabledMarkets && it.date.isBefore(targetDateExclusive)
         }
@@ -28,7 +30,18 @@ object AiResearchContextBuilder {
         }
         val observationGroups = eligibleObservations.groupBy { it.market to it.sessionId }
         val recordGroups = eligibleRecords.groupBy { it.market to it.sessionId }
+        // AI may inspect exploratory single-source rows, but Pattern Evidence DB statistics
+        // in the research pack must come only from reconciled multi-source consensus.
+        val eligibleConsensusRecords = ReconciledChartBuilder.build(eligibleObservations).records
+            .filter { it.date.isBefore(targetDateExclusive) }
+        val consensusRecordGroups = eligibleConsensusRecords.groupBy { it.market to it.sessionId }
         val eligibleRankings = scannerRankings.filter { it.market in ReverseEngineeringModel.enabledMarkets && it.targetDate == targetDateExclusive }.groupBy { it.market to it.sessionId }
+        val exactPatternEvidence = PatternEvidenceRanking.rank(
+            PatternEvidenceDatabase.analyze(eligibleConsensusRecords, targetDateExclusive, outcomeMode = PatternOutcomeMode.EXACT)
+        ).groupBy { it.evidence.market to it.evidence.sessionId }
+        val familyPatternEvidence = PatternEvidenceRanking.rank(
+            PatternEvidenceDatabase.analyze(eligibleConsensusRecords, targetDateExclusive, outcomeMode = PatternOutcomeMode.FAMILY_MOVEMENT)
+        ).groupBy { it.evidence.market to it.evidence.sessionId }
         val output = StringBuilder()
         var currentLimit = maxChars
         var wasTruncated = false
@@ -49,8 +62,9 @@ object AiResearchContextBuilder {
         line("Target date exclusive: $targetDateExclusive")
         line("Scope: all nine enabled markets; rows on/after target date excluded.")
         line("IMPORTANT: raw source observations below are not independent confirmations. Derived records are exploratory and may include single-source/conflicting groups; inspect provenance before treating as truth.")
-        line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}.")
-        line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use history strictly before target date.")
+        line("Eligible source observations: ${eligibleObservations.size}; eligible exploratory records: ${eligibleRecords.size}; eligible multi-source consensus records: ${eligibleConsensusRecords.size}.")
+        line("SCANNER RANKINGS: relative evidence indices only; NOT calibrated probabilities. Rankings use multi-source consensus history strictly before target date.")
+        line("PATTERN EVIDENCE DB: chronological historical pattern/outcome evidence, ranked against a matched global baseline. Multi-source consensus rows only; not a prediction or independent verification.")
         val truncationSuffix = "\n[Evidence pack reached configured character limit; per-market character budgets preserve coverage across markets.]"
         val marketBudget = ((maxChars - output.length - truncationSuffix.length) / ReverseEngineeringModel.enabledMarkets.size).coerceAtLeast(1)
         for (market in ReverseEngineeringModel.enabledMarkets.sortedBy { it.name }) {
@@ -58,7 +72,7 @@ object AiResearchContextBuilder {
             val marketLimit = minOf(maxChars, marketStart + marketBudget)
             currentLimit = marketLimit
             if (output.length >= marketLimit) break
-            val sessions = (observationGroups.keys + recordGroups.keys + eligibleRankings.keys)
+            val sessions = (observationGroups.keys + recordGroups.keys + consensusRecordGroups.keys + eligibleRankings.keys)
                 .filter { it.first == market }
                 .map { it.second }.distinct().sorted()
             line("")
@@ -71,12 +85,31 @@ object AiResearchContextBuilder {
                 if (output.length >= marketLimit) break
                 val sourceRows = observationGroups[market to session].orEmpty().sortedByDescending { it.date }
                 val records = recordGroups[market to session].orEmpty().sortedByDescending { it.date }
-                line("SESSION: $session | source observations=${sourceRows.size} | exploratory records=${records.size}")
+                val consensusRecords = consensusRecordGroups[market to session].orEmpty().sortedByDescending { it.date }
+                line("SESSION: $session | source observations=${sourceRows.size} | exploratory records=${records.size} | multi-source consensus records=${consensusRecords.size}")
                 val statusCounts = sourceRows.groupingBy { it.status.name }.eachCount().toSortedMap()
                 line("Source status counts: " + if (statusCounts.isEmpty()) "none" else statusCounts.entries.joinToString(", ") { "${it.key}=${it.value}" })
                 line("CHART RECORDS (date | open panna | jodi | close panna | source id):")
                 records.take(maxRecordsPerMarketSession).sortedBy { it.date }.forEach {
                     line("${it.date} | ${it.openPanna} | ${it.jodi} | ${it.closePanna} | ${it.sourceId} | EVIDENCE_REF=[${market.name}/$session/${it.date}/${it.sourceId}]")
+                }
+                line("PATTERN EVIDENCE DB — EXACT MODE (MULTI-SOURCE CONSENSUS; pattern | n | hits | baseline hits | assessment | rank score):")
+                val exactItems = exactPatternEvidence[market to session].orEmpty().take(maxPatternEvidencePerMode)
+                if (exactItems.isEmpty()) line("No eligible multi-source consensus exact-pattern evidence for this market/session.")
+                exactItems.forEach { item ->
+                    line(item.evidence.pattern + " | " + item.evidence.evaluatedOccurrences + " | " + item.evidence.hits + " | " + item.evidence.baselineHits + " | " + item.assessment + " | " + "%.3f".format(java.util.Locale.ROOT, item.rankScore))
+                }
+                line("PATTERN EVIDENCE DB — FAMILY MOVEMENT MODE (MULTI-SOURCE CONSENSUS; pattern | n | hits | baseline hits | assessment | rank score):")
+                val familyItems = familyPatternEvidence[market to session].orEmpty().take(maxPatternEvidencePerMode)
+                if (familyItems.isEmpty()) line("No eligible multi-source consensus family-movement evidence for this market/session.")
+                familyItems.forEach { item ->
+                    line(item.evidence.pattern + " | " + item.evidence.evaluatedOccurrences + " | " + item.evidence.hits + " | " + item.evidence.baselineHits + " | " + item.assessment + " | " + "%.3f".format(java.util.Locale.ROOT, item.rankScore))
+                }
+                line("FAMILY MOVEMENT HYPOTHESIS (research only; not a prediction):")
+                records.take(3).sortedBy { it.date }.forEach { row ->
+                    line("${row.date} | Jodi ${row.jodi} -> ${FamilyMovementMath.variants(row.jodi).joinToString("/")}")
+                    line("${row.date} | Open panna ${row.openPanna} -> ${FamilyMovementMath.variants(row.openPanna).joinToString("/")}")
+                    line("${row.date} | Close panna ${row.closePanna} -> ${FamilyMovementMath.variants(row.closePanna).joinToString("/")}")
                 }
                 line("RAW SOURCE OBSERVATIONS (date | source id | status | raw text | normalized result | retrieved at):")
                 sourceRows.take(maxObservationsPerMarketSession).sortedBy { it.date }.forEach {

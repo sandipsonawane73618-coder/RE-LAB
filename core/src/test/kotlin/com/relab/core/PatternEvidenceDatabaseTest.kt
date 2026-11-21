@@ -107,4 +107,28 @@ class PatternEvidenceDatabaseTest {
         assertTrue(ranked.all { it.rankScore.isFinite() })
     }
 
+    @Test fun familyMovementModeGroupsDigitSwapAndReversalWithoutChangingExactMode() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333"),
+            row(3, "666"), row(4, "777"), row(5, "888")
+        )
+        val exact = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        val movement = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2,
+            outcomeMode = PatternOutcomeMode.FAMILY_MOVEMENT
+        )
+        assertTrue(exact.all { it.outcomeMode == PatternOutcomeMode.EXACT })
+        val repeated = movement.single {
+            it.channel == PatternEvidenceChannel.OPEN_PANNA &&
+                it.pattern == "${FamilyMovementMath.key("111")}>${FamilyMovementMath.key("222")}"
+        }
+        assertEquals(PatternOutcomeMode.FAMILY_MOVEMENT, repeated.outcomeMode)
+        assertEquals(2, repeated.occurrences)
+        assertEquals(1, repeated.evaluatedOccurrences)
+        assertEquals(1, repeated.hits)
+        assertEquals(0, repeated.misses)
+    }
+
 }

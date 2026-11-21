@@ -8,9 +8,11 @@ class AiResearchEngineTest {
 
     @Test fun auditsCitationsInAllThreeStagesAndPersistsRawStageCheckpoints() {
         val requests = mutableListOf<String>()
+        val requestBodies = mutableListOf<String>()
         val checkpoints = mutableListOf<String>()
-        val engine = AiResearchEngine { endpoint, _, _ ->
+        val engine = AiResearchEngine { endpoint, _, body ->
             requests += endpoint
+            requestBodies += body
             when {
                 endpoint.contains("generativelanguage") && requests.size == 1 ->
                     """{"candidates":[{"content":{"parts":[{"text":"Draft [SRIDEVI/main/2026-01-02/publisher-a]."}]}}]}"""
@@ -28,6 +30,10 @@ class AiResearchEngineTest {
         )
 
         assertEquals(3, requests.size)
+        val geminiRequest = com.google.gson.JsonParser.parseString(requestBodies.first()).asJsonObject
+        val generationConfig = geminiRequest.getAsJsonObject("generationConfig")
+        assertEquals(1400, generationConfig.get("maxOutputTokens").asInt)
+        assertFalse("Gemini request must not send unsupported temperature", generationConfig.has("temperature"))
         assertEquals(listOf("GEMINI_ANALYSIS", "GROQ_REVIEW", "FINAL_SYNTHESIS"), checkpoints)
         assertTrue(result.geminiAnalysis.contains("INITIAL GEMINI ANALYSIS"))
         assertTrue(result.geminiAnalysis.contains("Verified citations: 1"))

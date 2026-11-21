@@ -117,8 +117,22 @@ class ReverseEngineeringModelTest {
             sridevi + kalyan, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
             ReverseEngineeringSide.OPEN, minimumHistory = 30
         )
-        assertTrue(result.activeEvidenceLayers.contains("Lagged cross-market conditional"))
+        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
         assertEquals("166", result.candidates.first().panna)
+    }
+
+    @Test fun crossMarketConditionalDoesNotTreatDifferentDatesAsAligned() {
+        val targetHistory = history(Market.SRIDEVI)
+        val sourceHistory = (40..58).map {
+            row(Market.KALYAN, it, open = "277", close = "368")
+        }
+        val result = ReverseEngineeringModel.rank(
+            targetHistory + sourceHistory, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN, minimumHistory = 30
+        )
+
+        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+        assertTrue(result.candidates.all { it.crossMarketConditionalEvidence == null })
     }
 
     @Test fun backtestReportsTopKAndBaselineWithoutFutureLeakage() {
@@ -239,6 +253,33 @@ class ReverseEngineeringModelTest {
         assertFalse(reports.single().occurrences.any {
             it.sourceIds.contains("future-jodi")
         })
+    }
+
+
+    @Test fun rankingIsIsolatedByMarketAndSession() {
+        val mainHistory = history(Market.SRIDEVI)
+        val otherSession = (0 until 40).map {
+            row(Market.SRIDEVI, it, open = "999", close = "000", session = "late")
+        }
+        val otherMarket = (0 until 40).map {
+            row(Market.KALYAN, it, open = "888", close = "111", session = "late")
+        }
+        val target = LocalDate.of(2026, 3, 1)
+        val baseline = ReverseEngineeringModel.rank(
+            mainHistory, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+        val combined = ReverseEngineeringModel.rank(
+            mainHistory + otherSession + otherMarket, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+
+        assertEquals(40, combined.trainingRecords)
+        assertEquals(
+            baseline.candidates.map { it.panna to it.score },
+            combined.candidates.map { it.panna to it.score }
+        )
+        assertEquals(baseline.familyCandidates, combined.familyCandidates)
     }
 
 }

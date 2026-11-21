@@ -5,6 +5,8 @@ import java.time.temporal.ChronoUnit
 
 enum class CrossMarketEvidenceChannel { OPEN_PANNA_FAMILY, CLOSE_PANNA_FAMILY, JODI }
 
+enum class CrossMarketEvidenceLevel { LOW_SAMPLE, LIMITED_SAMPLE, LARGER_SAMPLE }
+
 data class CrossMarketLeadLagEvidence(
     val sourceMarket: Market,
     val targetMarket: Market,
@@ -22,7 +24,12 @@ data class CrossMarketLeadLagEvidence(
     val latestSourceDate: LocalDate,
     val latestTargetDate: LocalDate,
     val latestSourceAgeDays: Long,
-    val distinctSourceCount: Int
+    /** Distinct publisher IDs represented by the source events. */
+    val distinctSourceCount: Int,
+    /** Distinct source-market dates represented; one publisher can supply many observations. */
+    val distinctSourceObservationCount: Int,
+    /** Based on evaluated target outcomes, not raw signal occurrences. */
+    val evidenceLevel: CrossMarketEvidenceLevel
 )
 
 /**
@@ -129,7 +136,13 @@ object CrossMarketLeadLagEvidenceEngine {
                             latestSourceDate = latest.first.date,
                             latestTargetDate = latest.second.date,
                             latestSourceAgeDays = latestAge,
-                            distinctSourceCount = signalEvents.map { it.first.sourceId }.distinct().size
+                            distinctSourceCount = signalEvents.map { it.first.sourceId }.distinct().size,
+                            distinctSourceObservationCount = signalEvents.map { it.first.date }.distinct().size,
+                            evidenceLevel = when {
+                                evaluated < 10 -> CrossMarketEvidenceLevel.LOW_SAMPLE
+                                evaluated < 30 -> CrossMarketEvidenceLevel.LIMITED_SAMPLE
+                                else -> CrossMarketEvidenceLevel.LARGER_SAMPLE
+                            }
                         )
                     }
                 }

@@ -24,7 +24,9 @@ data class CrossMarketWalkForwardReport(
     val noEarlierSourceTargets: Int,
     val staleSourceTargets: Int,
     val insufficientSignalHistoryTargets: Int,
-    val distinctSourceCount: Int
+    val distinctSourceCount: Int,
+    val distinctSourceObservationCount: Int,
+    val evidenceLevel: CrossMarketEvidenceLevel
 )
 
 /**
@@ -99,6 +101,7 @@ object CrossMarketLeadLagWalkForwardEvaluator {
                     val priorTargetOutcomes = mutableListOf<String>()
                     val priorOutcomesBySignal = mutableMapOf<String, MutableList<String>>()
                     val usedSourceIds = linkedSetOf<String>()
+                    val usedSourceObservationDates = linkedSetOf<LocalDate>()
                     var hits = 0
                     var baselineHits = 0
                     var evaluated = 0
@@ -129,6 +132,7 @@ object CrossMarketLeadLagWalkForwardEvaluator {
                                     if (baseline == actual) baselineHits++
                                     evaluated++
                                     usedSourceIds += source.sourceId
+                                    usedSourceObservationDates += source.date
                                 }
                             }
                         }
@@ -163,7 +167,13 @@ object CrossMarketLeadLagWalkForwardEvaluator {
                         noEarlierSourceTargets = noSource,
                         staleSourceTargets = stale,
                         insufficientSignalHistoryTargets = insufficient,
-                        distinctSourceCount = usedSourceIds.size
+                        distinctSourceCount = usedSourceIds.size,
+                        distinctSourceObservationCount = usedSourceObservationDates.size,
+                        evidenceLevel = when {
+                            evaluated < 10 -> CrossMarketEvidenceLevel.LOW_SAMPLE
+                            evaluated < 30 -> CrossMarketEvidenceLevel.LIMITED_SAMPLE
+                            else -> CrossMarketEvidenceLevel.LARGER_SAMPLE
+                        }
                     )
                 }
             }
