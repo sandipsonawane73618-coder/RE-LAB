@@ -550,6 +550,8 @@ private fun RelabHome(
                         )
                     )
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (cacheError: Exception) {
                 // A cache write failure must not turn a successful analysis into a failure.
                 android.util.Log.w("RE-LAB", "Could not persist dashboard analysis cache", cacheError)
