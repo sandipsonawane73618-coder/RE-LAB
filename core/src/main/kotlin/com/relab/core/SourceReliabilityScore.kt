@@ -1,12 +1,6 @@
 package com.relab.core
 
-/**
- * Descriptive source-quality indicators for one market/session/publisher.
- *
- * The score is a weighted, renormalized index of observable data-quality signals.
- * It is not a probability that a result is true and must not be used as a prediction
- * probability. Corroboration measures agreement with other publisher IDs only.
- */
+/** Descriptive source-quality indicators, not truth probabilities or prediction probabilities. */
 enum class SourceEvidenceLevel { LOW_SAMPLE, LIMITED_SAMPLE, LARGER_SAMPLE }
 
 data class SourceReliabilityRecord(
@@ -31,9 +25,9 @@ object SourceReliabilityScore {
     private data class WeightedSignal(val value: Double, val weight: Double)
 
     /**
-     * PENDING and HOLIDAY_CLOSED rows are excluded from the completeness denominator.
-     * Negative publication-to-retrieval lags count as not timely. Missing timestamps
-     * are reported separately and are not silently replaced with retrieval timestamps.
+     * PENDING and HOLIDAY_CLOSED rows are excluded from completeness.
+     * Missing publication timestamps are not replaced with retrieval timestamps.
+     * Negative lags count as not timely; corroboration uses distinct publisher IDs.
      */
     fun summarize(
         observations: List<SourceObservation>,
@@ -46,6 +40,7 @@ object SourceReliabilityScore {
 
         val independence = SourceIndependenceAudit.summarize(observations)
         val pairByIdentity = independence.associateBy { it.market to it.sessionId }
+        val maximumLag = java.time.Duration.ofMinutes(maximumPublicationLagMinutes)
 
         return observations
             .groupBy { Triple(it.market, it.sessionId, it.sourceId) }
@@ -56,19 +51,17 @@ object SourceReliabilityScore {
                         it.status == ObservationStatus.MALFORMED
                 }
                 val published = rows.filter { it.status == ObservationStatus.PUBLISHED }
-                val timestamped = published.mapNotNull { row ->
-                    row.publishedAt?.let { publishedAt ->
-                        java.time.Duration.between(publishedAt, row.retrievedAt).toMinutes()
-                    }
+                val lags = published.mapNotNull { row ->
+                    row.publishedAt?.let { java.time.Duration.between(it, row.retrievedAt) }
                 }
                 val completeness = eligible.takeIf { it.isNotEmpty() }?.let {
                     published.size.toDouble() / it.size
                 }
                 val timestampCoverage = published.takeIf { it.isNotEmpty() }?.let {
-                    timestamped.size.toDouble() / it.size
+                    lags.size.toDouble() / it.size
                 }
-                val timelyRate = timestamped.takeIf { it.isNotEmpty() }?.let { lags ->
-                    lags.count { it >= 0 && it <= maximumPublicationLagMinutes }.toDouble() / lags.size
+                val timelyRate = lags.takeIf { it.isNotEmpty() }?.let { durations ->
+                    durations.count { !it.isNegative && it <= maximumLag }.toDouble() / durations.size
                 }
 
                 val pairReports = pairByIdentity[identity.first to identity.second]?.pairAgreements.orEmpty()
