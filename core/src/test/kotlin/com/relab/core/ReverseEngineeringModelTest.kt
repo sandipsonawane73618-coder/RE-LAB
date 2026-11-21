@@ -117,8 +117,22 @@ class ReverseEngineeringModelTest {
             sridevi + kalyan, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
             ReverseEngineeringSide.OPEN, minimumHistory = 30
         )
-        assertTrue(result.activeEvidenceLayers.contains("Lagged cross-market conditional"))
+        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
         assertEquals("166", result.candidates.first().panna)
+    }
+
+    @Test fun crossMarketConditionalDoesNotTreatDifferentDatesAsAligned() {
+        val targetHistory = history(Market.SRIDEVI)
+        val sourceHistory = (40..58).map {
+            row(Market.KALYAN, it, open = "277", close = "368")
+        }
+        val result = ReverseEngineeringModel.rank(
+            targetHistory + sourceHistory, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN, minimumHistory = 30
+        )
+
+        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+        assertTrue(result.candidates.all { it.crossMarketConditionalEvidence == null })
     }
 
     @Test fun backtestReportsTopKAndBaselineWithoutFutureLeakage() {
