@@ -160,7 +160,7 @@ class ResearchToBacktestWorkflowTest {
         assertTrue(report.compactSummary().contains("pairedExactP="))
         val csv = ResearchToBacktestCsvExporter.export(report)
         assertTrue(csv.contains("UNCERTAIN,LOW_SAMPLE_UNCERTAIN"))
-        val csvRows = csv.split("\\n")
+        val csvRows = csv.split('\n')
         val header = csvColumns(csvRows.first())
         val values = csvColumns(csvRows[1])
         assertEquals(result.patternOnlyHits.toString(), values[header.indexOf("pattern_only_hits")])
