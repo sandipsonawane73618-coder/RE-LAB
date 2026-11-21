@@ -98,11 +98,11 @@ class AiResearchContextBuilderTest {
     @Test fun patternEvidenceInAiPackUsesOnlyMultiSourceConsensusRows() {
         val observations = (0..5).flatMap { day ->
             listOf(
-                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-a"),
-                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-b")
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-a", rawText = "123-65-456", normalizedResult = "123-65-456"),
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-b", rawText = "123-65-456", normalizedResult = "123-65-456")
             )
         }
-        val exploratory = (0..5).map { record(Market.SRIDEVI, it) }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it).copy(jodi = "65") }
         val context = AiResearchContextBuilder.build(
             observations, exploratory, LocalDate.of(2026, 2, 1)
         )
@@ -113,8 +113,10 @@ class AiResearchContextBuilderTest {
     }
 
     @Test fun singleSourceExploratoryRowsCannotPopulateAiPatternEvidenceDb() {
-        val observations = (0..5).map { observation(Market.SRIDEVI, it) }
-        val exploratory = (0..5).map { record(Market.SRIDEVI, it) }
+        val observations = (0..5).map {
+            observation(Market.SRIDEVI, it).copy(rawText = "123-65-456", normalizedResult = "123-65-456")
+        }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it).copy(jodi = "65") }
         val context = AiResearchContextBuilder.build(
             observations, exploratory, LocalDate.of(2026, 2, 1)
         )
