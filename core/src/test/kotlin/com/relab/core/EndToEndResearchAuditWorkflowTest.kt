@@ -135,9 +135,9 @@ class EndToEndResearchAuditWorkflowTest {
         val observations = listOf(
             observation(LocalDate.of(2026, 1, 1), "publisher-a", "123-62-444"),
             observation(LocalDate.of(2026, 1, 1), "publisher-b", "123-62-444"),
-            observation(LocalDate.of(2026, 1, 2), "publisher-a", "222-84-444"),
-            observation(LocalDate.of(2026, 1, 3), "publisher-a", "333-06-444"),
-            observation(LocalDate.of(2026, 1, 3), "publisher-b", "999-06-444"),
+            observation(LocalDate.of(2026, 1, 2), "publisher-a", "222-62-444"),
+            observation(LocalDate.of(2026, 1, 3), "publisher-a", "333-92-444"),
+            observation(LocalDate.of(2026, 1, 3), "publisher-b", "999-72-444"),
             observation(LocalDate.of(2026, 1, 4), "publisher-a", null)
         )
         val sourceQuality = ReconciledChartBuilder.build(observations)
