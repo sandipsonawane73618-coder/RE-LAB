@@ -35,7 +35,7 @@ class MarketWalkForwardComparisonTest {
 
         val kalyan = result.single { it.market == Market.KALYAN }
         assertEquals(2, kalyan.sessionCount)
-        assertEquals(37, kalyan.requestedTargets)
+        assertEquals(42, kalyan.requestedTargets)
         assertEquals(35, kalyan.evaluatedTargets)
         assertEquals(7, kalyan.abstainedTargets)
         assertEquals(7, kalyan.exactPairTop10Hits)
