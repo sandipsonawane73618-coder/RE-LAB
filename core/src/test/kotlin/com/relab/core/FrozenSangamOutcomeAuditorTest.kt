@@ -57,6 +57,10 @@ class FrozenSangamOutcomeAuditorTest {
         assertEquals("222", report.audit.actualClosePanna)
         assertTrue(report.audit.exactPairHit)
         assertEquals(1, report.audit.exactPairRank)
+        assertEquals(1, report.openPannaAudit.exactRank)
+        assertEquals(1, report.closePannaAudit.exactRank)
+        assertTrue(report.openPannaAudit.nearestCandidates.first().exactHit)
+        assertTrue(report.closePannaAudit.nearestCandidates.first().exactHit)
     }
 
     @Test
