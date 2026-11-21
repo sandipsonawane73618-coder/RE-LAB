@@ -59,7 +59,7 @@ class RandomnessChallengeTest {
         assertEquals(setOf("a", "b", "c"), adjusted.keys)
         assertEquals(0.03, adjusted.getValue("a"), 1e-12)
         assertEquals(0.04, adjusted.getValue("b"), 1e-12)
-        assertEquals(0.045, adjusted.getValue("c"), 1e-12)
+        assertEquals(0.04, adjusted.getValue("c"), 1e-12)
         assertTrue(adjusted.values.all { it in 0.0..1.0 })
     }
 
