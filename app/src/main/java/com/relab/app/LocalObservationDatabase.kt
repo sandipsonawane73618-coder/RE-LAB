@@ -134,6 +134,55 @@ class LocalObservationDatabase(context: Context) :
         }
     }
 
+    /** Reads frozen snapshots without recalculating or mutating their payloads. */
+    fun loadPredictionSnapshots(): List<PredictionSnapshot> {
+        val snapshots = mutableListOf<PredictionSnapshot>()
+        readableDatabase.query(
+            TABLE_PREDICTION_SNAPSHOTS,
+            arrayOf(
+                "market", "session_id", "target_date", "created_at",
+                "history_through_date", "model_version", "payload_json", "payload_sha256"
+            ),
+            null, null, null, null,
+            "target_date ASC, created_at ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                snapshots += PredictionSnapshot(
+                    market = Market.valueOf(cursor.getString(0)),
+                    sessionId = cursor.getString(1),
+                    targetDate = LocalDate.parse(cursor.getString(2)),
+                    createdAt = Instant.parse(cursor.getString(3)),
+                    historyThroughDate = LocalDate.parse(cursor.getString(4)),
+                    modelVersion = cursor.getString(5),
+                    payloadJson = cursor.getString(6),
+                    payloadSha256 = cursor.getString(7)
+                )
+            }
+        }
+        return snapshots
+    }
+
+    /** Reads separately stored outcomes; no result is inferred from current chart rows. */
+    fun loadPredictionOutcomes(): List<PredictionSnapshotOutcome> {
+        val outcomes = mutableListOf<PredictionSnapshotOutcome>()
+        readableDatabase.query(
+            TABLE_PREDICTION_OUTCOMES,
+            arrayOf("snapshot_key", "actual_result", "published_at", "source_status"),
+            null, null, null, null,
+            "published_at ASC, snapshot_key ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                outcomes += PredictionSnapshotOutcome(
+                    snapshotKey = cursor.getString(0),
+                    actualResult = cursor.getString(1),
+                    publishedAt = Instant.parse(cursor.getString(2)),
+                    sourceStatus = cursor.getString(3)
+                )
+            }
+        }
+        return outcomes
+    }
+
     fun replaceDataset(csv: String, observations: List<SourceObservation>) {
         val database = writableDatabase
         database.beginTransaction()
