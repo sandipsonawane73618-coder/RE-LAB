@@ -3,6 +3,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +39,7 @@ import java.time.LocalDate
 import com.relab.core.ReverseEngineeringModel
 import com.relab.core.ReverseEngineeringSide
 import com.relab.core.ResearchToBacktestWorkflow
+import com.relab.core.ResearchToBacktestCsvExporter
 
 class AiResearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +75,26 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
     var pendingLoop by remember { mutableStateOf<AiResearchLoopSession?>(null) }
     var loopResult by remember { mutableStateOf<AiResearchLoopResult?>(null) }
     var backtestReport by remember { mutableStateOf<String?>(null) }
+    var backtestCsv by remember { mutableStateOf<String?>(null) }
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            val csv = backtestCsv.orEmpty()
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(csv.toByteArray(Charsets.UTF_8))
+                        } ?: error("Could not open the selected destination")
+                    }
+                    status = "Backtest CSV exported successfully."
+                } catch (error: Exception) {
+                    status = "CSV export failed: " + (error.message ?: "unknown error")
+                }
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         history = withContext(Dispatchers.IO) { store.latest() }
         pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
@@ -127,6 +150,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
         scope.launch {
             busy = true
             backtestReport = null
+            backtestCsv = null
             status = "Extracting structured AI proposals and running chronological backtests…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
@@ -145,6 +169,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     ResearchToBacktestWorkflow.run(records, scannerRankings, parsed.proposals, targetDate)
                 }
                 backtestReport = report.compactSummary() + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
+                backtestCsv = ResearchToBacktestCsvExporter.export(report)
                 status = if (parsed.proposals.isEmpty()) {
                     "Research report completed; AI supplied no executable patterns. Scanner and Pattern Evidence DB results are still available. " +
                         parsed.issues.joinToString("; ")
@@ -251,6 +276,13 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Chronological verification · cutoff ${targetDate} (exclusive)", style = MaterialTheme.typography.titleMedium)
                                     Text(it)
+                                    if (!backtestCsv.isNullOrBlank()) {
+                                        OutlinedButton(
+                                            enabled = !busy,
+                                            onClick = { csvExportLauncher.launch("relab-backtest-" + targetDate + ".csv") },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Export verification CSV") }
+                                    }
                                 }
                             }
                         }
