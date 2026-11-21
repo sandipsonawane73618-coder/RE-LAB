@@ -766,6 +766,13 @@ private fun RelabHome(
         }.sortedByDescending { it.targetDate }
     }
 
+    val frozenPredictionScorecards = remember(frozenPredictionSnapshots, frozenSangamAudits) {
+        com.relab.core.FrozenPredictionScorecardBuilder.build(
+            frozenPredictionSnapshots,
+            frozenSangamAudits
+        )
+    }
+
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
     val baseReverseModelArtifacts = snapshot?.reverseModelArtifacts.orEmpty()
     val sourceTiming = snapshot?.sourceTiming.orEmpty()
@@ -1029,6 +1036,33 @@ private fun RelabHome(
                                 }
                             }
                             Text("Only immutable saved predictions are scored. Family and Jodi matches are diagnostics, never exact Sangam hits.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (frozenPredictionScorecards.isNotEmpty()) {
+                    Card {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Frozen Prediction Scorecard", style = MaterialTheme.typography.titleMedium)
+                            Text("Only snapshots saved before publication are included. Rates use audited outcomes as denominator; pending outcomes are excluded.", style = MaterialTheme.typography.bodySmall)
+                            frozenPredictionScorecards.forEach { score ->
+                                Text(
+                                    "${score.market.name.replace("_", " ")} · ${score.sessionId} · Audited ${score.auditedOutcomes}/${score.savedSnapshots} · Pending ${score.pendingOutcomes}",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                Text(
+                                    "Open exact Top 10/100: ${score.openExactTop10}/${score.auditedOutcomes} (${score.rate(score.openExactTop10)?.let { "${(it * 100).toInt()}%" } ?: "N/A"}) / ${score.openExactTop100}/${score.auditedOutcomes} · Family: ${score.openFamilyTop10}/${score.auditedOutcomes}, ${score.openFamilyTop100}/${score.auditedOutcomes} · Near: ${score.openPositionalNearTop10}/${score.auditedOutcomes}, ${score.openPositionalNearTop100}/${score.auditedOutcomes}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Close exact Top 10/100: ${score.closeExactTop10}/${score.auditedOutcomes} / ${score.closeExactTop100}/${score.auditedOutcomes} · Family: ${score.closeFamilyTop10}/${score.auditedOutcomes}, ${score.closeFamilyTop100}/${score.auditedOutcomes} · Near: ${score.closePositionalNearTop10}/${score.auditedOutcomes}, ${score.closePositionalNearTop100}/${score.auditedOutcomes}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Sangam exact Top 10/100: ${score.sangamExactTop10}/${score.auditedOutcomes} / ${score.sangamExactTop100}/${score.auditedOutcomes} · Jodi diagnostic: ${score.jodiDiagnosticMatches}/${score.auditedOutcomes}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Text("Family and positional near-hit rates are diagnostic only, not exact hits or winning probabilities. No calibration claim is made.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
