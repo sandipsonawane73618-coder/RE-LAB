@@ -42,7 +42,14 @@ object MultiModelWalkForwardEvaluator {
         val consensusCounts = IntArray(5)
         eligible.forEachIndexed { index, target ->
             if (index >= minimumHistory) {
-                val prediction = engine.predict(records, market, sessionId, target.date, channel, limit)
+                val prediction = engine.predictFromEarlierHistory(
+                    history = eligible.subList(0, index),
+                    market = market,
+                    sessionId = sessionId,
+                    targetDate = target.date,
+                    channel = channel,
+                    limit = limit
+                )
                 val actual = target.channelValue(channel)
                 prediction.modelPredictions.forEach { model ->
                     val counts = modelCounts.getOrPut(model.modelId) { IntArray(5) }
