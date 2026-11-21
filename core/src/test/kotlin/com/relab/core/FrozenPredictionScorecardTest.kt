@@ -69,7 +69,8 @@ class FrozenPredictionScorecardTest {
         assertEquals(1, report.openPositionalNearTop10)
         assertEquals(1, report.closePositionalNearTop10)
         assertEquals(1.0, report.rate(report.openExactTop10)!!, 0.0)
-        assertNull(report.rate(0).takeIf { report.auditedOutcomes == 0 })
+        val pendingOnly = FrozenPredictionScorecardBuilder.build(listOf(snapshot(4)), emptyList()).single()
+        assertNull(pendingOnly.rate(0))
     }
 
     @Test
