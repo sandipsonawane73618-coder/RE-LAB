@@ -1,9 +1,7 @@
 package com.relab.core
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import org.junit.Assert.*
+import org.junit.Test
 
 class PredictionOutcomeAuditTest {
     private fun candidate(panna: String, score: Double) = ReverseEngineeringCandidate(
@@ -74,11 +72,17 @@ class PredictionOutcomeAuditTest {
         val open = listOf(candidate("123", 80.0))
         val close = listOf(candidate("456", 70.0))
         val jodi = listOf(ReverseEngineeringJodiCandidate("12", 60.0, 1))
-        kotlin.test.assertFailsWith<IllegalArgumentException> {
+        try {
             PredictionOutcomeAudit.analyze("12", "456", "12", open, close, jodi)
+            fail("Malformed actual result must be rejected")
+        } catch (_: IllegalArgumentException) {
+            // expected
         }
-        kotlin.test.assertFailsWith<IllegalArgumentException> {
+        try {
             PredictionOutcomeAudit.analyze("123", "456", "12", open, close, jodi, topLimit = 0)
+            fail("Invalid top limit must be rejected")
+        } catch (_: IllegalArgumentException) {
+            // expected
         }
     }
 }
