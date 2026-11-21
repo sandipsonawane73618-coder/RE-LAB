@@ -9,6 +9,23 @@ enum class WalkForwardSampleBand {
     LARGER_SAMPLE
 }
 
+data class MarketWalkForwardPeriodComparison(
+    val period: Int,
+    val firstTargetDate: java.time.LocalDate?,
+    val lastTargetDate: java.time.LocalDate?,
+    val requestedTargets: Int,
+    val evaluatedTargets: Int,
+    val abstainedTargets: Int,
+    val exactPairTop10Hits: Int,
+    val exactPairTop100Hits: Int,
+    val openFamilyTop10Hits: Int,
+    val closeFamilyTop10Hits: Int,
+    val jodiDiagnosticMatches: Int
+) {
+    fun rate(hits: Int): Double? =
+        if (evaluatedTargets == 0) null else hits.toDouble() / evaluatedTargets
+}
+
 data class MarketWalkForwardComparison(
     val market: Market,
     val sessionCount: Int,
@@ -20,7 +37,8 @@ data class MarketWalkForwardComparison(
     val openFamilyTop10Hits: Int,
     val closeFamilyTop10Hits: Int,
     val jodiDiagnosticMatches: Int,
-    val sampleBand: WalkForwardSampleBand
+    val sampleBand: WalkForwardSampleBand,
+    val chronologicalPeriods: List<MarketWalkForwardPeriodComparison> = emptyList()
 ) {
     fun rate(hits: Int): Double? =
         if (evaluatedTargets == 0) null else hits.toDouble() / evaluatedTargets
@@ -43,6 +61,24 @@ object MarketWalkForwardComparisonBuilder {
                     evaluated < 300 -> WalkForwardSampleBand.BROADER_SAMPLE
                     else -> WalkForwardSampleBand.LARGER_SAMPLE
                 }
+                val periods = (1..3).map { period ->
+                    val parts = sessions.flatMap { session ->
+                        session.chronologicalPeriods.filter { it.period == period }
+                    }
+                    MarketWalkForwardPeriodComparison(
+                        period = period,
+                        firstTargetDate = parts.mapNotNull { it.firstTargetDate }.minOrNull(),
+                        lastTargetDate = parts.mapNotNull { it.lastTargetDate }.maxOrNull(),
+                        requestedTargets = parts.sumOf { it.requestedTargets },
+                        evaluatedTargets = parts.sumOf { it.evaluatedTargets },
+                        abstainedTargets = parts.sumOf { it.abstainedTargets },
+                        exactPairTop10Hits = parts.sumOf { it.exactPairTop10Hits },
+                        exactPairTop100Hits = parts.sumOf { it.exactPairTop100Hits },
+                        openFamilyTop10Hits = parts.sumOf { it.openFamilyTop10Hits },
+                        closeFamilyTop10Hits = parts.sumOf { it.closeFamilyTop10Hits },
+                        jodiDiagnosticMatches = parts.sumOf { it.jodiPairTop100Hits }
+                    )
+                }
                 MarketWalkForwardComparison(
                     market = market,
                     sessionCount = sessions.size,
@@ -54,7 +90,8 @@ object MarketWalkForwardComparisonBuilder {
                     openFamilyTop10Hits = sessions.sumOf { it.openFamilyTop10Hits },
                     closeFamilyTop10Hits = sessions.sumOf { it.closeFamilyTop10Hits },
                     jodiDiagnosticMatches = sessions.sumOf { it.jodiPairTop100Hits },
-                    sampleBand = band
+                    sampleBand = band,
+                    chronologicalPeriods = periods
                 )
             }
     }
