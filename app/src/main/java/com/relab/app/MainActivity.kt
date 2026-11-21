@@ -208,6 +208,12 @@ private data class DashboardAnalysisSnapshot(
     val crossMarketLeadLagBacktests: List<com.relab.core.CrossMarketWalkForwardReport>,
     val candidateSets: List<Triple<com.relab.core.CandidateRanking, com.relab.core.CandidateRanking, List<com.relab.core.JodiCandidate>>>,
     val reverseModelSets: List<ReverseModelDashboardSet>,
+    val marketWalkForwardComparisons = remember(consensusWalkForwardReport) {
+        consensusWalkForwardReport?.marketSessionReports?.let {
+            com.relab.core.MarketWalkForwardComparisonBuilder.build(it)
+        }.orEmpty()
+    }
+
     val patternEvidenceSets: List<PatternEvidenceDashboardSet>,
     val reverseModelArtifacts: Map<String, String>,
     val sourceTiming: List<com.relab.core.SourceTimingSummary>,
@@ -1105,6 +1111,18 @@ private fun RelabHome(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text("Open family Top 10: ${report.openFamilyTop10Hits}/${report.evaluatedTargets} · Close family Top 10: ${report.closeFamilyTop10Hits}/${report.evaluatedTargets} · Jodi diagnostic: ${report.jodiDiagnosticMatches}/${report.evaluatedTargets}", style = MaterialTheme.typography.bodySmall)
+                                Text("Market-wise sample comparison (not a leaderboard)", style = MaterialTheme.typography.titleSmall)
+                                marketWalkForwardComparisons.forEach { market ->
+                                    Text(
+                                        "${market.market.name.replace("_", " ")} · sessions ${market.sessionCount} · evaluated ${market.evaluatedTargets}/${market.requestedTargets} · abstained ${market.abstainedTargets} · sample ${market.sampleBand.name.replace("_", " ")}",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    Text(
+                                        "Sangam exact Top 10: ${market.exactPairTop10Hits}/${market.evaluatedTargets} (${market.rate(market.exactPairTop10Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"}) · Top 100: ${market.exactPairTop100Hits}/${market.evaluatedTargets} (${market.rate(market.exactPairTop100Hits)?.let { "${(it * 100).toInt()}%" } ?: "N/A"})",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Text("Sample bands are descriptive only: <30 very small, 30–99 early, 100–299 broader, 300+ larger. A larger sample does not prove an edge; markets are not ranked by hit rate.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("Compare this historical benchmark separately from the frozen-snapshot scorecard above; cohorts differ. Family/Jodi diagnostics are not exact hits or winning probabilities.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
