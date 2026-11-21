@@ -67,6 +67,11 @@ class AiResearchLoopWorker(
 
     private fun shouldRetry(error: Throwable): Boolean {
         val message = error.message.orEmpty()
+        if (error is IllegalArgumentException) return false
+        if (message.contains("Saved research loop is missing") ||
+            message.contains("already completed") ||
+            message.contains("Save both Gemini and Groq API keys")
+        ) return false
         val status = Regex("AI provider HTTP (\\d{3})").find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
         if (status != null && status in 400..499 && status != 408 && status != 429) return false
         return true
