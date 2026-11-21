@@ -1,10 +1,14 @@
 package com.relab.app
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -95,7 +99,17 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             }
         }
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) status = "Notifications are disabled. Android may show background activity only in its active-apps panel."
+    }
     LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         history = withContext(Dispatchers.IO) { store.latest() }
         pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
@@ -306,12 +320,13 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                             }
                         }
                         loopResult?.let { Text(it.report()) }
-                        if (loopResult != null || result != null) {
-                            Button(enabled = !busy, onClick = {
-                                val synthesis = loopResult?.finalSynthesis?.takeIf { it.isNotBlank() }
-                                    ?: result?.finalSynthesis.orEmpty()
-                                launchBacktest(synthesis)
-                            }, modifier = Modifier.fillMaxWidth()) { Text("Backtest AI-proposed patterns") }
+                        val savedSynthesis = loopResult?.finalSynthesis?.takeIf { it.isNotBlank() }
+                            ?: result?.finalSynthesis?.takeIf { it.isNotBlank() }
+                            ?: history.firstOrNull()?.finalSynthesis.orEmpty()
+                        if (savedSynthesis.isNotBlank()) {
+                            Button(enabled = !busy, onClick = { launchBacktest(savedSynthesis) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Backtest latest saved AI research")
+                            }
                         }
                         backtestReport?.let {
                             Card(Modifier.fillMaxWidth()) {
