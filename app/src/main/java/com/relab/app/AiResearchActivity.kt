@@ -134,10 +134,14 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         history = withContext(Dispatchers.IO) { store.latest() }
                         pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
                         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
-                        history.firstOrNull()?.let {
-                            result = AiResearchResult(it.geminiAnalysis, it.groqReview, it.finalSynthesis)
-                        }
-                        status = "Background AI research completed. Results remain UNVERIFIED until backtested."
+                        // Do not hydrate the full multi-stage AI transcript into Compose state here.
+                        // A three-round loop can produce a very large report; rendering it in one Text
+                        // tree after completion can freeze the UI and trigger an Android ANR.
+                        // Keep the full result persisted in SQLite; the bounded history preview and
+                        // explicit backtest action remain available without eagerly composing it.
+                        result = null
+                        loopResult = null
+                        status = "Background AI research completed. Full results are saved; use the backtest action below. Results remain UNVERIFIED until backtested."
                     }
                     androidx.work.WorkInfo.State.FAILED -> {
                         pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
