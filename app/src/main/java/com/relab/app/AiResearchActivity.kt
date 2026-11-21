@@ -132,15 +132,22 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     androidx.work.WorkInfo.State.RUNNING -> status = "Background research is running. You can close this screen; progress is saved."
                     androidx.work.WorkInfo.State.SUCCEEDED -> {
                         history = withContext(Dispatchers.IO) { store.latest() }
+                        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
                         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
-                        status = "Background Auto Research completed. All results remain UNVERIFIED until backtested."
+                        history.firstOrNull()?.let {
+                            result = AiResearchResult(it.geminiAnalysis, it.groqReview, it.finalSynthesis)
+                        }
+                        status = "Background AI research completed. Results remain UNVERIFIED until backtested."
                     }
                     androidx.work.WorkInfo.State.FAILED -> {
+                        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
                         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
-                        status = pendingLoop?.lastError?.let { "Background research paused: " + it }
+                        val savedError = pendingSession?.lastError ?: pendingLoop?.lastError
+                        status = savedError?.let { "Background research paused: " + it }
                             ?: "Background research failed. Saved checkpoints are preserved."
                     }
                     androidx.work.WorkInfo.State.CANCELLED -> {
+                        pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
                         pendingLoop = withContext(Dispatchers.IO) { store.latestResumableLoop() }
                         status = "Background research cancelled. Saved checkpoints are preserved."
                     }
@@ -152,23 +159,14 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
         }
     }
     fun launchResearch(session: AiResearchSession) {
-        scope.launch {
-            busy = true; result = null; status = "Resuming from last saved stage…"
-            try {
-                val keys = withContext(Dispatchers.IO) { vault.read(AiKeyVault.GEMINI) to vault.read(AiKeyVault.GROQ) }
-                val completed = withContext(Dispatchers.IO) {
-                    engine.runCrossReview(keys.first.orEmpty(), keys.second.orEmpty(), session.question, session.evidence,
-                        session.priorMemory, session.checkpoint()) { stage, output -> store.saveStage(session.id, stage, output) }
-                }
-                withContext(Dispatchers.IO) { store.markCompleted(session.id, session.question, completed) }
-                result = completed; history = withContext(Dispatchers.IO) { store.latest() }
-                pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
-                status = "Cross-review complete. New note saved as UNVERIFIED."
-            } catch (e: Exception) {
-                withContext(Dispatchers.IO) { store.markInterrupted(session.id, e.message ?: "Network or provider error") }
-                pendingSession = withContext(Dispatchers.IO) { store.latestResumable() }
-                status = "Research paused safely. Completed stages are saved; tap Resume research to continue."
-            } finally { busy = false }
+        result = null
+        busy = true
+        status = "Queueing persistent background cross-review. The app can be closed while it runs."
+        try {
+            AiResearchBackgroundWork.enqueueSession(context, session.id)
+        } catch (error: Exception) {
+            busy = false
+            status = "Could not queue background cross-review: " + (error.message ?: "unknown error")
         }
     }
     fun launchAutoLoop(session: AiResearchLoopSession) {
@@ -177,7 +175,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
         busy = true
         status = "Queueing persistent background research. The app can be closed while it runs."
         try {
-            AiResearchBackgroundWork.enqueue(context, session.id)
+            AiResearchBackgroundWork.enqueueLoop(context, session.id)
         } catch (error: Exception) {
             busy = false
             status = "Could not queue background research: " + (error.message ?: "unknown error")
