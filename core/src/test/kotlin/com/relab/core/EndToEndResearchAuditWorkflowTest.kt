@@ -101,6 +101,19 @@ class EndToEndResearchAuditWorkflowTest {
         )
     }
 
+    @Test fun walkForwardCsvEscapesCommaQuotesAndEmbeddedNewlinesInSessionIds() {
+        val session = "night, \"special\"\nsecond-line"
+        val data = rows().map { it.copy(sessionId = session) }
+        val report = EndToEndResearchAuditWorkflow.run(
+            data, emptyList(), emptyList(),
+            LocalDate.of(2026, 1, 1).plusDays(120),
+            minimumModelHistory = 30
+        )
+
+        val csv = EndToEndResearchAuditWorkflow.exportWalkForwardCsv(report)
+        assertTrue(csv.contains("\"night, \"\"special\"\"\nsecond-line\""))
+    }
+
     @Test fun invalidMinimumHistoryAndCandidateLimitAreRejected() {
         val data = rows()
         val cutoff = LocalDate.of(2026, 1, 1).plusDays(120)
