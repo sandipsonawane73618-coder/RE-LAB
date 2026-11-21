@@ -17,7 +17,8 @@ class SangamOutcomeAuditorTest {
             actualOpenPanna = "123",
             actualClosePanna = "456",
             openCandidates = listOf(candidate("129", 90.0), candidate("123", 80.0)),
-            closeCandidates = listOf(candidate("459", 95.0), candidate("456", 70.0))
+            closeCandidates = listOf(candidate("459", 95.0), candidate("456", 70.0)),
+            pairLimit = 2
         )
         assertEquals("65", report.actualJodi)
         assertEquals(4, report.exactPairRank)
