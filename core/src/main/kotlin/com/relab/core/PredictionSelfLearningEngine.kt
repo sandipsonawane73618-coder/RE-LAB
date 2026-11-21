@@ -46,9 +46,15 @@ object PredictionSelfLearningEngine {
                     sessionId = identity.second,
                     auditedOutcomes = rows.size,
                     openExactHits = rows.count { it.openPannaAudit.exactRank?.let { rank -> rank <= topLimit } == true },
-                    openFamilyMovementHits = rows.count { it.openPannaAudit.familySequenceTop10Hit },
+                    openFamilyMovementHits = rows.count { audit ->
+                        audit.openPannaAudit.exactRank?.let { it <= topLimit } != true &&
+                            audit.openPannaAudit.familySequenceTop10Hit
+                    },
                     closeExactHits = rows.count { it.closePannaAudit.exactRank?.let { rank -> rank <= topLimit } == true },
-                    closeFamilyMovementHits = rows.count { it.closePannaAudit.familySequenceTop10Hit },
+                    closeFamilyMovementHits = rows.count { audit ->
+                        audit.closePannaAudit.exactRank?.let { it <= topLimit } != true &&
+                            audit.closePannaAudit.familySequenceTop10Hit
+                    },
                     reciprocalOpenCloseSwapHints = rows.count { audit ->
                         audit.openPannaAudit.exactRank?.let { it <= topLimit } != true &&
                             audit.closePannaAudit.exactRank?.let { it <= topLimit } != true &&
