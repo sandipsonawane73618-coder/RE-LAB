@@ -114,6 +114,56 @@ class EndToEndResearchAuditWorkflowTest {
         assertTrue(csv.contains("\"night, \"\"special\"\"\nsecond-line\""))
     }
 
+    @Test fun reportsOriginalSourceReconciliationWithoutPromotingUnverifiedRows() {
+        val retrieved = java.time.Instant.parse("2026-01-10T12:00:00Z")
+        fun observation(
+            date: LocalDate,
+            source: String,
+            result: String?,
+            status: ObservationStatus = if (result == null) ObservationStatus.PENDING else ObservationStatus.PUBLISHED
+        ) = SourceObservation(
+            market = Market.SRIDEVI,
+            sessionId = "main",
+            date = date,
+            sourceId = source,
+            retrievedAt = retrieved,
+            rawText = result ?: "pending",
+            normalizedResult = result,
+            status = status
+        )
+
+        val observations = listOf(
+            observation(LocalDate.of(2026, 1, 1), "publisher-a", "123-62-444"),
+            observation(LocalDate.of(2026, 1, 1), "publisher-b", "123-62-444"),
+            observation(LocalDate.of(2026, 1, 2), "publisher-a", "222-84-444"),
+            observation(LocalDate.of(2026, 1, 3), "publisher-a", "333-06-444"),
+            observation(LocalDate.of(2026, 1, 3), "publisher-b", "999-06-444"),
+            observation(LocalDate.of(2026, 1, 4), "publisher-a", null)
+        )
+        val sourceQuality = ReconciledChartBuilder.build(observations)
+        val report = EndToEndResearchAuditWorkflow.run(
+            records = sourceQuality.records,
+            scannerRankings = emptyList(),
+            proposals = emptyList(),
+            targetDateExclusive = LocalDate.of(2026, 2, 1),
+            minimumModelHistory = 30,
+            sourceQuality = sourceQuality,
+            sourceObservationCount = observations.size
+        )
+
+        assertEquals(1, sourceQuality.records.size)
+        assertEquals(1, sourceQuality.singleSourceUnverifiedGroups.size)
+        assertEquals(1, sourceQuality.conflictGroups.size)
+        assertEquals(1, sourceQuality.noPublishedResultGroups.size)
+        assertEquals(6, report.research.sourceObservationCount)
+        assertEquals(1, report.research.sourceConsensusGroups)
+        assertEquals(1, report.research.sourceSingleSourceGroups)
+        assertEquals(1, report.research.sourceConflictGroups)
+        assertEquals(1, report.research.sourceNoPublishedGroups)
+        assertEquals(0, report.research.sourceInvalidGroups)
+        assertTrue(report.compactSummary().contains("observations=6 | consensus=1 | conflicts=1"))
+    }
+
     @Test fun invalidMinimumHistoryAndCandidateLimitAreRejected() {
         val data = rows()
         val cutoff = LocalDate.of(2026, 1, 1).plusDays(120)
