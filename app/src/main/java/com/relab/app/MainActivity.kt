@@ -66,6 +66,8 @@ import java.time.Instant
 import java.security.MessageDigest
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonParser
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -163,7 +165,11 @@ class MainActivity : ComponentActivity() {
                         }.apply()
                     },
                     onSavePredictionSnapshot = database::savePredictionSnapshot,
-                    onSavePredictionOutcome = database::savePredictionOutcome
+                    onSavePredictionOutcome = database::savePredictionOutcome,
+                    initialPredictionSnapshots = database.loadPredictionSnapshots(),
+                    initialPredictionOutcomes = database.loadPredictionOutcomes(),
+                    onLoadPredictionSnapshots = database::loadPredictionSnapshots,
+                    onLoadPredictionOutcomes = database::loadPredictionOutcomes
                 )
             }
         }
@@ -437,7 +443,11 @@ private fun RelabHome(
     onSaveLinkObservations: (List<com.relab.core.SourceObservation>) -> List<com.relab.core.SourceObservation>,
     onClearCsv: () -> Unit,
     onSavePredictionSnapshot: (com.relab.core.PredictionSnapshot) -> Boolean,
-    onSavePredictionOutcome: (com.relab.core.PredictionSnapshotOutcome) -> Boolean
+    onSavePredictionOutcome: (com.relab.core.PredictionSnapshotOutcome) -> Boolean,
+    initialPredictionSnapshots: List<com.relab.core.PredictionSnapshot>,
+    initialPredictionOutcomes: List<com.relab.core.PredictionSnapshotOutcome>,
+    onLoadPredictionSnapshots: () -> List<com.relab.core.PredictionSnapshot>,
+    onLoadPredictionOutcomes: () -> List<com.relab.core.PredictionSnapshotOutcome>
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -447,6 +457,8 @@ private fun RelabHome(
     var selectedDateText by remember { mutableStateOf(LocalDate.now().toString()) }
     var dateError by remember { mutableStateOf<String?>(null) }
     var observations by remember { mutableStateOf(initialObservations) }
+    var frozenPredictionSnapshots by remember { mutableStateOf(initialPredictionSnapshots) }
+    var frozenPredictionOutcomes by remember { mutableStateOf(initialPredictionOutcomes) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var chartUrl by remember { mutableStateOf("") }
     var linkBusy by remember { mutableStateOf(false) }
@@ -664,8 +676,7 @@ private fun RelabHome(
     // A later refresh can attach an outcome but can never replace the first snapshot.
     LaunchedEffect(reverseModelSets, selectedDate, activeObservations) {
         val targetDate = selectedDate
-        if (!targetDate.isBefore(LocalDate.now())) {
-            val serializer = GsonBuilder()
+        val serializer = GsonBuilder()
                 .registerTypeAdapter(
                     LocalDate::class.java,
                     com.google.gson.JsonSerializer<LocalDate> { value, _, _ ->
@@ -683,6 +694,7 @@ private fun RelabHome(
                             !it.normalizedResult.isNullOrBlank()
                     }
                     if (targetRows.isEmpty()) {
+                        if (targetDate.isBefore(LocalDate.now())) return@forEach
                         val historyThrough = activeObservations.asSequence()
                             .filter {
                                 it.market == set.market &&
@@ -728,8 +740,31 @@ private fun RelabHome(
                         }
                     }
                 }
+                frozenPredictionSnapshots = onLoadPredictionSnapshots()
+                frozenPredictionOutcomes = onLoadPredictionOutcomes()
             }
         }
+    }
+
+    val frozenSangamAudits = remember(frozenPredictionSnapshots, frozenPredictionOutcomes) {
+        val outcomesByKey = frozenPredictionOutcomes.associateBy { it.snapshotKey }
+        frozenPredictionSnapshots.mapNotNull { frozen ->
+            val outcome = outcomesByKey[frozen.snapshotKey] ?: return@mapNotNull null
+            runCatching {
+                val json = JsonParser.parseString(frozen.payloadJson).asJsonObject
+                val parser = GsonBuilder()
+                    .registerTypeAdapter(
+                        LocalDate::class.java,
+                        JsonDeserializer<LocalDate> { value, _, _ -> LocalDate.parse(value.asString) }
+                    )
+                    .create()
+                val open = parser.fromJson(json.getAsJsonObject("open"), com.relab.core.ReverseEngineeringRanking::class.java)
+                val close = parser.fromJson(json.getAsJsonObject("close"), com.relab.core.ReverseEngineeringRanking::class.java)
+                com.relab.core.FrozenSangamOutcomeAuditor.analyze(
+                    frozen, outcome, open.candidates, close.candidates, pairLimit = 100
+                )
+            }.getOrNull()
+        }.sortedByDescending { it.targetDate }
     }
 
     val patternEvidenceSets = snapshot?.patternEvidenceSets.orEmpty()
@@ -964,6 +999,28 @@ private fun RelabHome(
                             it.market == set.market && it.sessionId == set.sessionId && it.date == selectedDate
                         }
                         MarketPredictionSheet(set, resultGroup, selectedDate)
+                    }
+                }
+                if (frozenPredictionSnapshots.isNotEmpty()) {
+                    Card {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("Frozen Prediction Outcome Audit", style = MaterialTheme.typography.titleMedium)
+                            Text("Saved snapshots: ${frozenPredictionSnapshots.size} · Published outcomes: ${frozenPredictionOutcomes.size} · Audited: ${frozenSangamAudits.size}", style = MaterialTheme.typography.bodySmall)
+                            if (frozenSangamAudits.isEmpty()) {
+                                Text("No matching, valid frozen Sangam outcomes yet. Historical predictions are never reconstructed.", style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                frozenSangamAudits.take(8).forEach { item ->
+                                    val audit = item.audit
+                                    Text("${item.market.name.replace("_", " ")} · ${item.targetDate}", style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        "Exact Sangam: " + (audit.exactPairRank?.let { "rank $it / ${if (audit.exactPairHit) "Top 100" else "outside Top 100"}" } ?: "not in ranked pairs") +
+                                            " · Open family: ${audit.openFamilySequenceMatchCount} · Close family: ${audit.closeFamilySequenceMatchCount} · Jodi matches: ${audit.jodiMatchCount}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                            Text("Only immutable saved predictions are scored. Family and Jodi matches are diagnostics, never exact Sangam hits.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
                 OutlinedButton(
