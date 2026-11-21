@@ -49,6 +49,40 @@ class PredictionOutcomeAuditTest {
     }
 
     @Test
+    fun comparesActualCandidateEvidenceLayersAgainstPredictionLeader() {
+        val actual = candidate("123", 80.0).copy(
+            exactPannaEvidence = 0.01,
+            familyEvidence = 0.08,
+            ankEvidence = 0.03,
+            positionEvidence = 0.02,
+            weekdayEvidence = null
+        )
+        val leader = candidate("456", 95.0).copy(
+            exactPannaEvidence = 0.05,
+            familyEvidence = 0.04,
+            ankEvidence = 0.03,
+            positionEvidence = 0.06,
+            weekdayEvidence = 0.07
+        )
+        val report = PredictionOutcomeAudit.analyze(
+            actualOpenPanna = "123",
+            actualClosePanna = "456",
+            actualJodi = "12",
+            openCandidates = listOf(leader, actual),
+            closeCandidates = listOf(leader),
+            jodiCandidates = listOf(ReverseEngineeringJodiCandidate("12", 90.0, 1)),
+            topLimit = 1
+        )
+
+        assertEquals(2, report.open.actualRank)
+        assertTrue(report.open.weakerEvidenceLayers.contains("Exact panna recurrence"))
+        assertTrue(report.open.weakerEvidenceLayers.contains("Digit-position distribution"))
+        assertFalse(report.open.evidenceComparisons.any { it.layer == "Target weekday" })
+        assertTrue(report.compactAnalysis().contains("evidence weaker than leader"))
+        assertTrue(report.compactAnalysis().contains("not causal proof"))
+    }
+
+    @Test
     fun reportsActualOutsideCandidateWindowWithoutInventingRank() {
         val report = PredictionOutcomeAudit.analyze(
             actualOpenPanna = "999",
