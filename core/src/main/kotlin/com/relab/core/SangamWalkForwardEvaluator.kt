@@ -131,9 +131,9 @@ object SangamWalkForwardEvaluator {
                     }
                 }
                 val periods = (0..2).map { period ->
-                    val start = (period.toLong() * rows.size / 3L).toInt()
-                    val endExclusive = ((period + 1L) * rows.size / 3L).toInt().coerceAtMost(rows.size)
-                    val periodRows = rows.subList(start, endExclusive)
+                    val periodRows = rows.filterIndexed { rowIndex, _ ->
+                        ((rowIndex.toLong() * 3L) / rows.size).toInt().coerceAtMost(2) == period
+                    }
                     WalkForwardPeriodReport(
                         period = period + 1,
                         firstTargetDate = periodRows.firstOrNull()?.date,
