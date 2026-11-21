@@ -39,6 +39,14 @@ data class ProposedPatternBacktest(
     val rejectionReason: String? = null
 )
 
+private fun ProposedPatternBacktest.diagnosticCategory(minimumEvaluations: Int): String = when {
+    rejectionReason != null -> "INVALID_PROPOSAL"
+    status == ResearchVerificationStatus.REJECTED -> "STATISTICAL_REJECTION"
+    status == ResearchVerificationStatus.UNCERTAIN && evaluatedOccurrences < minimumEvaluations -> "LOW_SAMPLE_UNCERTAIN"
+    status == ResearchVerificationStatus.UNCERTAIN -> "INCONCLUSIVE"
+    else -> "HISTORICALLY_VERIFIED"
+}
+
 /**
  * Executes the same one-step-ahead pattern rule on chronological rows.
  * A target is scored before its outcome is added to either pattern or baseline history.
@@ -233,13 +241,7 @@ data class ResearchToBacktestReport(
             .thenByDescending { it.wilsonLowerBound ?: -1.0 }
             .thenBy { it.proposal.id }).forEach { result ->
             val proposal = result.proposal
-            val diagnostic = when {
-                result.rejectionReason != null -> "INVALID_PROPOSAL"
-                result.status == ResearchVerificationStatus.REJECTED -> "STATISTICAL_REJECTION"
-                result.status == ResearchVerificationStatus.UNCERTAIN && result.evaluatedOccurrences < 20 -> "LOW_SAMPLE_UNCERTAIN"
-                result.status == ResearchVerificationStatus.UNCERTAIN -> "INCONCLUSIVE"
-                else -> "HISTORICALLY_VERIFIED"
-            }
+            val diagnostic = result.diagnosticCategory(minimumEvaluationsRequired)
             appendLine("${result.status} | ${diagnostic} | ${proposal.id} | ${proposal.market}/${proposal.sessionId} | ${proposal.channel} | ${proposal.pattern} | n=${result.evaluatedOccurrences} | hit=${rate(result.hitRate)} | baseline=${rate(result.baselineHitRate)} | Wilson-LB=${rate(result.wilsonLowerBound)} | Baseline-Wilson-UB=${rate(result.baselineWilsonUpperBound)} | pairedWins=${result.patternOnlyHits} | baselineOnlyWins=${result.baselineOnlyHits} | pairedExactP=${rate(result.pairedExactPValue)}" + (result.rejectionReason?.let { " | REASON=$it" } ?: ""))
         }
         appendLine("Verification is historical evidence only, not a guarantee or calibrated future probability.")
@@ -333,7 +335,7 @@ object ResearchToBacktestCsvExporter {
             "proposal_id", "source", "market", "session", "channel", "pattern", "outcome_mode",
             "support_occurrences", "evaluated_occurrences", "abstained_occurrences", "hits", "misses",
             "baseline_hits", "pattern_only_hits", "baseline_only_hits", "paired_exact_p_value", "hit_rate", "baseline_hit_rate", "lift", "wilson_lower_95",
-            "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "rejection_reason", "rationale"
+            "wilson_upper_95", "baseline_wilson_lower_95", "baseline_wilson_upper_95", "verification_status", "diagnostic_category", "rejection_reason", "rationale"
         )
         val rows = report.assessments.map { result ->
             val p = result.proposal
@@ -344,7 +346,7 @@ object ResearchToBacktestCsvExporter {
                 result.baselineHits.toString(), result.patternOnlyHits.toString(), result.baselineOnlyHits.toString(), result.pairedExactPValue.csvRate(), result.hitRate.csvRate(), result.baselineHitRate.csvRate(),
                 result.lift.csvRate(), result.wilsonLowerBound.csvRate(), result.wilsonUpperBound.csvRate(),
                 result.baselineWilsonLowerBound.csvRate(), result.baselineWilsonUpperBound.csvRate(),
-                result.status.name, result.rejectionReason.orEmpty(), p.rationale
+                result.status.name, result.diagnosticCategory(report.minimumEvaluationsRequired), result.rejectionReason.orEmpty(), p.rationale
             )
         }
         return (listOf(header) + rows).joinToString("\n") { row -> row.joinToString(",") { it.csvEscape() } }
