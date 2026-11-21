@@ -482,6 +482,9 @@ private fun RelabHome(
     var coverageLoading by remember { mutableStateOf(true) }
     var coverageError by remember { mutableStateOf<String?>(null) }
     var coverageCompletedFor by remember { mutableStateOf<String?>(null) }
+    // Only compose one heavy report group at a time after the background analysis completes.
+    // The previous eager Column/verticalScroll rendered every market/session card in one frame.
+    var expandedDashboardSection by remember { mutableStateOf<String?>(null) }
 
     // Reuse a durable analysis snapshot when the exact dataset/date/settings are unchanged.
     // On a cache miss, compute off the UI thread and persist the completed result below.
@@ -981,6 +984,10 @@ private fun RelabHome(
                     }
                 }
                 Text("Pattern research · exploratory + verified", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "patterns") null else "patterns" }) {
+                    Text(if (expandedDashboardSection == "patterns") "Hide pattern research" else "View pattern research")
+                }
+                if (expandedDashboardSection == "patterns") {
                 Text("Enabled markets: Sridevi · Sridevi Night · Kalyan · Main Bazar · Time Bazar · Milan Day · Milan Night · Rajdhani Day · Rajdhani Night.", style = MaterialTheme.typography.bodySmall)
                 Text(
                     "Analysis input: ${researchRecords.size} valid historical rows (${chartBuild.records.size} consensus + ${chartBuild.singleSourceUnverifiedGroups.size} single-source groups) · Conflicts excluded: ${chartBuild.conflictGroups.size} · Pending/missing excluded: ${chartBuild.noPublishedResultGroups.size} · Invalid excluded: ${chartBuild.invalidGroups.size}",
@@ -991,7 +998,12 @@ private fun RelabHome(
                 } else {
                     patternAnalyses.forEach { analysis -> PatternResearchCard(analysis) }
                 }
+                }
                 Text("Cross-Market Reverse Engineering · nine enabled markets", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "cross") null else "cross" }) {
+                    Text(if (expandedDashboardSection == "cross") "Hide cross-market research" else "View cross-market research")
+                }
+                if (expandedDashboardSection == "cross") {
                 Text(
                     "Compares matching dates and sessions across all nine enabled markets. Historical co-occurrence only; not a prediction or causal claim.",
                     style = MaterialTheme.typography.bodySmall
@@ -1070,7 +1082,12 @@ private fun RelabHome(
                         }
                     }
                 }
+                }
                 Text("Market Intelligence · market-specific behaviour", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "intelligence") null else "intelligence" }) {
+                    Text(if (expandedDashboardSection == "intelligence") "Hide market intelligence" else "View market intelligence")
+                }
+                if (expandedDashboardSection == "intelligence") {
                 Text(
                     "Each market is analysed independently. Recent-vs-older distribution changes are descriptive alerts, not future-result predictions.",
                     style = MaterialTheme.typography.bodySmall
@@ -1080,7 +1097,12 @@ private fun RelabHome(
                 } else {
                     intelligenceReports.forEach { MarketIntelligenceCard(it) }
                 }
+                }
                 Text("Reverse Engineering Model · evidence-ranked research", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "reverse") null else "reverse" }) {
+                    Text(if (expandedDashboardSection == "reverse") "Hide reverse-engineering details" else "View reverse-engineering details")
+                }
+                if (expandedDashboardSection == "reverse") {
                 Text(
                     "Exploratory model uses valid consensus + single-source rows (single-source remains unverified); conflicts, pending and malformed rows are excluded. Combines exact panna, digit-family DNA (1/6, 2/7, 3/8, 4/9, 5/0), Ank, digit positions, SP/DP/TP, reverse panna, weekday, transitions and lagged cross-market conditions. Requires 30 earlier valid rows.",
                     style = MaterialTheme.typography.bodySmall
@@ -1135,7 +1157,12 @@ private fun RelabHome(
                         }
                     }
                 }
+                }
                 Text("Next draw candidate research · legacy frequency baseline", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "candidates") null else "candidates" }) {
+                    Text(if (expandedDashboardSection == "candidates") "Hide candidate research" else "View candidate research")
+                }
+                if (expandedDashboardSection == "candidates") {
                 if (candidateSets.isEmpty()) {
                     Text(if (snapshot == null) "Preparing legacy baseline candidates…" else "No usable published history yet. Candidates require at least 5 earlier valid rows; single-source results are exploratory and remain unverified.")
                 } else {
@@ -1143,7 +1170,12 @@ private fun RelabHome(
                         CandidateResearchCard(open, close, jodi)
                     }
                 }
+                }
                 Text("Historical coverage audit", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "coverage") null else "coverage" }) {
+                    Text(if (expandedDashboardSection == "coverage") "Hide coverage audit" else "View coverage audit")
+                }
+                if (expandedDashboardSection == "coverage") {
                 if (coverageReports.isEmpty()) {
                     Text(if (snapshot == null) "Calculating historical coverage…" else "Coverage audit will appear after source data is imported.")
                 } else {
@@ -1155,11 +1187,17 @@ private fun RelabHome(
                         }
                     }
                 }
+                }
                 Text("Independent publisher cross-check", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "publishers") null else "publishers" }) {
+                    Text(if (expandedDashboardSection == "publishers") "Hide publisher audit" else "View publisher audit")
+                }
+                if (expandedDashboardSection == "publishers") {
                 if (sourceIndependence.isEmpty()) {
                     Text(if (snapshot == null) "Auditing publisher independence…" else "No published source observations available for publisher comparison.")
                 } else {
                     sourceIndependence.forEach { SourceIndependenceCard(it) }
+                }
                 }
                 Text("Repeated source-record audit", style = MaterialTheme.typography.titleLarge)
                 if (repeatedSourceRecords.isEmpty()) {
@@ -1174,12 +1212,17 @@ private fun RelabHome(
                     RepeatedPublishedResultAuditCard(repeatedPublishedResults)
                 }
                 Text("Recent source observations", style = MaterialTheme.typography.titleLarge)
+                OutlinedButton(onClick = { expandedDashboardSection = if (expandedDashboardSection == "recent") null else "recent" }) {
+                    Text(if (expandedDashboardSection == "recent") "Hide recent observations" else "View recent observations")
+                }
+                if (expandedDashboardSection == "recent") {
                 if (groups.isEmpty()) {
                     Text("No source records loaded.")
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         groups.asReversed().take(30).forEach { group -> SourceGroupCard(group) }
                     }
+                }
                 }
                 Text("Offline SQLite · Source provenance preserved · Conflicts never auto-resolved", style = MaterialTheme.typography.labelSmall)
                 }
