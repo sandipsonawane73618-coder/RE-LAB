@@ -3,13 +3,8 @@ package com.relab.core
 import java.time.LocalDate
 
 data class WalkForwardModelMetrics(
-    val modelId: String,
-    val requestedTargets: Int,
-    val evaluatedTargets: Int,
-    val abstainedTargets: Int,
-    val top1Hits: Int,
-    val top3Hits: Int,
-    val top5Hits: Int
+    val modelId: String, val requestedTargets: Int, val evaluatedTargets: Int,
+    val abstainedTargets: Int, val top1Hits: Int, val top3Hits: Int, val top5Hits: Int
 ) {
     fun top1Rate(): Double? = if (evaluatedTargets == 0) null else top1Hits.toDouble() / evaluatedTargets
     fun top3Rate(): Double? = if (evaluatedTargets == 0) null else top3Hits.toDouble() / evaluatedTargets
@@ -17,30 +12,20 @@ data class WalkForwardModelMetrics(
 }
 
 data class MultiModelWalkForwardReport(
-    val market: Market,
-    val sessionId: String,
-    val channel: PredictionChannel,
-    val targetDateExclusive: LocalDate,
-    val minimumHistory: Int,
-    val models: List<WalkForwardModelMetrics>,
-    val consensus: WalkForwardModelMetrics,
+    val market: Market, val sessionId: String, val channel: PredictionChannel,
+    val targetDateExclusive: LocalDate, val minimumHistory: Int,
+    val models: List<WalkForwardModelMetrics>, val consensus: WalkForwardModelMetrics,
     val note: String
 )
 
 /**
- * Expanding-window evaluation. Every target is predicted using records strictly
- * earlier than that target; its actual value is scored before the next target can
- * see it. Results are hit coverage, not calibrated probabilities.
+ * Expanding-window evaluation. Every target is predicted using records strictly earlier
+ * than that target; its actual value is scored before it can enter any later history.
  */
 object MultiModelWalkForwardEvaluator {
     fun evaluate(
-        records: List<ChartRecord>,
-        market: Market,
-        sessionId: String,
-        channel: PredictionChannel,
-        targetDateExclusive: LocalDate,
-        minimumHistory: Int = 30,
-        limit: Int = 10,
+        records: List<ChartRecord>, market: Market, sessionId: String, channel: PredictionChannel,
+        targetDateExclusive: LocalDate, minimumHistory: Int = 30, limit: Int = 10,
         engine: MultiModelPredictionEngine = MultiModelPredictionEngine(minimumHistory = minimumHistory)
     ): MultiModelWalkForwardReport {
         require(sessionId.isNotBlank()) { "Session ID is required" }
@@ -53,47 +38,42 @@ object MultiModelWalkForwardEvaluator {
         require(eligible.map { it.date }.distinct().size == eligible.size) {
             "Duplicate dates must be reconciled before walk-forward evaluation"
         }
-        val modelIds = linkedSetOf<String>()
-        val modelCounts = mutableMapOf<String, IntArray>()
-        val consensusCounts = IntArray(4) // requested, evaluated, hits, abstained
-        var requested = 0
+        val modelCounts = mutableMapOf<String, IntArray>() // requested,evaluated,top1,top3,top5
+        val consensusCounts = IntArray(5)
         eligible.forEachIndexed { index, target ->
             if (index >= minimumHistory) {
-                requested++
                 val prediction = engine.predict(records, market, sessionId, target.date, channel, limit)
                 val actual = target.channelValue(channel)
                 prediction.modelPredictions.forEach { model ->
-                    modelIds += model.modelId
-                    val counts = modelCounts.getOrPut(model.modelId) { IntArray(4) }
+                    val counts = modelCounts.getOrPut(model.modelId) { IntArray(5) }
                     counts[0]++
                     if (model.candidates.isNotEmpty()) {
                         counts[1]++
                         if (actual in model.candidates.take(1)) counts[2]++
                         if (actual in model.candidates.take(3)) counts[3]++
+                        if (actual in model.candidates.take(5)) counts[4]++
                     }
                 }
                 consensusCounts[0]++
-                if (prediction.consensus.abstained || prediction.consensus.candidates.isEmpty()) {
-                    consensusCounts[3]++
-                } else {
+                if (!prediction.consensus.abstained && prediction.consensus.candidates.isNotEmpty()) {
                     consensusCounts[1]++
                     val ranked = prediction.consensus.candidates.map { it.candidate }
                     if (actual in ranked.take(1)) consensusCounts[2]++
+                    if (actual in ranked.take(3)) consensusCounts[3]++
+                    if (actual in ranked.take(5)) consensusCounts[4]++
                 }
             }
         }
-        val modelMetrics = modelIds.sorted().map { id ->
-            val counts = modelCounts.getValue(id)
-            // The fifth-slot top-5 count is not inferred from top-3; collect via a second
-            // explicit top-5 pass in the accumulator below.
+        val modelMetrics = modelCounts.toSortedMap().map { (id, counts) ->
             WalkForwardModelMetrics(id, counts[0], counts[1], counts[0] - counts[1],
                 counts[2], counts[3], counts[4])
         }
+        val consensusMetrics = WalkForwardModelMetrics("smart-consensus",
+            consensusCounts[0], consensusCounts[1], consensusCounts[0] - consensusCounts[1],
+            consensusCounts[2], consensusCounts[3], consensusCounts[4])
         return MultiModelWalkForwardReport(
             market, sessionId, channel, targetDateExclusive, minimumHistory,
-            modelMetrics,
-            WalkForwardModelMetrics("smart-consensus", consensusCounts[0], consensusCounts[1],
-                consensusCounts[3], consensusCounts[2], 0, 0),
+            modelMetrics, consensusMetrics,
             "Chronological expanding-window evaluation; held-out outcomes enter history only after scoring. Hit rates are coverage metrics, not probabilities."
         )
     }
