@@ -38,6 +38,10 @@ class ResearchToBacktestWorkflowTest {
         assertEquals(39, result.hits)
         assertEquals(0, result.misses)
         assertEquals(0, result.baselineHits)
+        assertEquals(39, result.patternOnlyHits)
+        assertEquals(0, result.baselineOnlyHits)
+        assertNotNull(result.pairedExactPValue)
+        assertTrue(result.pairedExactPValue!! < 0.01)
         assertEquals(ResearchVerificationStatus.VERIFIED, result.status)
         assertNotNull(result.wilsonLowerBound)
     }
@@ -166,6 +170,9 @@ class ResearchToBacktestWorkflowTest {
         assertEquals(rows.size, report.validConsensusRowsBeforeCutoff)
         assertEquals(0, report.excludedOnOrAfterCutoff)
         assertEquals(1, report.coveredMarketSessions)
-        assertTrue(ResearchToBacktestCsvExporter.export(report).contains("workflow-1"))
+        val csv = ResearchToBacktestCsvExporter.export(report)
+        assertTrue(csv.contains("workflow-1"))
+        assertTrue(csv.contains("pattern_only_hits"))
+        assertTrue(csv.contains("paired_exact_p_value"))
     }
 }
