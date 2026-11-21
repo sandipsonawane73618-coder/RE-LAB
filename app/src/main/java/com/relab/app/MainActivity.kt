@@ -65,8 +65,6 @@ import java.time.Instant
 import java.security.MessageDigest
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonDeserializer
-import com.google.gson.JsonSerializer
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -215,18 +213,20 @@ private data class DashboardAnalysisCacheEntry(
 
 private object DashboardAnalysisCache {
     private val gson: Gson = GsonBuilder()
-        .registerTypeAdapter(LocalDate::class.java, JsonSerializer<LocalDate> { value, _, _ ->
-            com.google.gson.JsonPrimitive(value.toString())
-        })
-        .registerTypeAdapter(LocalDate::class.java, JsonDeserializer<LocalDate> { json, _, _ ->
-            LocalDate.parse(json.asString)
-        })
-        .registerTypeAdapter(Instant::class.java, JsonSerializer<Instant> { value, _, _ ->
-            com.google.gson.JsonPrimitive(value.toString())
-        })
-        .registerTypeAdapter(Instant::class.java, JsonDeserializer<Instant> { json, _, _ ->
-            Instant.parse(json.asString)
-        })
+        .registerTypeAdapter(LocalDate::class.java, object : com.google.gson.TypeAdapter<LocalDate>() {
+            override fun write(out: com.google.gson.stream.JsonWriter, value: LocalDate) {
+                out.value(value.toString())
+            }
+            override fun read(input: com.google.gson.stream.JsonReader): LocalDate =
+                LocalDate.parse(input.nextString())
+        }.nullSafe())
+        .registerTypeAdapter(Instant::class.java, object : com.google.gson.TypeAdapter<Instant>() {
+            override fun write(out: com.google.gson.stream.JsonWriter, value: Instant) {
+                out.value(value.toString())
+            }
+            override fun read(input: com.google.gson.stream.JsonReader): Instant =
+                Instant.parse(input.nextString())
+        }.nullSafe())
         .create()
 
     fun key(
