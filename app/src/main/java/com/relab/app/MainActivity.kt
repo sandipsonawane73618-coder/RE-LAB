@@ -191,7 +191,8 @@ private data class ReverseModelDashboardSet(
 private data class PatternEvidenceDashboardSet(
     val market: com.relab.core.Market,
     val sessionId: String,
-    val rankedEvidence: List<com.relab.core.RankedPatternEvidence>
+    val rankedEvidence: List<com.relab.core.RankedPatternEvidence>,
+    val periodStability: List<com.relab.core.PatternPeriodStability>
 )
 
 private data class DashboardAnalysisSnapshot(
@@ -413,7 +414,11 @@ private fun buildDashboardAnalysisSnapshot(
                 researchRecords.filter { it.market == market && it.sessionId == sessionId },
                 market, sessionId, targetDate,
                 windowLengths = 2..5, minimumEvaluations = 5, recentOccurrenceWindow = 20
-            ).take(5)
+            ).take(5),
+            com.relab.core.PatternPeriodStabilityAnalyzer.analyze(
+                researchRecords.filter { it.market == market && it.sessionId == sessionId },
+                targetDate, windowLengths = 2..5, minimumEvaluationsPerPeriod = 10
+            )
         )
     }
 
@@ -1447,6 +1452,35 @@ private fun RelabHome(
                                             "Recent ${item.recentHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · weighted ${item.recencyWeightedHitRate?.let { "%.1f%%".format(it * 100.0) } ?: "n/a"} · rolling σ ${item.rollingHitRateStdDev?.let { "%.3f".format(it) } ?: "n/a"} · rank ${"%.2f".format(ranked.rankScore)}",
                                             style = MaterialTheme.typography.labelSmall
                                         )
+                                    }
+                                }
+                                val comparisons = evidenceSet.periodStability.orEmpty()
+                                Text("Three-period pattern stability · descriptive only", style = MaterialTheme.typography.titleSmall)
+                                if (comparisons.isEmpty()) {
+                                    Text("Insufficient chart history for three-period comparison.", style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    listOf(
+                                        com.relab.core.PatternPeriodAssessment.SUDDEN_DECLINE,
+                                        com.relab.core.PatternPeriodAssessment.WEAK,
+                                        com.relab.core.PatternPeriodAssessment.STABLE,
+                                        com.relab.core.PatternPeriodAssessment.CHANGING,
+                                        com.relab.core.PatternPeriodAssessment.INSUFFICIENT_SAMPLE
+                                    ).forEach { assessment ->
+                                        val matches = comparisons.filter { it.assessment == assessment }.take(3)
+                                        if (matches.isNotEmpty()) {
+                                            Text(assessment.name.replace('_', ' '), style = MaterialTheme.typography.labelLarge)
+                                            matches.forEach { comparison ->
+                                                val periodText = comparison.periods.joinToString(" · ") { period ->
+                                                    val rate = period.hitRate?.let { "%.1f%%".format(it * 100.0) } ?: "—"
+                                                    "P${period.period}: $rate (n=${period.evaluated})"
+                                                }
+                                                Text(
+                                                    "${comparison.channel} · ${comparison.outcomeMode} · w${comparison.windowLength} · ${comparison.pattern}",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                                Text(periodText, style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
                                     }
                                 }
                             }
