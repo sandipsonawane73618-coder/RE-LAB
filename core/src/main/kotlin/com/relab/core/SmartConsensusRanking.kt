@@ -1,6 +1,6 @@
-import kotlin.math.pow
-
 package com.relab.core
+
+import kotlin.math.pow
 
 /** Aggregates independent model rankings into a transparent consensus order. */
 data class ConsensusModelRanking(val modelId: String, val rankedCandidates: List<String>)
