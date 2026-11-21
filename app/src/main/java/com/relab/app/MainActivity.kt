@@ -1316,36 +1316,83 @@ private fun MarketPredictionSheet(
         ?.sorted()
         .orEmpty()
     val hasPublishedResult = publishedValues.isNotEmpty()
+    val actualParts = publishedValues.singleOrNull()?.split('-')?.takeIf {
+        it.size == 3 && it[0].matches(Regex("\\d{3}")) &&
+            it[1].matches(Regex("\\d{2}")) && it[2].matches(Regex("\\d{3}"))
+    }
+    var outcomeAudit by remember(set.market, set.sessionId, selectedDate) {
+        mutableStateOf<com.relab.core.PredictionOutcomeAuditReport?>(null)
+    }
+    LaunchedEffect(set, selectedDate, actualParts) {
+        outcomeAudit = if (actualParts == null) null else withContext(Dispatchers.Default) {
+            runCatching {
+                com.relab.core.PredictionOutcomeAudit.analyze(
+                    actualOpenPanna = actualParts[0],
+                    actualJodi = actualParts[1],
+                    actualClosePanna = actualParts[2],
+                    openCandidates = set.open.candidates,
+                    closeCandidates = set.close.candidates,
+                    jodiCandidates = set.jodi,
+                    topLimit = 10
+                )
+            }.getOrNull()
+        }
+    }
+    fun scoreText(value: Double): String =
+        String.format(java.util.Locale.ROOT, "%.1f", value)
     Card {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleSmall)
             if (hasPublishedResult) {
                 val conflict = publishedValues.size > 1
                 val resultLabel = when {
                     conflict -> "RESULT CONFLICT · REVIEW SOURCES"
                     resultGroup?.state == com.relab.core.ReconciliationState.CONSENSUS -> "RESULT PUBLISHED · VERIFIED"
-                    else -> "RESULT PUBLISHED · SINGLE SOURCE"
+                    else -> "RESULT PUBLISHED · SINGLE SOURCE · UNVERIFIED"
                 }
                 Text("$resultLabel · $selectedDate", color = if (conflict) MaterialTheme.colorScheme.error else Color(0xFF1B5E20), style = MaterialTheme.typography.labelMedium)
                 publishedValues.forEach { value ->
                     val parts = value.split('-')
                     if (parts.size == 3) {
-                        PredictionTableRow("Open Panna", parts[0], !conflict)
-                        PredictionTableRow("Jodi", parts[1], !conflict)
-                        PredictionTableRow("Close Panna", parts[2], !conflict)
+                        PredictionTableRow("Actual Open", parts[0], true)
+                        PredictionTableRow("Actual Jodi", parts[1], true)
+                        PredictionTableRow("Actual Close", parts[2], true)
                     } else {
-                        PredictionTableRow("Published value", value, !conflict)
+                        PredictionTableRow("Actual result", value, true)
                     }
                 }
             } else {
                 Text("PREDICTION · ${set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
-                PredictionTableRow("Open Ank", openAnks.joinToString(" · "), false, true)
-                PredictionTableRow("Panna", openPannas.take(6).joinToString(" · "), false, true)
-                PredictionTableRow("Close Panna", closePannas.take(6).joinToString(" · "), false, true)
-                PredictionTableRow("Jodi", jodis.take(6).joinToString(" · "), false, true)
-                PredictionTableRow("Sangam", sangams.take(6).joinToString(" · "), false, true)
-                PredictionTableRow("Half Sangam", halfSangams.take(6).joinToString(" · "), false, true)
-                if (set.open.abstained || set.close.abstained) Text("Insufficient history for one or more groups.", style = MaterialTheme.typography.labelSmall)
+            }
+
+            Text("RE-LAB prediction snapshot", style = MaterialTheme.typography.labelLarge)
+            PredictionTableRow("Open Panna", open.take(6).joinToString(" · ") { "${it.panna} (${scoreText(it.score)}%)" }, false, true)
+            PredictionTableRow("Open Ank", openAnks.joinToString(" · "), false, true)
+            PredictionTableRow("Close Panna", close.take(6).joinToString(" · ") { "${it.panna} (${scoreText(it.score)}%)" }, false, true)
+            PredictionTableRow("Jodi", set.jodi.take(6).joinToString(" · ") { "${it.jodi} (${scoreText(it.score)}%)" }, false, true)
+            PredictionTableRow("Sangam", sangams.take(6).joinToString(" · "), false, true)
+            PredictionTableRow("Half Sangam", halfSangams.take(6).joinToString(" · "), false, true)
+            Text("Percent = RE-LAB relative evidence score / 100, not a calibrated winning probability.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (set.open.abstained || set.close.abstained) {
+                Text("Insufficient history for one or more groups; model abstained.", style = MaterialTheme.typography.labelSmall)
+            }
+            if (actualParts != null) {
+                when {
+                    outcomeAudit == null -> Text("Backend result analysis running…", style = MaterialTheme.typography.labelSmall)
+                    else -> {
+                        val audit = outcomeAudit!!
+                        val failed = audit.failedSides
+                        Text(
+                            if (audit.allHit) "OUTCOME: HIT · all three channels in top-10"
+                            else "OUTCOME: FAIL · ${failed.joinToString()} missed top-10",
+                            color = if (audit.allHit) Color(0xFF1B5E20) else MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        Text(audit.compactAnalysis(), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            } else if (publishedValues.size > 1) {
+                Text("Failure analysis paused: conflicting published results must be reconciled first.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
         }
     }
