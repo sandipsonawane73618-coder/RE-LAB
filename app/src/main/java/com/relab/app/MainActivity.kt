@@ -1775,7 +1775,7 @@ private fun MarketPredictionSheet(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text("$marketName · ${{set.sessionId}", style = MaterialTheme.typography.titleSmall)
+            Text("$marketName · ${set.sessionId}", style = MaterialTheme.typography.titleSmall)
             if (publishedValues.isNotEmpty()) {
                 val conflict = publishedValues.size > 1
                 val resultLabel = when {
@@ -1796,14 +1796,14 @@ private fun MarketPredictionSheet(
                     PredictionTableRow("Top prediction", predictedResult, false, true)
                     outcomeAudit?.let { audit ->
                         Text(
-                            "OPEN ${{exactStatus(audit.open)} · JODI ${{exactStatus(audit.jodi)} · CLOSE ${{exactStatus(audit.close)}",
+                            "OPEN ${exactStatus(audit.open)} · JODI ${exactStatus(audit.jodi)} · CLOSE ${exactStatus(audit.close)}",
                             style = MaterialTheme.typography.bodySmall
                         )
                         val openFamily = open.any { familyKey(it.panna) == familyKey(actualParts[0]) }
                         val closeFamily = close.any { familyKey(it.panna) == familyKey(actualParts[2]) }
                         val jodiFamily = jodiCandidates.any { familyKey(it.jodi) == familyKey(actualParts[1]) }
                         Text(
-                            "Family-only diagnostics · Open ${{if (openFamily) "match" else "—"} · Jodi ${{if (jodiFamily) "match" else "—"} · Close ${{if (closeFamily) "match" else "—"}",
+                            "Family-only diagnostics · Open ${if (openFamily) "match" else "—"} · Jodi ${if (jodiFamily) "match" else "—"} · Close ${if (closeFamily) "match" else "—"}",
                             style = MaterialTheme.typography.labelSmall
                         )
                     } ?: Text("Comparing result with frozen prediction…", style = MaterialTheme.typography.labelSmall)
@@ -1812,7 +1812,7 @@ private fun MarketPredictionSheet(
                     Text("Conflicting published values are not scored until reconciled.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
             } else {
-                Text("PREDICTION · ${{set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                Text("PREDICTION · ${set.open.targetDate} · Result pending", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
             }
             Text("PREDICTION", style = MaterialTheme.typography.labelLarge)
             PredictionTableRow("Open Panna", openPannas.take(6).joinToString(" · "), false, true)
