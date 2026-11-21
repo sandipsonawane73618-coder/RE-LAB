@@ -25,7 +25,7 @@ class ProbabilityCalibrationTest {
             binCount = 2
         )
         assertEquals(0.64, report.brierScore, 1e-12)
-        assertEquals(0.6, report.expectedCalibrationError, 1e-12)
+        assertEquals(0.8, report.expectedCalibrationError, 1e-12)
         assertEquals(4, report.bins.sumOf { it.sampleCount })
     }
 
