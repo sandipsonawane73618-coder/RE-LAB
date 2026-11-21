@@ -1,3 +1,5 @@
+import kotlin.math.pow
+
 package com.relab.core
 
 /** Aggregates independent model rankings into a transparent consensus order. */
