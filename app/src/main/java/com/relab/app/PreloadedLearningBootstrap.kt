@@ -45,7 +45,11 @@ object PreloadedLearningBootstrap {
         if (manifest["format_version"] != "1") return Result.Rejected("Unsupported preloaded package format")
         val checksum = sha256(csv)
         if (manifest["sha256"] != checksum) return Result.Rejected("Preloaded CSV checksum does not match manifest")
-        val parsed = SourceCsvImporter.import(csv)
+        val parsed = try {
+            SourceCsvImporter.import(csv)
+        } catch (error: Exception) {
+            return Result.Rejected("Preloaded CSV parsing failed: ${error.message ?: "invalid CSV"}")
+        }
         if (parsed.issues.isNotEmpty()) {
             return Result.Rejected("Preloaded CSV has ${parsed.issues.size} invalid rows; fix the source export before packaging")
         }
