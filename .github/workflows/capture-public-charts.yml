@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Full 1000x1000 Half-Sangam and 1000x1000 Sangam candidate audit
+name: Capture Public Panel Charts # Add open-conditioned Half-Sangam OOS research arm
 
 on:
   push:
@@ -100,8 +100,8 @@ jobs:
           audit = json.loads(audit_path.read_text(encoding="utf-8"))
           backtest = json.loads(backtest_path.read_text(encoding="utf-8"))
           metric_lines = panna_half_path.read_text(encoding="utf-8").splitlines()
-          if len(metric_lines) < 46:
-              print("FAIL: production walk-forward output does not contain all nine markets and five metrics")
+          if len(metric_lines) < 55:
+              print("FAIL: production walk-forward output does not contain all nine markets and six metrics")
               sys.exit(1)
           if audit.get("unknown_market_ids") or audit.get("eligible_published_unique_rows", 0) < 1:
               print("FAIL: source audit contains unknown markets or no eligible rows")
