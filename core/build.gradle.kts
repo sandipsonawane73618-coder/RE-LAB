@@ -7,7 +7,7 @@ tasks.test { useJUnit() }
 tasks.register<JavaExec>("runPannaHalfSangamBacktest") {
     group = "verification"
     description = "Run production Panna, both Half-Sangam directions, and Sangam walk-forward metrics from an eligible chart CSV."
-    classpath = sourceSets.main.get().runtimeClasspath
+    classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.relab.core.PannaHalfSangamBacktestCli")
     doFirst {
         val input = providers.gradleProperty("inputCsv").orNull
