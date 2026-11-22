@@ -214,12 +214,13 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             status = "Extracting AI proposals and running the complete chronological research audit…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
-                val (report, exports) = withContext(Dispatchers.IO) {
+                val (audit, exports, groundingNotes, groundedProposalCount) = withContext(Dispatchers.IO) {
                     val observations = LocalObservationDatabase(context).loadObservations()
                     // Verification uses only multi-source consensus rows. Exploratory/single-source
                     // records may inform AI hypotheses but cannot independently verify them.
                     val chartBuild = com.relab.core.ReconciledChartBuilder.build(observations)
                     val records = chartBuild.records
+                    val grounding = AiResearchProposalGrounder.ground(records, parsed.proposals, targetDate)
                     val sessions = records.filter { it.date.isBefore(targetDate) }
                         .map { it.market to it.sessionId }.distinct()
                     val scannerRankings = sessions.flatMap { (market, session) ->
@@ -230,28 +231,34 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                     val audit = EndToEndResearchAuditWorkflow.run(
                         records = records,
                         scannerRankings = scannerRankings,
-                        proposals = parsed.proposals,
+                        proposals = grounding.accepted,
                         targetDateExclusive = targetDate,
                         minimumModelHistory = 30,
                         candidateLimit = 10,
                         sourceQuality = chartBuild,
                         sourceObservationCount = observations.size
                     )
-                    // Large report formatting and CSV serialization stay off the main thread.
-                    audit to Triple(
-                        audit.compactSummary(),
-                        ResearchToBacktestCsvExporter.export(audit.research),
-                        EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
+                    val notes = parsed.issues + grounding.rejected.map {
+                        "Proposal ${it.proposalId} rejected by source-grounding gate: ${it.reason}"
+                    }
+                    Triple(
+                        audit,
+                        Triple(
+                            audit.compactSummary(),
+                            ResearchToBacktestCsvExporter.export(audit.research),
+                            EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
+                        ),
+                        notes to grounding.accepted.size
                     )
-                }
-                backtestReport = exports.first + if (parsed.issues.isEmpty()) "" else "\n\nProposal parser notes:\n" + parsed.issues.joinToString("\n")
-                backtestCsv = exports.second
-                walkForwardCsv = exports.third
-                status = if (parsed.proposals.isEmpty()) {
-                    "Research report completed; AI supplied no executable patterns. Scanner and Pattern Evidence DB results are still available. " +
-                        parsed.issues.joinToString("; ")
+                }.let { Triple(it.first, it.second, it.third.first) to it.third.second }
+                backtestReport = exports.second.first + if (groundingNotes.isEmpty()) "" else "\n\nDiscovery grounding notes:\n" + groundingNotes.joinToString("\n")
+                backtestCsv = exports.second.second
+                walkForwardCsv = exports.second.third
+                status = if (groundedProposalCount == 0) {
+                    "Research report completed; no AI proposal passed source-grounding. Scanner and Pattern Evidence DB results remain available. " +
+                        groundingNotes.joinToString("; ")
                 } else {
-                    "Backtest completed. Only statistical evidence can change a proposal's verification status."
+                    "Discovery proposals grounded: $groundedProposalCount. Chronological backtest completed; only statistical evidence can change verification status."
                 }
             } catch (error: Exception) {
                 backtestReport = "Backtest not completed: ${error.message ?: "unknown error"}"

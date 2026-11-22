@@ -37,6 +37,8 @@ class AiResearchEngine internal constructor(
         val firstPrompt = """
             Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
             Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
+            Discover candidate sequences only when the complete sequence is visibly present in supplied rows for the exact market, session and channel.
+            Do not pool markets or sessions. Do not invent sequences, fill missing values, bridge invalid rows, or use target/future dates.
             Recommend chronological walk-forward validation and baselines. No certainty or guaranteed predictions.
             $evidenceRules
             QUESTION: $q
