@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Evaluate hybrid Panna Top-10 plus exact-frequency Top-90
+name: Capture Public Panel Charts # Re-run hybrid Panna experiment after compile fix
 
 on:
   push:
