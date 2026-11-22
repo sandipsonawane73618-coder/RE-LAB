@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Add held-out Panna Top-100 profile comparison
+name: Capture Public Panel Charts # Add post-open conditional Sangam close-Panna evaluation
 
 on:
   push:
@@ -100,8 +100,8 @@ jobs:
           audit = json.loads(audit_path.read_text(encoding="utf-8"))
           backtest = json.loads(backtest_path.read_text(encoding="utf-8"))
           metric_lines = panna_half_path.read_text(encoding="utf-8").splitlines()
-          if len(metric_lines) < 91:
-              print("FAIL: production walk-forward output does not contain all nine markets and ten metrics")
+          if len(metric_lines) < 109:
+              print("FAIL: production walk-forward output does not contain all nine markets and twelve metrics")
               sys.exit(1)
           if audit.get("unknown_market_ids") or audit.get("eligible_published_unique_rows", 0) < 1:
               print("FAIL: source audit contains unknown markets or no eligible rows")
