@@ -37,6 +37,18 @@ jobs:
         if: steps.audit.outcome == 'success'
         continue-on-error: true
         run: python scripts/walk_forward_backtest.py data/derived/eligible_published.csv --minimum-history 30 --output data/derived/panna_walk_forward_report.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Run production Panna, both Half-Sangam directions, and Sangam walk-forward
+        id: panna_half_sangam
+        if: steps.audit.outcome == 'success'
+        continue-on-error: true
+        run: gradle :core:runPannaHalfSangamBacktest -PinputCsv=data/derived/eligible_published.csv -PoutputCsv=data/derived/panna_half_sangam_sangam_metrics.csv
       - name: Upload immutable HTML captures and extracted observations
         if: always()
         uses: actions/upload-artifact@v4
@@ -49,6 +61,7 @@ jobs:
             data/derived/source_audit.json
             data/derived/eligible_published.csv
             data/derived/panna_walk_forward_report.json
+            data/derived/panna_half_sangam_sangam_metrics.csv
           if-no-files-found: warn
           retention-days: 7
       - name: Require all nine markets to have verified published rows
@@ -67,11 +80,16 @@ jobs:
           audit_path = Path("data/derived/source_audit.json")
           eligible_path = Path("data/derived/eligible_published.csv")
           backtest_path = Path("data/derived/panna_walk_forward_report.json")
-          if not audit_path.is_file() or not eligible_path.is_file() or not backtest_path.is_file():
+          panna_half_path = Path("data/derived/panna_half_sangam_sangam_metrics.csv")
+          if not audit_path.is_file() or not eligible_path.is_file() or not backtest_path.is_file() or not panna_half_path.is_file():
               print("FAIL: audit, eligible dataset, or walk-forward report missing")
               sys.exit(1)
           audit = json.loads(audit_path.read_text(encoding="utf-8"))
           backtest = json.loads(backtest_path.read_text(encoding="utf-8"))
+          metric_lines = panna_half_path.read_text(encoding="utf-8").splitlines()
+          if len(metric_lines) < 46:
+              print("FAIL: production walk-forward output does not contain all nine markets and five metrics")
+              sys.exit(1)
           if audit.get("unknown_market_ids") or audit.get("eligible_published_unique_rows", 0) < 1:
               print("FAIL: source audit contains unknown markets or no eligible rows")
               sys.exit(1)
