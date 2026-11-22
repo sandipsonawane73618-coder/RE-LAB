@@ -97,6 +97,8 @@ data class PannaHalfSangamWalkForwardReport(
     val openAnkClosePannaExactFrequencyBaseline: HalfSangamWalkForwardMetrics,
     val sangam: HalfSangamWalkForwardMetrics,
     val sangamExactFrequencyBaseline: HalfSangamWalkForwardMetrics,
+    val sangamClosePannaConditionedOnOpenPanna: HalfSangamWalkForwardMetrics,
+    val sangamClosePannaExactFrequencyBaseline: HalfSangamWalkForwardMetrics,
     val minimumHistory: Int,
     val candidateLimit: Int
 ) {
@@ -177,6 +179,16 @@ object PannaHalfSangamWalkForwardEvaluator {
                 val conditionedReverseHalfExactRanks = mutableListOf<Int?>()
                 val baselineHalfExactRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
                 val baselineSangamExactRanks = mutableListOf<Int?>()
+                val sangamConditionalCloseExactRanks = mutableListOf<Int?>()
+                val sangamCloseFrequencyExactRanks = mutableListOf<Int?>()
+                var sangamConditionalCloseEvaluated = 0
+                var sangamConditionalCloseAbstained = 0
+                var sangamConditionalCloseTop10 = 0
+                var sangamConditionalCloseTop100 = 0
+                var sangamCloseFrequencyEvaluated = 0
+                var sangamCloseFrequencyAbstained = 0
+                var sangamCloseFrequencyTop10 = 0
+                var sangamCloseFrequencyTop100 = 0
                 var baselineHalfEvaluated = 0
                 var baselineHalfAbstained = 0
                 var baselineSangamEvaluated = 0
@@ -209,6 +221,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                             conditionedReverseHalfAbstained++
                             baselineHalfAbstained++
                             baselineSangamAbstained++
+                            sangamConditionalCloseAbstained++
+                            sangamCloseFrequencyAbstained++
                             sangamAbstained++
                         } else {
                         val open = ReverseEngineeringModel.rank(
@@ -271,6 +285,18 @@ object PannaHalfSangamWalkForwardEvaluator {
 
                             val openExactFrequency = exactFrequencyCandidates(open.candidates)
                             val closeExactFrequency = exactFrequencyCandidates(close.candidates)
+                            val conditionedCloseExactRank = closeGivenOpen.candidates
+                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
+                            sangamConditionalCloseExactRanks += conditionedCloseExactRank
+                            sangamConditionalCloseEvaluated++
+                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 10) sangamConditionalCloseTop10++
+                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 100) sangamConditionalCloseTop100++
+                            val closeFrequencyExactRank = closeExactFrequency
+                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
+                            sangamCloseFrequencyExactRanks += closeFrequencyExactRank
+                            sangamCloseFrequencyEvaluated++
+                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 10) sangamCloseFrequencyTop10++
+                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 100) sangamCloseFrequencyTop100++
                             val halfOpenPannaWindow = open.candidates.take(halfSangamPannaLimit)
                             val halfClosePannaWindow = close.candidates.take(halfSangamPannaLimit)
                             val halfOpenAnkEvidence = open.candidates.take(halfSangamOppositeLimit)
@@ -397,6 +423,16 @@ object PannaHalfSangamWalkForwardEvaluator {
                         requestedTargets, baselineSangamEvaluated, baselineSangamAbstained,
                         baselineSangamTop10, baselineSangamTop100,
                         exactRankDiagnostics(baselineSangamExactRanks)
+                    ),
+                    sangamClosePannaConditionedOnOpenPanna = HalfSangamWalkForwardMetrics(
+                        requestedTargets, sangamConditionalCloseEvaluated, sangamConditionalCloseAbstained,
+                        sangamConditionalCloseTop10, sangamConditionalCloseTop100,
+                        exactRankDiagnostics(sangamConditionalCloseExactRanks)
+                    ),
+                    sangamClosePannaExactFrequencyBaseline = HalfSangamWalkForwardMetrics(
+                        requestedTargets, sangamCloseFrequencyEvaluated, sangamCloseFrequencyAbstained,
+                        sangamCloseFrequencyTop10, sangamCloseFrequencyTop100,
+                        exactRankDiagnostics(sangamCloseFrequencyExactRanks)
                     ),
                     minimumHistory = minimumHistory,
                     candidateLimit = candidateLimit
