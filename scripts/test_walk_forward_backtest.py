@@ -162,6 +162,9 @@ class WalkForwardBacktestTests(unittest.TestCase):
         held_out = result["tuning_test"]["balanced_default"]
         self.assertEqual(15, validation["tested_targets"])
         self.assertEqual(15, held_out["tested_targets"])
+        self.assertIn("top100_hits", held_out)
+        self.assertIn("top100_hit_rate", held_out)
+        self.assertGreaterEqual(held_out["top100_hits"], held_out["top10_hits"])
         self.assertEqual(15, result["tuning_test_baseline"]["tested_targets"])
         self.assertEqual(10, len(result["feature_ablation_top10"]))
         self.assertIn("balanced_default", result["feature_ablation_top10"])
