@@ -40,7 +40,7 @@ class MultiModelWalkForwardEvaluatorTest {
         )
         assertEquals(5, report.consensus.requestedTargets)
         assertEquals(5, report.consensus.evaluatedTargets)
-        assertTrue(report.note.contains("strictly earlier"))
+        assertTrue(report.note.contains("only after scoring"))
     }
 
     @Test fun duplicateDatesAreRejected() {
