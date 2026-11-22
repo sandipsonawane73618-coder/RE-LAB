@@ -10,6 +10,7 @@ import com.relab.core.PredictionSnapshot
 import com.relab.core.PredictionSnapshotOutcome
 import com.relab.core.SourceObservation
 import com.relab.core.SourceObservationMerger
+import com.relab.core.SourceCsvExporter
 import java.time.Instant
 import java.time.LocalDate
 
