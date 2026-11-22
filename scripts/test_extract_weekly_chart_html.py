@@ -99,6 +99,21 @@ class WeeklyExtractorNineMarketTests(unittest.TestCase):
         self.assertEqual(5, len(rows))
         self.assertTrue(any("future chart dates excluded" in issue for issue in issues))
 
+    def test_valid_non_monday_historical_week_start_is_supported(self):
+        # Some old source archives use Sunday-start ranges. Preserve the
+        # publisher's explicit date axis instead of dropping valid rows.
+        html = "<table><tr><td>1/11/15 to 6/11/15</td>" + "".join(
+            "<td>123</td><td>65</td><td>456</td>" for _ in range(6)
+        ) + "</tr></table>"
+        rows, issues = MODULE.extract_rows(
+            html, market="KALYAN", session_id="main", source_id="canonical",
+            retrieved_at="2026-11-19T10:00:00+05:30"
+        )
+        self.assertEqual(6, len(rows))
+        self.assertEqual("2015-11-01", rows[0]["date"])
+        self.assertEqual("2015-11-06", rows[-1]["date"])
+        self.assertEqual([], issues)
+
     def test_retrieval_timestamp_requires_timezone(self):
         with self.assertRaises(ValueError):
             MODULE.extract_rows(
