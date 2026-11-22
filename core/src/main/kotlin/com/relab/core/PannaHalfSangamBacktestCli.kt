@@ -66,6 +66,36 @@ object PannaHalfSangamBacktestCli {
                         report.closePannaHybridTop10PlusExactFrequencyTop90.abstainedTargets, report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop10Hits,
                         report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop10Rate(), report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop100Hits,
                         report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop100Rate(), report.closePannaHybridTop10PlusExactFrequencyTop90.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_TOP100_BASELINE",
+                        report.openPannaCloseAnkTop100PannaBaseline.requestedTargets, report.openPannaCloseAnkTop100PannaBaseline.evaluatedTargets,
+                        report.openPannaCloseAnkTop100PannaBaseline.abstainedTargets, report.openPannaCloseAnkTop100PannaBaseline.exactTop10Hits,
+                        report.openPannaCloseAnkTop100PannaBaseline.exactTop10Rate(), report.openPannaCloseAnkTop100PannaBaseline.exactTop100Hits,
+                        report.openPannaCloseAnkTop100PannaBaseline.exactTop100Rate(), report.openPannaCloseAnkTop100PannaBaseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_TOP100_HYBRID",
+                        report.openPannaCloseAnkTop100PannaHybrid.requestedTargets, report.openPannaCloseAnkTop100PannaHybrid.evaluatedTargets,
+                        report.openPannaCloseAnkTop100PannaHybrid.abstainedTargets, report.openPannaCloseAnkTop100PannaHybrid.exactTop10Hits,
+                        report.openPannaCloseAnkTop100PannaHybrid.exactTop10Rate(), report.openPannaCloseAnkTop100PannaHybrid.exactTop100Hits,
+                        report.openPannaCloseAnkTop100PannaHybrid.exactTop100Rate(), report.openPannaCloseAnkTop100PannaHybrid.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_TOP100_BASELINE",
+                        report.openAnkClosePannaTop100PannaBaseline.requestedTargets, report.openAnkClosePannaTop100PannaBaseline.evaluatedTargets,
+                        report.openAnkClosePannaTop100PannaBaseline.abstainedTargets, report.openAnkClosePannaTop100PannaBaseline.exactTop10Hits,
+                        report.openAnkClosePannaTop100PannaBaseline.exactTop10Rate(), report.openAnkClosePannaTop100PannaBaseline.exactTop100Hits,
+                        report.openAnkClosePannaTop100PannaBaseline.exactTop100Rate(), report.openAnkClosePannaTop100PannaBaseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_TOP100_HYBRID",
+                        report.openAnkClosePannaTop100PannaHybrid.requestedTargets, report.openAnkClosePannaTop100PannaHybrid.evaluatedTargets,
+                        report.openAnkClosePannaTop100PannaHybrid.abstainedTargets, report.openAnkClosePannaTop100PannaHybrid.exactTop10Hits,
+                        report.openAnkClosePannaTop100PannaHybrid.exactTop10Rate(), report.openAnkClosePannaTop100PannaHybrid.exactTop100Hits,
+                        report.openAnkClosePannaTop100PannaHybrid.exactTop100Rate(), report.openAnkClosePannaTop100PannaHybrid.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_TOP100X100_BASELINE",
+                        report.sangamTop100x100Baseline.requestedTargets, report.sangamTop100x100Baseline.evaluatedTargets,
+                        report.sangamTop100x100Baseline.abstainedTargets, report.sangamTop100x100Baseline.exactTop10Hits,
+                        report.sangamTop100x100Baseline.exactTop10Rate(), report.sangamTop100x100Baseline.exactTop100Hits,
+                        report.sangamTop100x100Baseline.exactTop100Rate(), report.sangamTop100x100Baseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_TOP100X100_HYBRID",
+                        report.sangamTop100x100Hybrid.requestedTargets, report.sangamTop100x100Hybrid.evaluatedTargets,
+                        report.sangamTop100x100Hybrid.abstainedTargets, report.sangamTop100x100Hybrid.exactTop10Hits,
+                        report.sangamTop100x100Hybrid.exactTop10Rate(), report.sangamTop100x100Hybrid.exactTop100Hits,
+                        report.sangamTop100x100Hybrid.exactTop100Rate(), report.sangamTop100x100Hybrid.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_PANNA1000_ANK1000",
                         report.openPannaCloseAnk.requestedTargets, report.openPannaCloseAnk.evaluatedTargets,
                         report.openPannaCloseAnk.abstainedTargets, report.openPannaCloseAnk.exactTop10Hits,
