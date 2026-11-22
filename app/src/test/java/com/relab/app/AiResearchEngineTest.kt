@@ -99,7 +99,7 @@ class AiResearchEngineTest {
         assertTrue("Failed first stage must not be checkpointed", checkpoints.isEmpty())
     }
 
-    @Test fun fallbackFailureDoesNotCheckpointFirstStageOrOverwriteExistingEvidence() {
+    @Test fun fallbackFailureDoesNotCheckpointFirstStage() {
         val requests = mutableListOf<String>()
         val checkpoints = mutableListOf<String>()
         val engine = AiResearchEngine { endpoint, _, _ ->
@@ -124,7 +124,6 @@ class AiResearchEngineTest {
 
         assertEquals(2, requests.size)
         assertTrue(checkpoints.isEmpty())
-        assertEquals(evidence, evidence)
     }
 
     @Test fun completedCheckpointResumesWithoutCallingProvidersButStillAuditsAllStages() {
