@@ -21,8 +21,15 @@ object MultiModelHistoricalBacktestCli {
                 imported.issues.take(10).joinToString { "row ${it.rowNumber}: ${it.message}" }
         }
         val sourceAudit = ReconciledChartBuilder.build(imported.observations)
-        val records = ReconciledChartBuilder.buildExploratoryRecords(imported.observations)
-        require(records.isNotEmpty()) { "No conflict-free published chart records are available" }
+        // Only independently matching publisher records enter historical training.
+        val records = sourceAudit.records
+        require(records.isNotEmpty()) { "No two-publisher consensus chart records are available" }
+        val thinMarkets = Market.entries.filter { market ->
+            records.count { it.market == market } < 30
+        }
+        require(thinMarkets.isEmpty()) {
+            "At least 30 consensus dates are required per market; insufficient: ${thinMarkets.map { it.name }}"
+        }
         val marketsPresent = records.map { it.market }.toSet()
         require(marketsPresent == Market.entries.toSet()) {
             "Expected conflict-free history for all nine markets; found: ${marketsPresent.map { it.name }.sorted()}"
@@ -97,11 +104,11 @@ object MultiModelHistoricalBacktestCli {
                 appendLine("published_observations=${imported.observations.count { it.status == ObservationStatus.PUBLISHED }}")
                 appendLine("malformed_observations=${imported.observations.count { it.status == ObservationStatus.MALFORMED }}")
                 appendLine("conflict_groups_excluded=${sourceAudit.conflictGroups.size}")
-                appendLine("single_source_unverified_groups=${sourceAudit.singleSourceUnverifiedGroups.size}")
+                appendLine("single_source_unverified_groups_excluded=${sourceAudit.singleSourceUnverifiedGroups.size}")
                 appendLine("independent_consensus_groups=${sourceAudit.records.size}")
-                appendLine("exploratory_records_used=${records.size}")
+                appendLine("consensus_records_used=${records.size}")
                 appendLine("publishers=${imported.observations.map { it.sourceId }.distinct().sorted().joinToString(",")}")
-                appendLine("source_quality=SINGLE_SOURCE_UNVERIFIED")
+                appendLine("source_quality=TWO_PUBLISHER_CONSENSUS")
                 appendLine("channels=${PredictionChannel.entries.joinToString(",")}")
                 appendLine("evaluation_start=$evaluationStart")
                 appendLine("evaluation_end_exclusive=$cutoffExclusive")
