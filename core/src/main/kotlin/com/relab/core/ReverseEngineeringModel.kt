@@ -325,7 +325,7 @@ object ReverseEngineeringModel {
             if (history.size >= 2) add("Previous-state transition")
             if (openCloseCounts.isNotEmpty()) add(
                 if (knownOpenAnk != null) "Known open-Ank-to-close conditional"
-                else "Known open-Panna-to-close conditional"
+                else "Known open-to-close conditional"
             )
             if (crossSignals.isNotEmpty()) add("Same-date cross-market conditional")
         }
