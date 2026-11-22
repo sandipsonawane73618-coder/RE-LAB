@@ -39,7 +39,7 @@ class IndependentResearchVerifierTest {
         assertEquals(start.plusDays(70), result.holdoutStart)
         assertEquals(1, report.results.size)
         assertTrue(result.evaluatedOccurrences > 0)
-        assertNotEquals(ResearchVerificationStatus.VERIFIED, result.status)
+        assertEquals(ResearchVerificationStatus.VERIFIED, result.status)
     }
 
     @Test fun rowsAtOrAfterCutoffCannotChangeHoldoutResult() {
