@@ -46,6 +46,9 @@ object PreloadedLearningBootstrap {
         val checksum = sha256(csv)
         if (manifest["sha256"] != checksum) return Result.Rejected("Preloaded CSV checksum does not match manifest")
         val parsed = SourceCsvImporter.import(csv)
+        if (parsed.issues.isNotEmpty()) {
+            return Result.Rejected("Preloaded CSV has ${parsed.issues.size} invalid rows; fix the source export before packaging")
+        }
         val rows = parsed.observations
         if (rows.isEmpty()) return Result.Rejected("Preloaded chart history contains no valid observations")
         if (manifest["observation_count"]?.toIntOrNull()?.let { it != rows.size } == true) {
@@ -57,11 +60,12 @@ object PreloadedLearningBootstrap {
         if (missingMarkets.isNotEmpty()) {
             return Result.Rejected("Preloaded history is missing published rows for: ${missingMarkets.joinToString()}")
         }
-        val shallowMarkets = Market.entries.filter { market ->
-            marketCounts[market].orEmpty().size < 30
-        }
+        val shallowMarkets = rows.filter { it.status == ObservationStatus.PUBLISHED }
+            .groupBy { it.market to it.sessionId }
+            .filterValues { it.size < 30 }
+            .keys
         if (shallowMarkets.isNotEmpty()) {
-            return Result.Rejected("At least 30 published historical rows per market are required; insufficient: ${shallowMarkets.joinToString()}")
+            return Result.Rejected("At least 30 published historical rows are required per market/session; insufficient: ${shallowMarkets.joinToString()}")
         }
         val installedChecksum = database.preloadedSeedChecksum()
         if (installedChecksum == checksum) return Result.AlreadyInstalled
