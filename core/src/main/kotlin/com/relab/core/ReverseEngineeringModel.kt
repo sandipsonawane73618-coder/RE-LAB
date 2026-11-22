@@ -117,7 +117,8 @@ object ReverseEngineeringModel {
         limit: Int = 10,
         minimumHistory: Int = 30,
         smoothingAlpha: Double = 1.0,
-        includeCrossMarketEvidence: Boolean = false
+        includeCrossMarketEvidence: Boolean = false,
+        knownOpenAnk: Int? = null
     ): ReverseEngineeringRanking {
         require(market in enabledMarkets) { "Market is not enabled for reverse-engineering" }
         require(sessionId.isNotBlank()) { "Session ID is required" }
@@ -127,6 +128,12 @@ object ReverseEngineeringModel {
         if (knownOpenPanna != null) require(
             knownOpenPanna.length == 3 && knownOpenPanna.all(Char::isDigit)
         ) { "Known open panna must contain exactly three digits" }
+        require(knownOpenPanna == null || knownOpenAnk == null) {
+            "Provide knownOpenPanna or knownOpenAnk, not both"
+        }
+        if (knownOpenAnk != null) require(knownOpenAnk in 0..9) {
+            "Known open ank must be between 0 and 9"
+        }
 
         val validRows = records.asSequence()
             .filter { it.market in enabledMarkets && it.sessionId == sessionId && it.date.isBefore(targetDate) }
@@ -170,12 +177,19 @@ object ReverseEngineeringModel {
             .groupingBy { (before, after) -> "$before>$after" }.eachCount()
         val previousFamily = historicalFamilies.last()
 
-        val openCloseCounts = if (side == ReverseEngineeringSide.CLOSE && knownOpenPanna != null) {
-            val knownOpenFamily = familyOf(knownOpenPanna)
-            history.map { familyOf(it.openPanna) to familyOf(it.closePanna) }
-                .filter { it.first == knownOpenFamily }
-                .map { it.second }.groupingBy { it }.eachCount()
-        } else emptyMap()
+        val openCloseCounts = when {
+            side != ReverseEngineeringSide.CLOSE -> emptyMap()
+            knownOpenPanna != null -> {
+                val knownOpenFamily = familyOf(knownOpenPanna)
+                history.map { familyOf(it.openPanna) to familyOf(it.closePanna) }
+                    .filter { it.first == knownOpenFamily }
+                    .map { it.second }.groupingBy { it }.eachCount()
+            }
+            knownOpenAnk != null -> history
+                .filter { it.openPanna.sumOf(Char::digitToInt) % 10 == knownOpenAnk }
+                .map { familyOf(it.closePanna) }.groupingBy { it }.eachCount()
+            else -> emptyMap()
+        }
 
         val crossSignals = if (!includeCrossMarketEvidence) emptyList() else
             ReverseEngineeringModel.enabledMarkets.asSequence()
@@ -309,7 +323,10 @@ object ReverseEngineeringModel {
             add("Reverse-panna recurrence")
             if (weekdayRows.isNotEmpty()) add("Target weekday")
             if (history.size >= 2) add("Previous-state transition")
-            if (openCloseCounts.isNotEmpty()) add("Known open-to-close conditional")
+            if (openCloseCounts.isNotEmpty()) add(
+                if (knownOpenAnk != null) "Known open-Ank-to-close conditional"
+                else "Known open-Panna-to-close conditional"
+            )
             if (crossSignals.isNotEmpty()) add("Same-date cross-market conditional")
         }
 
