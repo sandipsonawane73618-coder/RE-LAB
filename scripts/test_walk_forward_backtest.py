@@ -12,6 +12,55 @@ class WalkForwardBacktestTests(unittest.TestCase):
         self.assertEqual("112", backtest.family_sequence("167"))
         self.assertEqual("001", backtest.family_sequence("056"))
 
+    def test_vectorized_rank_matches_reference_tie_breaks(self):
+        exact = backtest.Counter({"123": 4, "456": 2, "007": 1})
+        families = backtest.Counter({"123": 7, "401": 3, "002": 2})
+        weekdays = backtest.Counter({"123": 2, "401": 1})
+        transitions = backtest.Counter({("000", "123"): 3, ("000", "401"): 1})
+        candidates = backtest.CANDIDATES
+        family = backtest.CANDIDATE_FAMILIES
+        cases = (
+            ((0.30, 0.35, 0.20, 0.15), False, False),
+            ((1.0, 0.0, 0.0, 0.0), True, False),
+            ((0.0, 0.50, 0.30, 0.20), False, True),
+        )
+        for weights, lexical, exact_primary in cases:
+            with self.subTest(weights=weights, lexical=lexical, exact_primary=exact_primary):
+                max_exact = max(exact.values(), default=1)
+                max_family = max(families.values(), default=1)
+                max_weekday = max(weekdays.values(), default=1)
+                max_transition = max(transitions.values(), default=1)
+                scored = []
+                for panna in candidates:
+                    fam = family[panna]
+                    score = (
+                        weights[0] * exact[panna] / max_exact
+                        + weights[1] * families[fam] / max_family
+                        + weights[2] * weekdays[fam] / max_weekday
+                        + weights[3] * transitions[("000", fam)] / max_transition
+                    ) * 100.0
+                    secondary = (
+                        weights[1] * families[fam] / max_family
+                        + weights[2] * weekdays[fam] / max_weekday
+                        + weights[3] * transitions[("000", fam)] / max_transition
+                    ) * 100.0
+                    scored.append((panna, score, families[fam], exact[panna], secondary))
+                if exact_primary:
+                    key = lambda item: (-item[3], -item[4], item[0])
+                elif lexical:
+                    key = lambda item: (-item[1], item[0])
+                else:
+                    key = lambda item: (-item[1], -item[2], -item[3], item[0])
+                ordered = sorted(scored, key=key)
+                expected = 1 + next(i for i, item in enumerate(ordered) if item[0] == "123")
+                actual_top, actual_rank = backtest.rank_pannas(
+                    exact, families, weekdays, transitions, "000", "123",
+                    weights=weights, lexical_tiebreak=lexical,
+                    exact_primary_tiebreak=exact_primary,
+                )
+                self.assertEqual([item[0] for item in ordered[:10]], actual_top)
+                self.assertEqual(expected, actual_rank)
+
     def test_walk_forward_uses_only_prior_rows(self):
         rows = [
             {"date": date(2026, 1, 5), "session_id": "main", "open": "111", "close": "222"},
