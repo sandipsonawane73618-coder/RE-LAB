@@ -76,6 +76,21 @@ object PannaHalfSangamBacktestCli {
                         report.openAnkClosePannaConditioned.abstainedTargets, report.openAnkClosePannaConditioned.exactTop10Hits,
                         report.openAnkClosePannaConditioned.exactTop10Rate(), report.openAnkClosePannaConditioned.exactTop100Hits,
                         report.openAnkClosePannaConditioned.exactTop100Rate(), report.openAnkClosePannaConditioned.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_EXACT_FREQUENCY_BASELINE",
+                        report.openPannaCloseAnkExactFrequencyBaseline.requestedTargets, report.openPannaCloseAnkExactFrequencyBaseline.evaluatedTargets,
+                        report.openPannaCloseAnkExactFrequencyBaseline.abstainedTargets, report.openPannaCloseAnkExactFrequencyBaseline.exactTop10Hits,
+                        report.openPannaCloseAnkExactFrequencyBaseline.exactTop10Rate(), report.openPannaCloseAnkExactFrequencyBaseline.exactTop100Hits,
+                        report.openPannaCloseAnkExactFrequencyBaseline.exactTop100Rate(), report.openPannaCloseAnkExactFrequencyBaseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_EXACT_FREQUENCY_BASELINE",
+                        report.openAnkClosePannaExactFrequencyBaseline.requestedTargets, report.openAnkClosePannaExactFrequencyBaseline.evaluatedTargets,
+                        report.openAnkClosePannaExactFrequencyBaseline.abstainedTargets, report.openAnkClosePannaExactFrequencyBaseline.exactTop10Hits,
+                        report.openAnkClosePannaExactFrequencyBaseline.exactTop10Rate(), report.openAnkClosePannaExactFrequencyBaseline.exactTop100Hits,
+                        report.openAnkClosePannaExactFrequencyBaseline.exactTop100Rate(), report.openAnkClosePannaExactFrequencyBaseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_EXACT_FREQUENCY_BASELINE",
+                        report.sangamExactFrequencyBaseline.requestedTargets, report.sangamExactFrequencyBaseline.evaluatedTargets,
+                        report.sangamExactFrequencyBaseline.abstainedTargets, report.sangamExactFrequencyBaseline.exactTop10Hits,
+                        report.sangamExactFrequencyBaseline.exactTop10Rate(), report.sangamExactFrequencyBaseline.exactTop100Hits,
+                        report.sangamExactFrequencyBaseline.exactTop100Rate(), report.sangamExactFrequencyBaseline.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "SANGAM_PANNA1000",
                         report.sangam.requestedTargets, report.sangam.evaluatedTargets,
                         report.sangam.abstainedTargets, report.sangam.exactTop10Hits,
