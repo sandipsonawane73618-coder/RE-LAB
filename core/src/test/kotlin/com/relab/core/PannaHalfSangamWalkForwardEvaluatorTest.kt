@@ -93,6 +93,24 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
     }
 
     @Test
+    fun exactFrequencyBaselineReplacesCompositeScoresBeforePairRanking() {
+        fun candidate(panna: String, modelScore: Double, exactEvidence: Double) =
+            ReverseEngineeringCandidate(
+                panna, panna.map { ChartMath.family(it.digitToInt()).toString() }.joinToString(""),
+                ChartMath.pannaType(panna), panna.sumOf { it.digitToInt() } % 10,
+                modelScore, exactEvidence, 0.02, 0.03, 0.04, 0.05, 0.06,
+                null, null, null, null
+            )
+        val baseline = PannaHalfSangamWalkForwardEvaluator.exactFrequencyCandidates(
+            listOf(candidate("111", modelScore = 99.0, exactEvidence = 0.01),
+                candidate("222", modelScore = 1.0, exactEvidence = 0.90))
+        )
+        assertEquals(listOf("222", "111"), baseline.map { it.panna })
+        assertEquals(90.0, baseline.first().score, 0.0)
+        assertEquals(1.0, baseline.last().score, 0.0)
+    }
+
+    @Test
     fun recentTargetWindowUsesAllEarlierRowsAsTrainingHistory() {
         val records = (1..40).map(::row)
         val report = PannaHalfSangamWalkForwardEvaluator.evaluate(
