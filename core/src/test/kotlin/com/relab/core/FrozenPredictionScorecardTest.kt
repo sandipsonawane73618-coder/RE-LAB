@@ -36,25 +36,32 @@ class FrozenPredictionScorecardTest {
         crossMarketConditionalEvidence = null
     )
 
+    private fun outcome(snapshot: PredictionSnapshot) = PredictionSnapshotOutcome(
+        snapshotKey = snapshot.snapshotKey,
+        actualResult = "111-36-222",
+        publishedAt = Instant.parse("2026-01-02T12:00:00Z"),
+        sourceStatus = "PUBLISHED"
+    )
+
+    private fun candidates() = listOf(candidate("111", 90.0), candidate("612", 80.0), candidate("129", 70.0)) to
+        listOf(candidate("222", 90.0), candidate("722", 80.0), candidate("229", 70.0))
+
     private fun audit(snapshot: PredictionSnapshot): FrozenSangamOutcomeAudit {
-        val outcome = PredictionSnapshotOutcome(
-            snapshotKey = snapshot.snapshotKey,
-            actualResult = "111-36-222",
-            publishedAt = Instant.parse("2026-01-02T12:00:00Z"),
-            sourceStatus = "PUBLISHED"
-        )
-        return FrozenSangamOutcomeAuditor.analyze(
-            snapshot,
-            outcome,
-            listOf(candidate("111", 90.0), candidate("612", 80.0), candidate("129", 70.0)),
-            listOf(candidate("222", 90.0), candidate("722", 80.0), candidate("229", 70.0))
-        )
+        val (open, close) = candidates()
+        return FrozenSangamOutcomeAuditor.analyze(snapshot, outcome(snapshot), open, close)
+    }
+
+    private fun pannaHalfAudit(snapshot: PredictionSnapshot): FrozenPannaHalfSangamAudit {
+        val (open, close) = candidates()
+        return FrozenPannaHalfSangamAuditor.analyze(snapshot, outcome(snapshot), open, close)
     }
 
     @Test
-    fun aggregatesExactFamilyNearAndPendingSeparately() {
+    fun aggregatesExactFamilyNearHalfSangamAndPendingSeparately() {
         val saved = listOf(snapshot(2), snapshot(3))
-        val report = FrozenPredictionScorecardBuilder.build(saved, listOf(audit(saved.first()))).single()
+        val report = FrozenPredictionScorecardBuilder.build(
+            saved, listOf(audit(saved.first())), listOf(pannaHalfAudit(saved.first()))
+        ).single()
 
         assertEquals(2, report.savedSnapshots)
         assertEquals(1, report.auditedOutcomes)
@@ -68,9 +75,14 @@ class FrozenPredictionScorecardTest {
         assertEquals(1, report.closeFamilyTop10)
         assertEquals(1, report.openPositionalNearTop10)
         assertEquals(1, report.closePositionalNearTop10)
+        assertEquals(1, report.pannaHalfAuditedOutcomes)
+        assertEquals(1, report.openPannaCloseAnkTop10)
+        assertEquals(1, report.openAnkClosePannaTop10)
         assertEquals(1.0, report.rate(report.openExactTop10)!!, 0.0)
+        assertEquals(1.0, report.halfSangamRate(report.openPannaCloseAnkTop10)!!, 0.0)
         val pendingOnly = FrozenPredictionScorecardBuilder.build(listOf(snapshot(4)), emptyList()).single()
         assertNull(pendingOnly.rate(0))
+        assertNull(pendingOnly.halfSangamRate(0))
     }
 
     @Test
@@ -98,6 +110,18 @@ class FrozenPredictionScorecardTest {
             fail("Duplicate audits must be rejected")
         } catch (expected: IllegalArgumentException) {
             assertTrue(expected.message!!.contains("Duplicate frozen outcome"))
+        }
+    }
+
+    @Test
+    fun rejectsPannaHalfAuditForUnknownSnapshot() {
+        try {
+            FrozenPredictionScorecardBuilder.build(
+                listOf(snapshot(2)), emptyList(), listOf(pannaHalfAudit(snapshot(3)))
+            )
+            fail("Panna/Half-Sangam audit for an unknown snapshot must be rejected")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("does not belong"))
         }
     }
 }

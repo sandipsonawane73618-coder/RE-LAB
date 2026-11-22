@@ -806,7 +806,8 @@ private fun RelabHome(
     val frozenPredictionScorecards = remember(frozenPredictionSnapshots, frozenSangamAudits) {
         com.relab.core.FrozenPredictionScorecardBuilder.build(
             frozenPredictionSnapshots,
-            frozenSangamAudits
+            frozenSangamAudits,
+            frozenPannaHalfSangamAudits
         )
     }
     val selfLearningFeedback = remember(frozenSangamAudits) {
@@ -1138,6 +1139,10 @@ private fun RelabHome(
                                 )
                                 Text(
                                     "Sangam exact Top 10/100: ${score.sangamExactTop10}/${score.auditedOutcomes} / ${score.sangamExactTop100}/${score.auditedOutcomes} · Jodi diagnostic: ${score.jodiDiagnosticMatches}/${score.auditedOutcomes}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Half Sangam OPEN Panna + CLOSE Ank Top 10/100: ${score.openPannaCloseAnkTop10}/${score.pannaHalfAuditedOutcomes} / ${score.openPannaCloseAnkTop100}/${score.pannaHalfAuditedOutcomes} · OPEN Ank + CLOSE Panna: ${score.openAnkClosePannaTop10}/${score.pannaHalfAuditedOutcomes} / ${score.openAnkClosePannaTop100}/${score.pannaHalfAuditedOutcomes}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }

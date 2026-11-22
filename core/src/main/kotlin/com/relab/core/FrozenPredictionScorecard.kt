@@ -24,23 +24,35 @@ data class FrozenPredictionScorecard(
     val closePositionalNearTop100: Int,
     val sangamExactTop10: Int,
     val sangamExactTop100: Int,
-    val jodiDiagnosticMatches: Int
+    val jodiDiagnosticMatches: Int,
+    val pannaHalfAuditedOutcomes: Int,
+    val openPannaCloseAnkTop10: Int,
+    val openPannaCloseAnkTop100: Int,
+    val openAnkClosePannaTop10: Int,
+    val openAnkClosePannaTop100: Int
 ) {
     fun rate(hits: Int): Double? =
         if (auditedOutcomes == 0) null else hits.toDouble() / auditedOutcomes
+
+    fun halfSangamRate(hits: Int): Double? =
+        if (pannaHalfAuditedOutcomes == 0) null else hits.toDouble() / pannaHalfAuditedOutcomes
 }
 
 /** Builds per-market/session scorecards from audits already linked to frozen snapshots. */
 object FrozenPredictionScorecardBuilder {
     fun build(
         snapshots: List<PredictionSnapshot>,
-        audits: List<FrozenSangamOutcomeAudit>
+        audits: List<FrozenSangamOutcomeAudit>,
+        pannaHalfAudits: List<FrozenPannaHalfSangamAudit> = emptyList()
     ): List<FrozenPredictionScorecard> {
         require(snapshots.map { it.snapshotKey }.distinct().size == snapshots.size) {
             "Duplicate frozen snapshot keys are not allowed"
         }
         require(audits.map { it.snapshotKey }.distinct().size == audits.size) {
             "Duplicate frozen outcome audits are not allowed"
+        }
+        require(pannaHalfAudits.map { it.snapshotKey }.distinct().size == pannaHalfAudits.size) {
+            "Duplicate frozen Panna/Half-Sangam audits are not allowed"
         }
         val snapshotsByKey = snapshots.associateBy { it.snapshotKey }
         audits.forEach { audit ->
@@ -52,12 +64,21 @@ object FrozenPredictionScorecardBuilder {
                 snapshot.modelVersion == audit.modelVersion
             ) { "Audit metadata does not match its frozen snapshot" }
         }
+        pannaHalfAudits.forEach { audit ->
+            val snapshot = snapshotsByKey[audit.snapshotKey]
+                ?: error("Panna/Half-Sangam audit does not belong to a supplied frozen snapshot")
+            require(snapshot.market == audit.market &&
+                snapshot.sessionId == audit.sessionId &&
+                snapshot.targetDate == audit.targetDate
+            ) { "Panna/Half-Sangam audit metadata does not match its frozen snapshot" }
+        }
 
         return snapshots.groupBy { it.market to it.sessionId }
             .toSortedMap(compareBy<Pair<Market, String>> { it.first.name }.thenBy { it.second })
             .map { (identity, groupSnapshots) ->
                 val keys = groupSnapshots.map { it.snapshotKey }.toSet()
                 val groupAudits = audits.filter { it.snapshotKey in keys }
+                val groupPannaHalfAudits = pannaHalfAudits.filter { it.snapshotKey in keys }
                 FrozenPredictionScorecard(
                     market = identity.first,
                     sessionId = identity.second,
@@ -78,7 +99,12 @@ object FrozenPredictionScorecardBuilder {
                     closePositionalNearTop100 = groupAudits.count { it.closePannaAudit.positionalNearHitTop100 },
                     sangamExactTop10 = groupAudits.count { it.audit.exactPairRank?.let { rank -> rank <= 10 } == true },
                     sangamExactTop100 = groupAudits.count { it.audit.exactPairRank?.let { rank -> rank <= 100 } == true },
-                    jodiDiagnosticMatches = groupAudits.count { it.audit.jodiMatchCount > 0 }
+                    jodiDiagnosticMatches = groupAudits.count { it.audit.jodiMatchCount > 0 },
+                    pannaHalfAuditedOutcomes = groupPannaHalfAudits.size,
+                    openPannaCloseAnkTop10 = groupPannaHalfAudits.count { it.openPannaCloseAnkExactTop10 },
+                    openPannaCloseAnkTop100 = groupPannaHalfAudits.count { it.openPannaCloseAnkExactTop100 },
+                    openAnkClosePannaTop10 = groupPannaHalfAudits.count { it.openAnkClosePannaExactTop10 },
+                    openAnkClosePannaTop100 = groupPannaHalfAudits.count { it.openAnkClosePannaExactTop100 }
                 )
             }
     }
