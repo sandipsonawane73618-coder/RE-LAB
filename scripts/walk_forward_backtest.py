@@ -263,8 +263,10 @@ def evaluate_market(rows: list[dict], market: str, minimum_history: int = 30) ->
                     name: {
                         "tested_targets": len(values),
                         "top10_hit_rate": round(sum(rank <= 10 for rank in values) / len(values), 6) if values else 0.0,
+                        "top100_hit_rate": round(sum(rank <= 100 for rank in values) / len(values), 6) if values else 0.0,
                         "mrr_top10": round(sum(1.0 / rank for rank in values if rank <= 10) / len(values), 6) if values else 0.0,
                         "top10_hits": sum(rank <= 10 for rank in values),
+                        "top100_hits": sum(rank <= 100 for rank in values),
                         "reciprocal_rank_sum": round(sum(1.0 / rank for rank in values if rank <= 10), 6),
                     }
                     for name, values in rank_lists.items()
