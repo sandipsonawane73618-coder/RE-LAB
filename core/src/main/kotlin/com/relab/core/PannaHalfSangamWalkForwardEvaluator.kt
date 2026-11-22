@@ -337,6 +337,24 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (closeHybridRank != null && closeHybridRank <= 10) closeHybridTop10++
                             if (openHybridRank != null && openHybridRank <= 100) openHybridTop100++
                             if (closeHybridRank != null && closeHybridRank <= 100) closeHybridTop100++
+                            val conditionedCloseExactRank = closeGivenOpen.candidates
+                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
+                            sangamConditionalCloseExactRanks += conditionedCloseExactRank
+                            sangamConditionalCloseEvaluated++
+                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 10) sangamConditionalCloseTop10++
+                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 100) sangamConditionalCloseTop100++
+                            val closeFrequencyExactRank = closeExactFrequency
+                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
+                            sangamCloseFrequencyExactRanks += closeFrequencyExactRank
+                            sangamCloseFrequencyEvaluated++
+                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 10) sangamCloseFrequencyTop10++
+                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 100) sangamCloseFrequencyTop100++
+                            val halfOpenPannaWindow = open.candidates.take(halfSangamPannaLimit)
+                            val halfClosePannaWindow = close.candidates.take(halfSangamPannaLimit)
+                            val halfOpenAnkEvidence = open.candidates.take(halfSangamOppositeLimit)
+                            val halfCloseAnkEvidence = close.candidates.take(halfSangamOppositeLimit)
+                            val actualOpenAnk = ank(target.openPanna)
+                            val actualCloseAnk = ank(target.closePanna)
                             val openTop100PannaBaseline = open.candidates.take(100)
                             val closeTop100PannaBaseline = close.candidates.take(100)
                             val openTop100PannaHalfBaselineRank = exactHalfSangamRank(
@@ -369,24 +387,6 @@ object PannaHalfSangamWalkForwardEvaluator {
                             )
                             sangamTop100x100BaselineRanks += sangamTop100x100BaselineRank
                             sangamTop100x100HybridRanks += sangamTop100x100HybridRank
-                            val conditionedCloseExactRank = closeGivenOpen.candidates
-                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
-                            sangamConditionalCloseExactRanks += conditionedCloseExactRank
-                            sangamConditionalCloseEvaluated++
-                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 10) sangamConditionalCloseTop10++
-                            if (conditionedCloseExactRank != null && conditionedCloseExactRank <= 100) sangamConditionalCloseTop100++
-                            val closeFrequencyExactRank = closeExactFrequency
-                                .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
-                            sangamCloseFrequencyExactRanks += closeFrequencyExactRank
-                            sangamCloseFrequencyEvaluated++
-                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 10) sangamCloseFrequencyTop10++
-                            if (closeFrequencyExactRank != null && closeFrequencyExactRank <= 100) sangamCloseFrequencyTop100++
-                            val halfOpenPannaWindow = open.candidates.take(halfSangamPannaLimit)
-                            val halfClosePannaWindow = close.candidates.take(halfSangamPannaLimit)
-                            val halfOpenAnkEvidence = open.candidates.take(halfSangamOppositeLimit)
-                            val halfCloseAnkEvidence = close.candidates.take(halfSangamOppositeLimit)
-                            val actualOpenAnk = ank(target.openPanna)
-                            val actualCloseAnk = ank(target.closePanna)
                             val openToCloseRank = exactHalfSangamRank(
                                 halfOpenPannaWindow, halfCloseAnkEvidence,
                                 target.openPanna, actualCloseAnk
