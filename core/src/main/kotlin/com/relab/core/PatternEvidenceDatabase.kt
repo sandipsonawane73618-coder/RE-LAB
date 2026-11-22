@@ -38,12 +38,17 @@ data class PatternEvidenceRecord(
 /**
  * Builds auditable next-observation evidence from exact or family-movement sequences.
  *
- * A pattern is the previous N observed chart values in one market/session/channel.
- * Its outcome is the current row's value. Each hit/miss is scored only against
- * matching occurrences strictly earlier than that outcome; the first occurrence
- * is retained as support but is not scored. Calendar gaps are not synthesized.
+ * A pattern is the previous N consecutive valid observations in one market,
+ * session and channel. Invalid source rows are hard barriers: windows never
+ * jump across them. The outcome is the next valid observation in that same
+ * uninterrupted segment. The first occurrence is retained as support but is
+ * not scored; later occurrences are scored only against earlier outcomes for
+ * that same pattern. Baselines use only channel outcomes strictly before the
+ * scored observation. Calendar gaps are not synthesized.
  */
 object PatternEvidenceDatabase {
+    private data class ValidRow(val record: ChartRecord, val rawIndex: Int)
+
     fun analyze(
         records: List<ChartRecord>,
         targetDateExclusive: LocalDate,
@@ -56,14 +61,8 @@ object PatternEvidenceDatabase {
         }
         require(recentOccurrenceWindow >= 1) { "Recent occurrence window must be positive" }
 
-        val validRows = records.asSequence()
-            .filter { it.date.isBefore(targetDateExclusive) }
-            .filter { ChartMath.validate(it) is ValidationResult.Valid }
-            .sortedWith(compareBy<ChartRecord> { it.market.name }
-                .thenBy { it.sessionId }.thenBy { it.date })
-            .toList()
-
-        validRows.groupBy { Triple(it.market, it.sessionId, it.date) }
+        val inScope = records.filter { it.date.isBefore(targetDateExclusive) }
+        inScope.groupBy { Triple(it.market, it.sessionId, it.date) }
             .forEach { (key, rows) ->
                 require(rows.size == 1) {
                     "Duplicate dates for ${key.first}/${key.second} on ${key.third} must be reconciled before evidence analysis"
@@ -72,40 +71,69 @@ object PatternEvidenceDatabase {
 
         val results = mutableListOf<PatternEvidenceRecord>()
         val channels = PatternEvidenceChannel.entries
-        validRows.groupBy { it.market to it.sessionId }
-            .forEach { (identity, rowsUnsorted) ->
-                val rows = rowsUnsorted.sortedBy { it.date }
+        inScope.groupBy { it.market to it.sessionId }
+            .forEach { (identity, unsortedRows) ->
+                val rawRows = unsortedRows.sortedBy { it.date }
+                val validRows = rawRows.mapIndexedNotNull { index, row ->
+                    if (ChartMath.validate(row) is ValidationResult.Valid) ValidRow(row, index) else null
+                }
+                if (validRows.isEmpty()) return@forEach
+
                 channels.forEach { channel ->
-                    val values = rows.map { row ->
+                    val values = validRows.map { valid ->
                         val raw = when (channel) {
-                            PatternEvidenceChannel.OPEN_PANNA -> row.openPanna
-                            PatternEvidenceChannel.CLOSE_PANNA -> row.closePanna
-                            PatternEvidenceChannel.JODI -> row.jodi
+                            PatternEvidenceChannel.OPEN_PANNA -> valid.record.openPanna
+                            PatternEvidenceChannel.CLOSE_PANNA -> valid.record.closePanna
+                            PatternEvidenceChannel.JODI -> valid.record.jodi
                         }
                         when (outcomeMode) {
                             PatternOutcomeMode.EXACT -> raw
                             PatternOutcomeMode.FAMILY_MOVEMENT -> FamilyMovementMath.key(raw)
                         }
                     }
+
+                    // Split at every invalid raw observation. No sequence may bridge it.
+                    val segments = mutableListOf<List<Int>>()
+                    var current = mutableListOf<Int>()
+                    validRows.forEachIndexed { validIndex, valid ->
+                        val previousRawIndex = current.lastOrNull()?.let { validRows[it].rawIndex }
+                        if (previousRawIndex != null &&
+                            valid.rawIndex != previousRawIndex + 1
+                        ) {
+                            if (current.isNotEmpty()) segments += current.toList()
+                            current = mutableListOf()
+                        }
+                        current += validIndex
+                    }
+                    if (current.isNotEmpty()) segments += current.toList()
+
                     windowLengths.forEach windowLoop@ { windowLength ->
-                        if (rows.size <= windowLength) return@windowLoop
                         data class Event(
                             val date: LocalDate,
                             val outcome: String,
                             val sourceId: String,
-                            val rowIndex: Int
+                            val validIndex: Int,
+                            val rawIndex: Int,
+                            val windowSourceIds: List<String>
                         )
                         val eventsByPattern = linkedMapOf<String, MutableList<Event>>()
-                        for (targetIndex in windowLength until rows.size) {
-                            val pattern = values.subList(targetIndex - windowLength, targetIndex)
-                                .joinToString(">")
-                            val event = Event(
-                                date = rows[targetIndex].date,
-                                outcome = values[targetIndex],
-                                sourceId = rows[targetIndex].sourceId,
-                                rowIndex = targetIndex
-                            )
-                            eventsByPattern.getOrPut(pattern) { mutableListOf() } += event
+                        segments.forEach { segment ->
+                            if (segment.size <= windowLength) return@forEach
+                            for (segmentIndex in windowLength until segment.size) {
+                                val targetValidIndex = segment[segmentIndex]
+                                val windowIndexes = segment.subList(segmentIndex - windowLength, segmentIndex)
+                                val pattern = windowIndexes.joinToString(">") { values[it] }
+                                val target = validRows[targetValidIndex]
+                                val event = Event(
+                                    date = target.record.date,
+                                    outcome = values[targetValidIndex],
+                                    sourceId = target.record.sourceId,
+                                    validIndex = targetValidIndex,
+                                    rawIndex = target.rawIndex,
+                                    windowSourceIds = windowIndexes.map { validRows[it].record.sourceId }
+                                )
+                                eventsByPattern.getOrPut(pattern) { mutableListOf() } += event
+                            }
                         }
 
                         eventsByPattern.forEach { (pattern, events) ->
@@ -125,7 +153,8 @@ object PatternEvidenceDatabase {
                                     val patternHit = predicted == event.outcome
                                     if (patternHit) hits++ else misses++
                                     scoredPatternHits += patternHit
-                                    val priorChannelOutcomes = values.take(event.rowIndex)
+
+                                    val priorChannelOutcomes = values.take(event.validIndex)
                                     val baselinePrediction = priorChannelOutcomes.groupingBy { it }.eachCount()
                                         .entries
                                         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
@@ -136,6 +165,7 @@ object PatternEvidenceDatabase {
                                 historicalOutcomes += event.outcome
                                 outcomeCounts[event.outcome] = (outcomeCounts[event.outcome] ?: 0) + 1
                             }
+
                             val recent = historicalOutcomes.takeLast(recentOccurrenceWindow)
                             val stability = if (recent.isEmpty()) null else
                                 recent.groupingBy { it }.eachCount().values.max().toDouble() / recent.size
@@ -165,6 +195,7 @@ object PatternEvidenceDatabase {
                                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
                                     .thenBy { it.key })
                                 .map { PatternOutcomeCount(it.key, it.value) }
+                            val evaluated = hits + misses
                             results += PatternEvidenceRecord(
                                 market = identity.first,
                                 sessionId = identity.second,
@@ -172,23 +203,20 @@ object PatternEvidenceDatabase {
                                 windowLength = windowLength,
                                 pattern = pattern,
                                 occurrences = events.size,
-                                evaluatedOccurrences = hits + misses,
+                                evaluatedOccurrences = evaluated,
                                 hits = hits,
                                 misses = misses,
-                                hitRate = if (hits + misses == 0) null else hits.toDouble() / (hits + misses),
+                                hitRate = if (evaluated == 0) null else hits.toDouble() / evaluated,
                                 outcomeCounts = rankedOutcomes,
                                 lastSeenDate = last.date,
-                                ageInChartRows = rows.lastIndex - last.rowIndex,
-                                ageInDays = ChronoUnit.DAYS.between(last.date, rows.last().date),
-                                distinctSourceCount = events.flatMap { event ->
-                                    rows.subList(event.rowIndex - windowLength, event.rowIndex)
-                                        .map { it.sourceId } + event.sourceId
-                                }.distinct().size,
+                                ageInChartRows = rawRows.lastIndex - last.rawIndex,
+                                ageInDays = ChronoUnit.DAYS.between(last.date, validRows.last().record.date),
+                                distinctSourceCount = events.flatMap { it.windowSourceIds + it.sourceId }.distinct().size,
                                 recentOutcomeStability = stability,
                                 baselineHits = baselineHits,
-                                baselineHitRate = if (hits + misses == 0) null else baselineHits.toDouble() / (hits + misses),
-                                baselineLift = if (hits + misses == 0) null else
-                                    hits.toDouble() / (hits + misses) - baselineHits.toDouble() / (hits + misses),
+                                baselineHitRate = if (evaluated == 0) null else baselineHits.toDouble() / evaluated,
+                                baselineLift = if (evaluated == 0) null else
+                                    hits.toDouble() / evaluated - baselineHits.toDouble() / evaluated,
                                 recencyWeightedHitRate = weightedHitRate,
                                 recentHitRate = recentHitRate,
                                 rollingHitRateStdDev = rollingStdDev,

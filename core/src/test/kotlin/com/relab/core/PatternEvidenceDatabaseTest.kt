@@ -73,6 +73,7 @@ class PatternEvidenceDatabaseTest {
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.CLOSE_PANNA })
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.JODI })
     }
+
     @Test fun recordsMatchedGlobalBaselineAndRecencyMetrics() {
         val rows = listOf(
             row(0, "111"), row(1, "222"), row(2, "333"),
@@ -131,4 +132,48 @@ class PatternEvidenceDatabaseTest {
         assertEquals(0, repeated.misses)
     }
 
+    @Test fun invalidRowsAreBarriersAndPatternsCannotBridgeThem() {
+        val rows = listOf(
+            row(0, "111"),
+            row(1, "222"),
+            row(2, "333").copy(jodi = "99"),
+            row(3, "111"),
+            row(4, "222"),
+            row(5, "333")
+        )
+        val evidence = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        val repeated = evidence.single {
+            it.channel == PatternEvidenceChannel.OPEN_PANNA && it.pattern == "111>222"
+        }
+        assertEquals(1, repeated.occurrences)
+        assertEquals(0, repeated.evaluatedOccurrences)
+        assertNull(repeated.hitRate)
+        assertEquals(0, repeated.ageInChartRows)
+    }
+
+    @Test fun invalidDuplicateDateStillRequiresReconciliation() {
+        val invalid = row(0, "111").copy(jodi = "99")
+        val valid = row(0, "222")
+        try {
+            PatternEvidenceDatabase.analyze(
+                listOf(invalid, valid), LocalDate.of(2026, 2, 1), windowLengths = 1..1
+            )
+            fail("Invalid duplicate row must not disappear before duplicate audit")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("Duplicate dates"))
+        }
+    }
+
+    @Test fun invalidRowsDoNotIncreaseEvidenceSourceCounts() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333").copy(jodi = "99"),
+            row(3, "111"), row(4, "222"), row(5, "333")
+        )
+        val evidence = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        assertTrue(evidence.all { it.distinctSourceCount <= 3 })
+    }
 }
