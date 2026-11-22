@@ -231,6 +231,11 @@ jobs:
           gradle :core:runMultiModelHistoricalBacktest \
             -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
             -PoutputCsv=data/derived/multi-model-learning-metrics.csv
+      - name: Run per-market exact-versus-family walk-forward audit
+        run: |
+          gradle :core:runFamilyMovementHistoricalBacktest \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
+            -PoutputCsv=data/derived/family-movement-learning-metrics.csv
       - name: Upload historical learning metrics and source audits
         uses: actions/upload-artifact@v4
         with:
@@ -240,6 +245,8 @@ jobs:
             data/derived/panna-half-sangam-learning-metrics.audit.txt
             data/derived/multi-model-learning-metrics.csv
             data/derived/multi-model-learning-metrics.audit.txt
+            data/derived/family-movement-learning-metrics.csv
+            data/derived/family-movement-learning-metrics.audit.txt
           if-no-files-found: error
           retention-days: 90
 
