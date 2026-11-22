@@ -83,6 +83,42 @@ class LocalObservationDatabaseInstrumentationTest {
     }
 
     @Test
+    fun preloadedSeedMergesOnceAndSurvivesDatabaseReopen() {
+        val market = ReverseEngineeringModel.enabledMarkets.first()
+        val existing = observation(market, LocalDate.parse("2026-01-08"), "live-source", "123-65-456")
+        val preloaded = observation(market, LocalDate.parse("2026-01-09"), "preload-source", "456-12-789")
+        val csv = SourceCsvExporter.export(listOf(preloaded))
+        val checksum = "a".repeat(64)
+
+        LocalObservationDatabase(testContext).use { database ->
+            database.replaceDataset(SourceCsvExporter.export(listOf(existing)), listOf(existing))
+            database.seedPreloadedDataset(csv, listOf(preloaded), checksum)
+            assertEquals(2, database.loadObservations().size)
+            assertEquals(checksum, database.preloadedSeedChecksum())
+            // A repeat install of the same package is a no-op.
+            database.seedPreloadedDataset(csv, listOf(preloaded), checksum)
+            assertEquals(2, database.loadObservations().size)
+        }
+
+        LocalObservationDatabase(testContext).use { reopened ->
+            assertEquals(2, reopened.loadObservations().size)
+            assertEquals(checksum, reopened.preloadedSeedChecksum())
+        }
+    }
+
+    @Test
+    fun explicitDatasetClearPreventsAutomaticPreloadReseed() {
+        val market = ReverseEngineeringModel.enabledMarkets.first()
+        val row = observation(market, LocalDate.parse("2026-01-08"), "preload-source", "123-65-456")
+        LocalObservationDatabase(testContext).use { database ->
+            database.seedPreloadedDataset(SourceCsvExporter.export(listOf(row)), listOf(row), "b".repeat(64))
+            database.clearDataset()
+            assertTrue(database.isPreloadedSeedDisabled())
+            assertTrue(database.loadObservations().isEmpty())
+        }
+    }
+
+    @Test
     fun refusesOutcomeWithoutPreviouslyFrozenPrediction() {
         val market = ReverseEngineeringModel.enabledMarkets.first()
         val outcome = PredictionSnapshotOutcome(
