@@ -357,9 +357,12 @@ object ReverseEngineeringModel {
         targetLimit: Int = 120,
         minimumHistory: Int = 30,
         candidateLimit: Int = 10,
-        targetDateExclusive: LocalDate? = null
+        targetDateExclusive: LocalDate? = null,
+        ankCandidateLimit: Int = 100
     ): ReverseEngineeringBacktestReport {
         require(targetLimit in 1..1000) { "Target limit must be between 1 and 1000" }
+        require(candidateLimit in 1..100) { "Candidate limit must be between 1 and 100" }
+        require(ankCandidateLimit in 1..100) { "Ank candidate limit must be between 1 and 100" }
         require(market in enabledMarkets) { "Market is not enabled for walk-forward backtesting" }
         val actualRows = records.asSequence()
             .filter { it.market == market && it.sessionId == sessionId }
@@ -408,7 +411,13 @@ object ReverseEngineeringModel {
             if (ranking.candidates.any { it.ank == actualAnk }) top10Ank++
 
             // Evaluate the same unique-Ank shortlist used by the Open Ank UI.
-            val rankedUniqueAnks = OpenAnkRanking.rank(ranking.candidates, limit = 5)
+            // The UI builds Open Ank from up to 100 ranked Pannas, independently
+            // of the smaller exact-Panna evaluation window.
+            val ankRanking = if (ankCandidateLimit == candidateLimit) ranking else rank(
+                records, market, sessionId, actual.date, side,
+                limit = ankCandidateLimit, minimumHistory = minimumHistory
+            )
+            val rankedUniqueAnks = OpenAnkRanking.rank(ankRanking.candidates, limit = 5)
                 .map { it.ank }
             if (rankedUniqueAnks.take(3).contains(actualAnk)) top3UniqueAnk++
             if (rankedUniqueAnks.contains(actualAnk)) top5UniqueAnk++
@@ -417,7 +426,7 @@ object ReverseEngineeringModel {
             if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
             val priorRows = actualRows.filter { it.date.isBefore(actual.date) }
-            val priorAnks = priorRows.groupingBy { pannaOf(it, side).sumOf(Char::digitToInt) % 10 }
+            val priorAnks = priorRows.groupingBy { pannaOf(it, side).sumOf { digit -> digit.digitToInt() } % 10 }
                 .eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key })
                 .map { it.key }
