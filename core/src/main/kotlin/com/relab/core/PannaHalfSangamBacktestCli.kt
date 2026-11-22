@@ -61,6 +61,11 @@ object PannaHalfSangamBacktestCli {
                         report.openPannaCloseAnk.abstainedTargets, report.openPannaCloseAnk.exactTop10Hits,
                         report.openPannaCloseAnk.exactTop10Rate(), report.openPannaCloseAnk.exactTop100Hits,
                         report.openPannaCloseAnk.exactTop100Rate(), report.openPannaCloseAnk.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_CONDITIONED_ON_OPEN_PANNA",
+                        report.openPannaCloseAnkConditioned.requestedTargets, report.openPannaCloseAnkConditioned.evaluatedTargets,
+                        report.openPannaCloseAnkConditioned.abstainedTargets, report.openPannaCloseAnkConditioned.exactTop10Hits,
+                        report.openPannaCloseAnkConditioned.exactTop10Rate(), report.openPannaCloseAnkConditioned.exactTop100Hits,
+                        report.openPannaCloseAnkConditioned.exactTop100Rate(), report.openPannaCloseAnkConditioned.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_PANNA1000_ANK1000",
                         report.openAnkClosePanna.requestedTargets, report.openAnkClosePanna.evaluatedTargets,
                         report.openAnkClosePanna.abstainedTargets, report.openAnkClosePanna.exactTop10Hits,
@@ -74,7 +79,7 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; sangam_panna_window=1000; output=${output.absolutePath}")
+        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; conditioned_open_to_close=enabled; sangam_panna_window=1000; output=${output.absolutePath}")
     }
 
     private fun appendMetric(
