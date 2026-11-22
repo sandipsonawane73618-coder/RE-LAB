@@ -90,6 +90,7 @@ data class PannaHalfSangamWalkForwardReport(
     val openPanna: PannaSideWalkForwardMetrics,
     val closePanna: PannaSideWalkForwardMetrics,
     val openPannaCloseAnk: HalfSangamWalkForwardMetrics,
+    val openPannaCloseAnkConditioned: HalfSangamWalkForwardMetrics,
     val openAnkClosePanna: HalfSangamWalkForwardMetrics,
     val sangam: HalfSangamWalkForwardMetrics,
     val minimumHistory: Int,
@@ -159,11 +160,16 @@ object PannaHalfSangamWalkForwardEvaluator {
                 val openExactRanks = mutableListOf<Int?>()
                 val closeExactRanks = mutableListOf<Int?>()
                 val halfExactRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
+                val conditionedHalfExactRanks = mutableListOf<Int?>()
                 val sangamExactRanks = mutableListOf<Int?>()
                 val halfEvaluated = IntArray(2)
                 val halfAbstained = IntArray(2)
                 val halfTop10 = IntArray(2)
                 val halfTop100 = IntArray(2)
+                var conditionedHalfEvaluated = 0
+                var conditionedHalfAbstained = 0
+                var conditionedHalfTop10 = 0
+                var conditionedHalfTop100 = 0
                 var sangamEvaluated = 0
                 var sangamAbstained = 0
                 var sangamTop10 = 0
@@ -192,7 +198,15 @@ object PannaHalfSangamWalkForwardEvaluator {
                             ReverseEngineeringSide.CLOSE, limit = 1000,
                             minimumHistory = minimumHistory
                         )
-                        if (open.abstained || close.abstained) {
+                        // In the OPEN_PANNA_CLOSE_ANK direction, the open result is
+                        // already known before the close result. Condition only this
+                        // close-side research ranking on that observed open Panna.
+                        val closeGivenOpen = ReverseEngineeringModel.rank(
+                            prior, identity.first, identity.second, target.date,
+                            ReverseEngineeringSide.CLOSE, knownOpenPanna = target.openPanna,
+                            limit = 1000, minimumHistory = minimumHistory
+                        )
+                        if (open.abstained || close.abstained || closeGivenOpen.abstained) {
                             openAbstained++
                             closeAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
@@ -232,6 +246,16 @@ object PannaHalfSangamWalkForwardEvaluator {
                                 halfOpenPannaWindow, halfCloseAnkEvidence,
                                 target.openPanna, actualCloseAnk
                             )
+                            val conditionedCloseAnkEvidence =
+                                closeGivenOpen.candidates.take(halfSangamOppositeLimit)
+                            val openToCloseConditionedRank = exactHalfSangamRank(
+                                halfOpenPannaWindow, conditionedCloseAnkEvidence,
+                                target.openPanna, actualCloseAnk
+                            )
+                            conditionedHalfEvaluated++
+                            conditionedHalfExactRanks += openToCloseConditionedRank
+                            if (openToCloseConditionedRank != null && openToCloseConditionedRank <= 10) conditionedHalfTop10++
+                            if (openToCloseConditionedRank != null && openToCloseConditionedRank <= 100) conditionedHalfTop100++
                             val closeToOpenRank = exactHalfSangamRank(
                                 halfClosePannaWindow, halfOpenAnkEvidence,
                                 target.closePanna, actualOpenAnk
@@ -277,6 +301,11 @@ object PannaHalfSangamWalkForwardEvaluator {
                     openPanna = pannaMetrics(openEvaluated, openAbstained, openTop10, openTop100, openFamily10, openFamily100, openNear10, openNear100, openExactRanks),
                     closePanna = pannaMetrics(closeEvaluated, closeAbstained, closeTop10, closeTop100, closeFamily10, closeFamily100, closeNear10, closeNear100, closeExactRanks),
                     openPannaCloseAnk = halfMetrics(0),
+                    openPannaCloseAnkConditioned = HalfSangamWalkForwardMetrics(
+                        requestedTargets, conditionedHalfEvaluated, conditionedHalfAbstained,
+                        conditionedHalfTop10, conditionedHalfTop100,
+                        exactRankDiagnostics(conditionedHalfExactRanks)
+                    ),
                     openAnkClosePanna = halfMetrics(1),
                     sangam = HalfSangamWalkForwardMetrics(requestedTargets, sangamEvaluated, sangamAbstained, sangamTop10, sangamTop100, exactRankDiagnostics(sangamExactRanks)),
                     minimumHistory = minimumHistory,
