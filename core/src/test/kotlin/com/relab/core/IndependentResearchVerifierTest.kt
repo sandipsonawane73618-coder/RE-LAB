@@ -12,7 +12,7 @@ class IndependentResearchVerifierTest {
             market = market,
             date = start.plusDays(day.toLong()),
             openPanna = open,
-            jodi = "12",
+            jodi = "${open.sumOf { it.digitToInt() } % 10}${"444".sumOf { it.digitToInt() } % 10}",
             closePanna = "444",
             sourceId = "consensus-$day",
             sessionId = session
