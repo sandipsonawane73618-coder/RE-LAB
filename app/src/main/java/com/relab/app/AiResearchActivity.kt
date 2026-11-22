@@ -214,7 +214,7 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
             status = "Extracting AI proposals and running the complete chronological research audit…"
             try {
                 val parsed = AiPatternProposalParser.parse(synthesis)
-                val (audit, exports, groundingNotes, groundedProposalCount) = withContext(Dispatchers.IO) {
+                val discovery = withContext(Dispatchers.IO) {
                     val observations = LocalObservationDatabase(context).loadObservations()
                     // Verification uses only multi-source consensus rows. Exploratory/single-source
                     // records may inform AI hypotheses but cannot independently verify them.
@@ -229,31 +229,27 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         }
                     }
                     val audit = EndToEndResearchAuditWorkflow.run(
-                        records = records,
-                        scannerRankings = scannerRankings,
-                        proposals = grounding.accepted,
-                        targetDateExclusive = targetDate,
-                        minimumModelHistory = 30,
-                        candidateLimit = 10,
-                        sourceQuality = chartBuild,
-                        sourceObservationCount = observations.size
+                        records = records, scannerRankings = scannerRankings,
+                        proposals = grounding.accepted, targetDateExclusive = targetDate,
+                        minimumModelHistory = 30, candidateLimit = 10,
+                        sourceQuality = chartBuild, sourceObservationCount = observations.size
                     )
                     val notes = parsed.issues + grounding.rejected.map {
                         "Proposal ${it.proposalId} rejected by source-grounding gate: ${it.reason}"
                     }
-                    Triple(
-                        audit,
-                        Triple(
-                            audit.compactSummary(),
-                            ResearchToBacktestCsvExporter.export(audit.research),
-                            EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
-                        ),
-                        notes to grounding.accepted.size
-                    )
-                }.let { Triple(it.first, it.second, it.third.first) to it.third.second }
-                backtestReport = exports.second.first + if (groundingNotes.isEmpty()) "" else "\n\nDiscovery grounding notes:\n" + groundingNotes.joinToString("\n")
-                backtestCsv = exports.second.second
-                walkForwardCsv = exports.second.third
+                    Triple(audit, Triple(
+                        audit.compactSummary(),
+                        ResearchToBacktestCsvExporter.export(audit.research),
+                        EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
+                    ), notes to grounding.accepted.size)
+                }
+                val audit = discovery.first
+                val exports = discovery.second
+                val groundingNotes = discovery.third.first
+                val groundedProposalCount = discovery.third.second
+                backtestReport = exports.first + if (groundingNotes.isEmpty()) "" else "\n\nDiscovery grounding notes:\n" + groundingNotes.joinToString("\n")
+                backtestCsv = exports.second
+                walkForwardCsv = exports.third
                 status = if (groundedProposalCount == 0) {
                     "Research report completed; no AI proposal passed source-grounding. Scanner and Pattern Evidence DB results remain available. " +
                         groundingNotes.joinToString("; ")
