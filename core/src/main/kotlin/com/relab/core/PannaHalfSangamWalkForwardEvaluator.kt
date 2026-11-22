@@ -115,10 +115,12 @@ object PannaHalfSangamWalkForwardEvaluator {
         records: List<ChartRecord>,
         targetDateExclusive: LocalDate,
         minimumHistory: Int = 30,
-        candidateLimit: Int = 100
+        candidateLimit: Int = 100,
+        targetLimit: Int = Int.MAX_VALUE
     ): List<PannaHalfSangamWalkForwardReport> {
         require(minimumHistory >= 1) { "minimumHistory must be positive" }
         require(candidateLimit in 10..100) { "candidateLimit must be between 10 and 100" }
+        require(targetLimit >= 1) { "targetLimit must be positive" }
 
         val eligible = records.filter { it.date.isBefore(targetDateExclusive) }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
@@ -161,14 +163,19 @@ object PannaHalfSangamWalkForwardEvaluator {
                 var sangamTop10 = 0
                 var sangamTop100 = 0
 
+                val requestedTargets = minOf(rows.size, targetLimit)
+                val firstTargetIndex = rows.size - requestedTargets
                 rows.forEachIndexed { index, target ->
-                    val prior = rows.take(index)
-                    if (prior.size < minimumHistory) {
-                        openAbstained++
-                        closeAbstained++
-                        halfAbstained.indices.forEach { halfAbstained[it]++ }
-                        sangamAbstained++
-                    } else {
+                    // Retain the complete earlier history for each selected target,
+                    // but avoid expensive ranking on older rows outside the OOS window.
+                    if (index >= firstTargetIndex) {
+                        val prior = rows.subList(0, index)
+                        if (prior.size < minimumHistory) {
+                            openAbstained++
+                            closeAbstained++
+                            halfAbstained.indices.forEach { halfAbstained[it]++ }
+                            sangamAbstained++
+                        } else {
                         val open = ReverseEngineeringModel.rank(
                             prior, identity.first, identity.second, target.date,
                             ReverseEngineeringSide.OPEN, limit = 1000,
@@ -240,29 +247,30 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (sangam.exactPairRank != null && sangam.exactPairRank <= 100) sangamTop100++
                         }
                     }
+                    }
                 }
 
                 fun pannaMetrics(
                     evaluated: Int, abstained: Int, top10: Int, top100: Int,
                     family10: Int, family100: Int, near10: Int, near100: Int, ranks: List<Int?>
                 ) = PannaSideWalkForwardMetrics(
-                    rows.size, evaluated, abstained, top10, top100,
+                    requestedTargets, evaluated, abstained, top10, top100,
                     family10, family100, near10, near100, exactRankDiagnostics(ranks)
                 )
                 fun halfMetrics(direction: Int) = HalfSangamWalkForwardMetrics(
-                    rows.size, halfEvaluated[direction], halfAbstained[direction],
+                    requestedTargets, halfEvaluated[direction], halfAbstained[direction],
                     halfTop10[direction], halfTop100[direction], exactRankDiagnostics(halfExactRanks[direction])
                 )
                 PannaHalfSangamWalkForwardReport(
                     market = identity.first,
                     sessionId = identity.second,
-                    firstTargetDate = rows.firstOrNull()?.date,
+                    firstTargetDate = rows.getOrNull(firstTargetIndex)?.date,
                     lastTargetDate = rows.lastOrNull()?.date,
                     openPanna = pannaMetrics(openEvaluated, openAbstained, openTop10, openTop100, openFamily10, openFamily100, openNear10, openNear100, openExactRanks),
                     closePanna = pannaMetrics(closeEvaluated, closeAbstained, closeTop10, closeTop100, closeFamily10, closeFamily100, closeNear10, closeNear100, closeExactRanks),
                     openPannaCloseAnk = halfMetrics(0),
                     openAnkClosePanna = halfMetrics(1),
-                    sangam = HalfSangamWalkForwardMetrics(rows.size, sangamEvaluated, sangamAbstained, sangamTop10, sangamTop100, exactRankDiagnostics(sangamExactRanks)),
+                    sangam = HalfSangamWalkForwardMetrics(requestedTargets, sangamEvaluated, sangamAbstained, sangamTop10, sangamTop100, exactRankDiagnostics(sangamExactRanks)),
                     minimumHistory = minimumHistory,
                     candidateLimit = candidateLimit
                 )
