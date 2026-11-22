@@ -116,11 +116,17 @@ object PannaHalfSangamWalkForwardEvaluator {
         targetDateExclusive: LocalDate,
         minimumHistory: Int = 30,
         candidateLimit: Int = 100,
-        targetLimit: Int = Int.MAX_VALUE
+        targetLimit: Int = Int.MAX_VALUE,
+        halfSangamPannaLimit: Int = candidateLimit,
+        halfSangamOppositeLimit: Int = candidateLimit,
+        sangamPannaLimit: Int = candidateLimit
     ): List<PannaHalfSangamWalkForwardReport> {
         require(minimumHistory >= 1) { "minimumHistory must be positive" }
         require(candidateLimit in 10..100) { "candidateLimit must be between 10 and 100" }
         require(targetLimit >= 1) { "targetLimit must be positive" }
+        require(halfSangamPannaLimit in 10..1000) { "halfSangamPannaLimit must be between 10 and 1000" }
+        require(halfSangamOppositeLimit in 10..1000) { "halfSangamOppositeLimit must be between 10 and 1000" }
+        require(sangamPannaLimit in 10..1000) { "sangamPannaLimit must be between 10 and 1000" }
 
         val eligible = records.filter { it.date.isBefore(targetDateExclusive) }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
@@ -216,35 +222,37 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (close.candidates.take(10).any { positionalMatch(it.panna, target.closePanna) }) closeNear10++
                             if (close.candidates.take(100).any { positionalMatch(it.panna, target.closePanna) }) closeNear100++
 
-                            val openWindow = open.candidates.take(candidateLimit)
-                            val closeWindow = close.candidates.take(candidateLimit)
-                            val openToClose = rankHalfSangam(openWindow, closeWindow)
-                            val closeToOpen = rankHalfSangam(closeWindow, openWindow)
+                            val halfOpenPannaWindow = open.candidates.take(halfSangamPannaLimit)
+                            val halfClosePannaWindow = close.candidates.take(halfSangamPannaLimit)
+                            val halfOpenAnkEvidence = open.candidates.take(halfSangamOppositeLimit)
+                            val halfCloseAnkEvidence = close.candidates.take(halfSangamOppositeLimit)
                             val actualOpenAnk = ank(target.openPanna)
                             val actualCloseAnk = ank(target.closePanna)
-                            val halfTargets = listOf(
-                                target.openPanna to actualCloseAnk,
-                                target.closePanna to actualOpenAnk
+                            val openToCloseRank = exactHalfSangamRank(
+                                halfOpenPannaWindow, halfCloseAnkEvidence,
+                                target.openPanna, actualCloseAnk
                             )
-                            listOf(openToClose, closeToOpen).forEachIndexed { direction, candidates ->
+                            val closeToOpenRank = exactHalfSangamRank(
+                                halfClosePannaWindow, halfOpenAnkEvidence,
+                                target.closePanna, actualOpenAnk
+                            )
+                            listOf(openToCloseRank, closeToOpenRank).forEachIndexed { direction, rank ->
                                 halfEvaluated[direction]++
-                                val actual = halfTargets[direction]
-                                val rank = candidates.indexOfFirst {
-                                    it.panna == actual.first && it.ank == actual.second
-                                }.takeIf { it >= 0 }?.plus(1)
                                 halfExactRanks[direction] += rank
                                 if (rank != null && rank <= 10) halfTop10[direction]++
                                 if (rank != null && rank <= 100) halfTop100[direction]++
                             }
 
-                            val sangam = SangamOutcomeAuditor.analyze(
+                            val sangamOpenWindow = open.candidates.take(sangamPannaLimit)
+                            val sangamCloseWindow = close.candidates.take(sangamPannaLimit)
+                            val sangamRank = SangamOutcomeAuditor.exactPairRank(
                                 target.openPanna, target.closePanna,
-                                openWindow, closeWindow, pairLimit = 100
+                                sangamOpenWindow, sangamCloseWindow
                             )
                             sangamEvaluated++
-                            sangamExactRanks += sangam.exactPairRank
-                            if (sangam.exactPairRank != null && sangam.exactPairRank <= 10) sangamTop10++
-                            if (sangam.exactPairRank != null && sangam.exactPairRank <= 100) sangamTop100++
+                            sangamExactRanks += sangamRank
+                            if (sangamRank != null && sangamRank <= 10) sangamTop10++
+                            if (sangamRank != null && sangamRank <= 100) sangamTop100++
                         }
                     }
                     }
@@ -277,22 +285,48 @@ object PannaHalfSangamWalkForwardEvaluator {
             }
     }
 
-    private fun rankHalfSangam(
+    /**
+     * Exact rank for (Panna, opposite-side Ank) using the same score and tie
+     * ordering as the materialized candidate list, but without sorting up to
+     * 10,000 pair objects for every historical target.
+     */
+    internal fun exactHalfSangamRank(
         pannaCandidates: List<ReverseEngineeringCandidate>,
-        oppositeSideCandidates: List<ReverseEngineeringCandidate>
-    ): List<HalfSangamCandidate> {
+        oppositeSideCandidates: List<ReverseEngineeringCandidate>,
+        actualPanna: String,
+        actualAnk: Int
+    ): Int? {
+        val actualPannaCandidate = pannaCandidates.firstOrNull { it.panna == actualPanna } ?: return null
         val ankScores = oppositeSideCandidates.groupBy { ank(it.panna) }
             .mapValues { (_, candidates) -> candidates.sumOf { it.score } }
+        val actualAnkScore = ankScores[actualAnk] ?: return null
         val maxAnkScore = ankScores.values.maxOrNull()?.coerceAtLeast(1e-12) ?: 1.0
-        return pannaCandidates.flatMap { panna ->
-            ankScores.map { (ank, score) ->
-                HalfSangamCandidate(panna.panna, ank, panna.score * score / maxAnkScore)
-            }
-        }.sortedWith(
-            compareByDescending<HalfSangamCandidate> { it.score }
-                .thenBy { it.panna }
-                .thenBy { it.ank }
+        val actualScore = actualPannaCandidate.score * actualAnkScore / maxAnkScore
+        val sortedAnks = ankScores.entries.sortedWith(
+            compareByDescending<Map.Entry<Int, Double>> { it.value }.thenBy { it.key }
         )
+        var rank = 1L
+        pannaCandidates.forEach { panna ->
+            var low = 0
+            var high = sortedAnks.size
+            while (low < high) {
+                val middle = (low + high) ushr 1
+                val score = panna.score * sortedAnks[middle].value / maxAnkScore
+                if (score > actualScore) low = middle + 1 else high = middle
+            }
+            rank += low.toLong()
+            var index = low
+            while (index < sortedAnks.size) {
+                val ankValue = sortedAnks[index].key
+                val score = panna.score * sortedAnks[index].value / maxAnkScore
+                if (score != actualScore) break
+                if (panna.panna < actualPanna ||
+                    (panna.panna == actualPanna && ankValue < actualAnk)
+                ) rank++
+                index++
+            }
+        }
+        return rank.toInt()
     }
 
     private fun positionalMatch(candidate: String, actual: String): Boolean =
