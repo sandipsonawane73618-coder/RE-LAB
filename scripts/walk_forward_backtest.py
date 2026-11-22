@@ -291,51 +291,64 @@ def evaluate(path: Path, minimum_history: int = 30) -> dict:
     results = {}
     for market in MARKETS:
         results[market] = evaluate_market(grouped[market], market, minimum_history)
-    # Select one global candidate using only the chronological validation window.
-    # The final 15% of each session is held out until after selection.
+    # Select independently inside each market/session/side cohort. A global
+    # selector could let another market's later validation outcomes influence
+    # this market's held-out test weights.
     tuning_names = (
         "balanced_default", "exact_only", "family_only", "no_exact",
         "no_weekday", "no_transition", "exact_primary_family",
         "exact_primary_weekday", "exact_primary_transition",
         "exact_primary_combined",
     )
-    validation_totals = {
-        name: {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
-        for name in tuning_names
-    }
-    test_totals = {
-        name: {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
-        for name in tuning_names
-    }
-    test_baseline = {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
-    for market_results in results.values():
-        for item in market_results.values():
-            for name in tuning_names:
-                for source, totals in (
-                    (item["tuning_validation"][name], validation_totals[name]),
-                    (item["tuning_test"][name], test_totals[name]),
-                ):
-                    totals["tested_targets"] += source["tested_targets"]
-                    totals["top10_hits"] += source["top10_hits"]
-                    totals["reciprocal_rank_sum"] += source["reciprocal_rank_sum"]
-            base = item["tuning_test_baseline"]
-            test_baseline["tested_targets"] += base["tested_targets"]
-            test_baseline["top10_hits"] += base["top10_hits"]
-            test_baseline["reciprocal_rank_sum"] += base["reciprocal_rank_sum"]
+    minimum_validation_targets = 30
+    selection_reports = {}
+    selected_test_totals = {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
+    baseline_test_totals = {"tested_targets": 0, "top10_hits": 0, "reciprocal_rank_sum": 0.0}
 
-    def selection_key(name):
-        metric = validation_totals[name]
-        count = metric["tested_targets"]
-        return (
-            metric["top10_hits"] / count if count else -1.0,
-            metric["reciprocal_rank_sum"] / count if count else -1.0,
-            name,
-        )
+    for market, market_results in results.items():
+        for cohort_key, item in market_results.items():
+            validation_count = item["tuning_validation"]["balanced_default"]["tested_targets"]
+            if validation_count < minimum_validation_targets:
+                selected_variant = "balanced_default"
+                selection_status = "ABSTAIN_INSUFFICIENT_VALIDATION"
+            else:
+                def cohort_selection_key(name):
+                    metric = item["tuning_validation"][name]
+                    count = metric["tested_targets"]
+                    return (
+                        metric["top10_hits"] / count if count else -1.0,
+                        metric["reciprocal_rank_sum"] / count if count else -1.0,
+                        name,
+                    )
+                selected_variant = max(tuning_names, key=cohort_selection_key)
+                selection_status = "SELECTED_ON_THIS_COHORT_VALIDATION_ONLY"
 
-    selected_variant = max(tuning_names, key=selection_key)
-    selected_test = test_totals[selected_variant]
-    baseline_count = test_baseline["tested_targets"]
-    selected_count = selected_test["tested_targets"]
+            selected_test = item["tuning_test"][selected_variant]
+            baseline_test = item["tuning_test_baseline"]
+            selected_test_totals["tested_targets"] += selected_test["tested_targets"]
+            selected_test_totals["top10_hits"] += selected_test["top10_hits"]
+            selected_test_totals["reciprocal_rank_sum"] += selected_test["reciprocal_rank_sum"]
+            baseline_test_totals["tested_targets"] += baseline_test["tested_targets"]
+            baseline_test_totals["top10_hits"] += baseline_test["top10_hits"]
+            baseline_test_totals["reciprocal_rank_sum"] += baseline_test["reciprocal_rank_sum"]
+
+            selection_reports[f"{market}:{cohort_key}"] = {
+                "market": market,
+                "session_side": cohort_key,
+                "selection_status": selection_status,
+                "selected_variant": selected_variant,
+                "validation_targets": validation_count,
+                "validation_candidates": item["tuning_validation"],
+                "untouched_test": selected_test,
+                "exact_frequency_baseline_test": baseline_test,
+                "top10_delta_vs_exact_frequency": round(
+                    selected_test["top10_hits"] / selected_test["tested_targets"]
+                    - baseline_test["top10_hits"] / baseline_test["tested_targets"], 6
+                ) if selected_test["tested_targets"] and baseline_test["tested_targets"] else None,
+            }
+
+    selected_count = selected_test_totals["tested_targets"]
+    baseline_count = baseline_test_totals["tested_targets"]
     tuning_report = {
         "split": {
             "per_market_session_chronology": True,
@@ -343,27 +356,22 @@ def evaluate(path: Path, minimum_history: int = 30) -> dict:
             "validation_fraction": 0.15,
             "untouched_test_suffix_fraction": 0.15,
             "minimum_history": minimum_history,
-            "selection_rule": "highest validation Top-10 hit rate; MRR@10 tie-break; deterministic variant-name tie-break",
-            "leakage_control": "candidate selected only from validation targets; final test suffix is not used for selection",
+            "minimum_validation_targets": minimum_validation_targets,
+            "selection_rule": "select highest Top-10 hit rate on this same market/session/side validation cohort; MRR@10 tie-break; deterministic variant-name tie-break",
+            "leakage_control": "each cohort selects weights only from its own earlier validation targets; no cross-market or cross-session selection; final test suffix is untouched",
         },
-        "validation_candidates": {
-            name: {
-                **values,
-                "top10_hit_rate": round(values["top10_hits"] / values["tested_targets"], 6) if values["tested_targets"] else 0.0,
-                "mrr_top10": round(values["reciprocal_rank_sum"] / values["tested_targets"], 6) if values["tested_targets"] else 0.0,
-            }
-            for name, values in validation_totals.items()
-        },
-        "selected_variant": selected_variant,
-        "untouched_test": {
+        "selection_scope": "independent_per_market_session_side",
+        "selected_variant_by_market_session": selection_reports,
+        "aggregate_untouched_test": {
             "tested_targets": selected_count,
-            "top10_hit_rate": round(selected_test["top10_hits"] / selected_count, 6) if selected_count else 0.0,
-            "mrr_top10": round(selected_test["reciprocal_rank_sum"] / selected_count, 6) if selected_count else 0.0,
+            "top10_hit_rate": round(selected_test_totals["top10_hits"] / selected_count, 6) if selected_count else 0.0,
+            "mrr_top10": round(selected_test_totals["reciprocal_rank_sum"] / selected_count, 6) if selected_count else 0.0,
             "baseline_tested_targets": baseline_count,
-            "baseline_top10_hit_rate": round(test_baseline["top10_hits"] / baseline_count, 6) if baseline_count else 0.0,
-            "baseline_mrr_top10": round(test_baseline["reciprocal_rank_sum"] / baseline_count, 6) if baseline_count else 0.0,
+            "baseline_top10_hit_rate": round(baseline_test_totals["top10_hits"] / baseline_count, 6) if baseline_count else 0.0,
+            "baseline_mrr_top10": round(baseline_test_totals["reciprocal_rank_sum"] / baseline_count, 6) if baseline_count else 0.0,
             "top10_delta_vs_exact_frequency": round(
-                selected_test["top10_hits"] / selected_count - test_baseline["top10_hits"] / baseline_count, 6
+                selected_test_totals["top10_hits"] / selected_count
+                - baseline_test_totals["top10_hits"] / baseline_count, 6
             ) if selected_count and baseline_count else 0.0,
         },
     }
