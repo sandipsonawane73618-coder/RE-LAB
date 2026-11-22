@@ -78,10 +78,13 @@ class WalkForwardProbabilityCalibratorTest {
             LocalDate.parse("2026-02-01"), LocalDate.parse("2026-02-02"),
             binCount = 4, minimumCalibrationSamples = 20
         )
-        assertEquals(0, report.forecasts.single().calibrationSupport)
-        assertTrue(report.forecasts.single().abstained)
-        assertEquals(0, report.calibratedForecasts)
-        assertNull(report.calibratedMetrics)
+        // The 20 January rows were published before the target forecast was
+        // created and are valid calibration history. The late-published row
+        // and the other-market row must not add to that support.
+        assertEquals(20, report.forecasts.single().calibrationSupport)
+        assertFalse(report.forecasts.single().abstained)
+        assertEquals(1, report.calibratedForecasts)
+        assertNotNull(report.calibratedMetrics)
     }
 
     @Test
