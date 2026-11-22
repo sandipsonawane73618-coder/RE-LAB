@@ -45,6 +45,7 @@ import com.relab.core.ReverseEngineeringModel
 import com.relab.core.ReverseEngineeringSide
 import com.relab.core.EndToEndResearchAuditWorkflow
 import com.relab.core.ResearchToBacktestCsvExporter
+import com.relab.core.IndependentResearchVerifier
 
 class AiResearchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -234,11 +235,18 @@ private fun AiResearchScreen(context: Context, initialContext: String, targetDat
                         minimumModelHistory = 30, candidateLimit = 10,
                         sourceQuality = chartBuild, sourceObservationCount = observations.size
                     )
+                    val independent = IndependentResearchVerifier.verify(
+                        records = records,
+                        proposals = grounding.accepted,
+                        targetDateExclusive = targetDate,
+                        minimumEvaluations = 20,
+                        trainingFraction = 0.70
+                    )
                     val notes = parsed.issues + grounding.rejected.map {
                         "Proposal ${it.proposalId} rejected by source-grounding gate: ${it.reason}"
                     }
                     Triple(audit, Triple(
-                        audit.compactSummary(),
+                        audit.compactSummary() + "\\n\\n" + independent.compactSummary(),
                         ResearchToBacktestCsvExporter.export(audit.research),
                         EndToEndResearchAuditWorkflow.exportWalkForwardCsv(audit)
                     ), notes to grounding.accepted.size)
