@@ -39,7 +39,7 @@ jobs:
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
   capture-public-charts-once:
-    if: (github.event_name == 'push' && github.event.head_commit.message == 'Run one-time nine-market public chart capture') || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.event.head_commit.message == 'Run one-time nine-market public chart capture' || github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')) || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -243,11 +243,12 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Keep the full device suite intact; run it manually during final APK verification.
+  # Package the exact audited two-publisher history and verify bootstrap on an API 35 emulator.
   android-instrumentation:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')
+    needs: [historical-learning-backtest]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification') || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       ANDROID_I_WANT_MY_TCG: "yes"
     steps:
@@ -259,7 +260,55 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run Android instrumentation regression suite on API 35 emulator
+      - name: Download the exact audited two-publisher capture
+        uses: actions/download-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: preload-input
+      - name: Assemble debug APK with required historical preload
+        run: |
+          gradle :app:assembleDebug \
+            -PrelabPreloadedCsv=preload-input/derived/canonical_observations.csv \
+            -PrequirePreloadedLearning=true
+      - name: Verify packaged CSV checksum and coverage
+        run: |
+          python - <<'PY'
+          import csv
+          import hashlib
+          import io
+          import zipfile
+          from collections import Counter
+          from pathlib import Path
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          with zipfile.ZipFile(apk) as package:
+              csv_bytes = package.read("assets/preloaded/source-observations.csv")
+              manifest_bytes = package.read("assets/preloaded/manifest.properties")
+          manifest = dict(
+              line.split("=", 1) for line in manifest_bytes.decode("utf-8").splitlines()
+              if "=" in line
+          )
+          digest = hashlib.sha256(csv_bytes).hexdigest()
+          assert manifest.get("format_version") == "1", "Unexpected preload format version"
+          assert manifest.get("sha256") == digest, "Packaged preload checksum mismatch"
+          rows = list(csv.DictReader(io.StringIO(csv_bytes.decode("utf-8"))))
+          assert len(rows) >= 50_000, f"Expected full captured history, got {len(rows)} rows"
+          markets = {row["market"] for row in rows}
+          publishers = {row["source_id"] for row in rows}
+          assert len(markets) == 9, f"Expected all nine markets, got {sorted(markets)}"
+          assert publishers == {"sattamatkajodi", "sattamatkame"}, f"Unexpected publisher set: {publishers}"
+          coverage = Counter(
+              (row["source_id"], row["market"], row["session_id"])
+              for row in rows if row["status"] == "PUBLISHED"
+          )
+          thin = {key: count for key, count in coverage.items() if count < 30}
+          assert not thin, f"Published source/market/session coverage below 30: {thin}"
+          print(f"PACKAGED_PRELOAD_OK rows={len(rows)} markets={len(markets)} publishers={sorted(publishers)} sha256={digest}")
+          PY
+      - name: Verify APK signature and record checksum
+        run: |
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - name: Run SQLite and packaged-preload instrumentation suite on API 35
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -267,7 +316,10 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            gradle :app:connectedDebugAndroidTest \
+              -PrelabPreloadedCsv=preload-input/derived/canonical_observations.csv \
+              -PrequirePreloadedLearning=true --stacktrace
       - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -277,6 +329,16 @@ jobs:
             app/build/reports/androidTests/connected/**
             app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn
+          retention-days: 90
+      - name: Upload preloaded debug APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-preloaded-debug-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
   android-debug-apk:
     runs-on: ubuntu-latest
     steps:
