@@ -40,6 +40,49 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
     }
 
     @Test
+    fun fastHalfSangamExactRankMatchesMaterializedOrderingIncludingTies() {
+        fun candidate(panna: String, score: Double) = ReverseEngineeringCandidate(
+            panna, panna.map { ChartMath.family(it.digitToInt()).toString() }.joinToString(""),
+            ChartMath.pannaType(panna), panna.sumOf { it.digitToInt() } % 10, score,
+            0.01, 0.02, 0.03, 0.04, 0.05, 0.06,
+            null, null, null, null
+        )
+        fun ank(panna: String) = panna.sumOf { it.digitToInt() } % 10
+        val pannaCandidates = listOf(
+            candidate("111", 90.0), candidate("123", 80.0),
+            candidate("222", 80.0), candidate("456", 50.0)
+        )
+        val opposite = listOf(
+            candidate("333", 70.0), candidate("456", 70.0),
+            candidate("555", 40.0), candidate("789", 20.0)
+        )
+        val ankScores = opposite.groupBy { ank(it.panna) }
+            .mapValues { (_, values) -> values.sumOf { it.score } }
+        val maximum = ankScores.values.maxOrNull()!!
+        val materialized = pannaCandidates.flatMap { panna ->
+            ankScores.map { (ankValue, score) ->
+                Triple(panna.panna, ankValue, panna.score * score / maximum)
+            }
+        }.sortedWith(
+            compareByDescending<Triple<String, Int, Double>> { it.third }
+                .thenBy { it.first }.thenBy { it.second }
+        )
+        val expected = materialized.indexOfFirst { it.first == "123" && it.second == 6 }
+            .takeIf { it >= 0 }?.plus(1)
+        assertEquals(
+            expected,
+            PannaHalfSangamWalkForwardEvaluator.exactHalfSangamRank(
+                pannaCandidates, opposite, "123", 6
+            )
+        )
+        assertNull(
+            PannaHalfSangamWalkForwardEvaluator.exactHalfSangamRank(
+                pannaCandidates, opposite, "999", 6
+            )
+        )
+    }
+
+    @Test
     fun recentTargetWindowUsesAllEarlierRowsAsTrainingHistory() {
         val records = (1..40).map(::row)
         val report = PannaHalfSangamWalkForwardEvaluator.evaluate(
