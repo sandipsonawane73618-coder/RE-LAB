@@ -26,11 +26,15 @@ object MultiModelWalkForwardEvaluator {
     fun evaluate(
         records: List<ChartRecord>, market: Market, sessionId: String, channel: PredictionChannel,
         targetDateExclusive: LocalDate, minimumHistory: Int = 30, limit: Int = 10,
-        engine: MultiModelPredictionEngine = MultiModelPredictionEngine(minimumHistory = minimumHistory)
+        engine: MultiModelPredictionEngine = MultiModelPredictionEngine(minimumHistory = minimumHistory),
+        targetStartInclusive: LocalDate? = null
     ): MultiModelWalkForwardReport {
         require(sessionId.isNotBlank()) { "Session ID is required" }
         require(minimumHistory >= 1) { "Minimum history must be positive" }
         require(limit in 1..100) { "Candidate limit must be 1..100" }
+        require(targetStartInclusive == null || targetStartInclusive.isBefore(targetDateExclusive)) {
+            "Evaluation start must be before the exclusive cutoff"
+        }
         val eligible = records.filter {
             it.market == market && it.sessionId == sessionId && it.date.isBefore(targetDateExclusive) &&
                 ChartMath.validate(it) is ValidationResult.Valid
@@ -41,7 +45,10 @@ object MultiModelWalkForwardEvaluator {
         val modelCounts = mutableMapOf<String, IntArray>() // requested,evaluated,top1,top3,top5
         val consensusCounts = IntArray(5)
         eligible.forEachIndexed { index, target ->
-            if (index >= minimumHistory) {
+            // Earlier rows remain in the expanding training history; only the
+            // requested out-of-sample window is scored and reported.
+            if (index >= minimumHistory &&
+                (targetStartInclusive == null || !target.date.isBefore(targetStartInclusive))) {
                 val prediction = engine.predictFromEarlierHistory(
                     history = eligible.subList(0, index),
                     market = market,
