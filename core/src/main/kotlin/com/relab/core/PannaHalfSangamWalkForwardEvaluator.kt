@@ -301,11 +301,11 @@ object PannaHalfSangamWalkForwardEvaluator {
 
                             val openExactFrequency = exactFrequencyCandidates(open.candidates)
                             val closeExactFrequency = exactFrequencyCandidates(close.candidates)
-                            val openHybridTop100 = top10PlusExactFrequencyTop90(open.candidates, openExactFrequency)
-                            val closeHybridTop100 = top10PlusExactFrequencyTop90(close.candidates, closeExactFrequency)
-                            val openHybridRank = openHybridTop100.indexOfFirst { it.panna == target.openPanna }
+                            val openHybridCandidates = top10PlusExactFrequencyTop90(open.candidates, openExactFrequency)
+                            val closeHybridCandidates = top10PlusExactFrequencyTop90(close.candidates, closeExactFrequency)
+                            val openHybridRank = openHybridCandidates.indexOfFirst { it.panna == target.openPanna }
                                 .takeIf { it >= 0 }?.plus(1)
-                            val closeHybridRank = closeHybridTop100.indexOfFirst { it.panna == target.closePanna }
+                            val closeHybridRank = closeHybridCandidates.indexOfFirst { it.panna == target.closePanna }
                                 .takeIf { it >= 0 }?.plus(1)
                             openHybridExactRanks += openHybridRank
                             closeHybridExactRanks += closeHybridRank
