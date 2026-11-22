@@ -30,7 +30,9 @@ class MarketSessionIsolationTest {
         row(market, session, 0, "111"),
         row(market, session, 1, "222"),
         row(market, session, 2, "111"),
-        row(market, session, 3, "222")
+        row(market, session, 3, "222"),
+        row(market, session, 4, "111"),
+        row(market, session, 5, "222")
     )
 
     @Test
@@ -81,7 +83,7 @@ class MarketSessionIsolationTest {
             setOf("KALYAN/day", "KALYAN/night", "SRIDEVI/day"),
             walkForward.map { "${it.market}/${it.sessionId}" }.toSet()
         )
-        assertTrue(walkForward.all { it.requestedTargets == 4 })
+        assertTrue(walkForward.all { it.requestedTargets == 6 })
 
         val directional = ChartPatternGridScanner.scan(
             rows,
@@ -93,6 +95,6 @@ class MarketSessionIsolationTest {
             setOf("KALYAN/day", "KALYAN/night", "SRIDEVI/day"),
             directional.map { "${it.market}/${it.sessionId}" }.toSet()
         )
-        assertTrue(directional.all { it.acceptedRecords == 4 })
+        assertTrue(directional.all { it.acceptedRecords == 6 })
     }
 }
