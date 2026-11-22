@@ -71,6 +71,11 @@ object PannaHalfSangamBacktestCli {
                         report.openAnkClosePanna.abstainedTargets, report.openAnkClosePanna.exactTop10Hits,
                         report.openAnkClosePanna.exactTop10Rate(), report.openAnkClosePanna.exactTop100Hits,
                         report.openAnkClosePanna.exactTop100Rate(), report.openAnkClosePanna.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_CONDITIONED_ON_OPEN_ANK",
+                        report.openAnkClosePannaConditioned.requestedTargets, report.openAnkClosePannaConditioned.evaluatedTargets,
+                        report.openAnkClosePannaConditioned.abstainedTargets, report.openAnkClosePannaConditioned.exactTop10Hits,
+                        report.openAnkClosePannaConditioned.exactTop10Rate(), report.openAnkClosePannaConditioned.exactTop100Hits,
+                        report.openAnkClosePannaConditioned.exactTop100Rate(), report.openAnkClosePannaConditioned.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "SANGAM_PANNA1000",
                         report.sangam.requestedTargets, report.sangam.evaluatedTargets,
                         report.sangam.abstainedTargets, report.sangam.exactTop10Hits,
@@ -79,7 +84,7 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; conditioned_open_to_close=enabled; sangam_panna_window=1000; output=${output.absolutePath}")
+        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; conditioned_open_to_close=enabled; conditioned_open_ank_to_close_panna=enabled; sangam_panna_window=1000; output=${output.absolutePath}")
     }
 
     private fun appendMetric(
