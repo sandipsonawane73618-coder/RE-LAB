@@ -91,6 +91,16 @@ object PannaHalfSangamBacktestCli {
                         report.sangamExactFrequencyBaseline.abstainedTargets, report.sangamExactFrequencyBaseline.exactTop10Hits,
                         report.sangamExactFrequencyBaseline.exactTop10Rate(), report.sangamExactFrequencyBaseline.exactTop100Hits,
                         report.sangamExactFrequencyBaseline.exactTop100Rate(), report.sangamExactFrequencyBaseline.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_CLOSE_PANNA_CONDITIONED_ON_OPEN_PANNA",
+                        report.sangamClosePannaConditionedOnOpenPanna.requestedTargets, report.sangamClosePannaConditionedOnOpenPanna.evaluatedTargets,
+                        report.sangamClosePannaConditionedOnOpenPanna.abstainedTargets, report.sangamClosePannaConditionedOnOpenPanna.exactTop10Hits,
+                        report.sangamClosePannaConditionedOnOpenPanna.exactTop10Rate(), report.sangamClosePannaConditionedOnOpenPanna.exactTop100Hits,
+                        report.sangamClosePannaConditionedOnOpenPanna.exactTop100Rate(), report.sangamClosePannaConditionedOnOpenPanna.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_CLOSE_PANNA_EXACT_FREQUENCY_BASELINE",
+                        report.sangamClosePannaExactFrequencyBaseline.requestedTargets, report.sangamClosePannaExactFrequencyBaseline.evaluatedTargets,
+                        report.sangamClosePannaExactFrequencyBaseline.abstainedTargets, report.sangamClosePannaExactFrequencyBaseline.exactTop10Hits,
+                        report.sangamClosePannaExactFrequencyBaseline.exactTop10Rate(), report.sangamClosePannaExactFrequencyBaseline.exactTop100Hits,
+                        report.sangamClosePannaExactFrequencyBaseline.exactTop100Rate(), report.sangamClosePannaExactFrequencyBaseline.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "SANGAM_PANNA1000",
                         report.sangam.requestedTargets, report.sangam.evaluatedTargets,
                         report.sangam.abstainedTargets, report.sangam.exactTop10Hits,
