@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Per-market isolated validation and OOS backtest # Refresh after historical date-axis parser update
+name: Capture Public Panel Charts # Reuse frozen nine-market capture; dispatch for fresh capture
 
 on:
   push:
@@ -20,13 +20,24 @@ jobs:
           python-version: "3.12"
       - name: Install vectorized backtest dependency
         run: python -m pip install numpy==2.2.6
+      # Reuse the already captured, immutable nine-market source artifact on push.
+      # Manual workflow_dispatch performs a fresh public-source capture.
+      - name: Restore previously captured nine-market source data
+        if: github.event_name == 'push'
+        uses: actions/download-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          run-id: 45013378152
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: data
       - name: Capture all nine canonical panel pages
         id: capture
+        if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
       - name: Extract dated observations and source-quality summary
         id: extract
-        if: always()
+        if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
         run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
       - name: Audit source rows and create unique published dataset
