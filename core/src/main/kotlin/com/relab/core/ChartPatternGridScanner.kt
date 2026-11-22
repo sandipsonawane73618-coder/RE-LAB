@@ -36,11 +36,12 @@ data class DirectionalPatternReport(
 )
 
 /**
- * Scans the three digit positions of each daily Panna as a two-dimensional chart:
- * rows are calendar dates and columns are Panna digit positions (hundreds/tens/units).
+ * Scans Panna/Jodi digits across eight grid directions. Rows are the supplied
+ * chronological observations and columns are digit positions. Invalid rows
+ * remain as empty barriers, so a pattern cannot silently jump over malformed
+ * source data. Calendar gaps between supplied observations are retained as
+ * adjacent observed rows; no synthetic dates or values are introduced.
  *
- * A stride greater than one is retained as explicit evidence (step=2 means one
- * intervening row/column is skipped); missing cells are never silently filled.
  * This is descriptive pattern discovery, not a prediction or probability claim.
  */
 object ChartPatternGridScanner {
@@ -59,24 +60,21 @@ object ChartPatternGridScanner {
             .entries
             .sortedWith(compareBy({ it.key.first.name }, { it.key.second }))
             .map { (identity, rows) ->
-                val valid = rows.mapNotNull { record ->
-                    val features = ChartMath.validate(record) as? ValidationResult.Valid ?: return@mapNotNull null
+                val orderedRows = rows.sortedBy { it.date }
+                require(orderedRows.map { it.date }.distinct().size == orderedRows.size) {
+                    "Duplicate dates for ${identity.first}/${identity.second}: reconcile source observations before scanning"
+                }
+
+                val orderedDates = orderedRows.map { it.date }
+                val dateIndexes = orderedDates.withIndex().associate { it.value to it.index }
+                val valid = orderedRows.filter { ChartMath.validate(it) is ValidationResult.Valid }
+                val cells = mutableMapOf<PatternGridCoordinate, Cell>()
+                valid.forEach { record ->
                     val chartValue = when (side) {
                         ChartPatternSide.OPEN_PANNA -> record.openPanna
                         ChartPatternSide.CLOSE_PANNA -> record.closePanna
                         ChartPatternSide.JODI -> record.jodi
                     }
-                    record to chartValue
-                }.sortedBy { it.first.date }
-
-                require(valid.map { it.first.date }.distinct().size == valid.size) {
-                    "Duplicate dates for ${identity.first}/${identity.second}: reconcile source observations before scanning"
-                }
-
-                val orderedDates = valid.map { it.first.date }
-                val dateIndexes = orderedDates.withIndex().associate { it.value to it.index }
-                val cells = mutableMapOf<PatternGridCoordinate, Cell>()
-                valid.forEach { (record, chartValue) ->
                     chartValue.forEachIndexed { position, digit ->
                         cells[PatternGridCoordinate(record.date, position)] = Cell(digit, record.sourceId)
                     }
@@ -89,10 +87,9 @@ object ChartPatternGridScanner {
                 }
 
                 val occurrences = mutableListOf<DirectionalPatternOccurrence>()
-                val directions = PatternDirection.entries
                 for ((coordinate, _) in cells) {
                     val rowIndex = dateIndexes.getValue(coordinate.date)
-                    for (direction in directions) {
+                    for (direction in PatternDirection.entries) {
                         for (step in 1..maximumStep) {
                             val predecessor = coordinateAt(
                                 rowIndex - direction.rowDelta * step,
@@ -133,7 +130,7 @@ object ChartPatternGridScanner {
                     sessionId = identity.second,
                     side = side,
                     acceptedRecords = valid.size,
-                    rejectedRecords = rows.size - valid.size,
+                    rejectedRecords = orderedRows.size - valid.size,
                     occurrences = occurrences.distinct().sortedWith(
                         compareBy<DirectionalPatternOccurrence> { it.direction.name }
                             .thenBy { it.start.date }

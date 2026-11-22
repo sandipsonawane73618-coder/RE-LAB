@@ -28,6 +28,11 @@ class AiResearchContextBuilderTest {
         val context = AiResearchContextBuilder.build(observations, records, LocalDate.of(2026, 2, 1))
         ReverseEngineeringModel.enabledMarkets.forEach { assertTrue("Missing ${it.name}", context.contains("=== MARKET: ${it.name} ===")) }
         assertTrue(context.contains("CHART RECORDS"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — EXACT MODE"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — FAMILY MOVEMENT MODE"))
+        assertTrue(context.contains("FAMILY MOVEMENT HYPOTHESIS"))
+        assertTrue(context.contains("Jodi 06 -> 06/51/60/15"))
+        assertTrue(context.contains("Open panna 123 -> 123/678/321/876"))
         assertTrue(context.contains("RAW SOURCE OBSERVATIONS"))
         assertTrue(context.contains("123-06-456"))
         assertTrue(context.contains("not independent confirmations"))
@@ -88,6 +93,37 @@ class AiResearchContextBuilderTest {
         assertTrue(context.contains("123 | 012 | 91.0000"))
         assertTrue(context.contains("NOT calibrated probabilities"))
         assertFalse(context.contains("target=2026-02-02"))
+    }
+
+    @Test fun patternEvidenceInAiPackUsesOnlyMultiSourceConsensusRows() {
+        val observations = (0..5).flatMap { day ->
+            listOf(
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-a", rawText = "123-65-456", normalizedResult = "123-65-456"),
+                observation(Market.SRIDEVI, day).copy(sourceId = "publisher-b", rawText = "123-65-456", normalizedResult = "123-65-456")
+            )
+        }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it).copy(jodi = "65") }
+        val context = AiResearchContextBuilder.build(
+            observations, exploratory, LocalDate.of(2026, 2, 1)
+        )
+        assertTrue(context.contains("eligible multi-source consensus records: 6"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — EXACT MODE (MULTI-SOURCE CONSENSUS"))
+        assertTrue(context.contains("PATTERN EVIDENCE DB — FAMILY MOVEMENT MODE (MULTI-SOURCE CONSENSUS"))
+        assertFalse(context.contains("Exploratory rows only; not a prediction"))
+    }
+
+    @Test fun singleSourceExploratoryRowsCannotPopulateAiPatternEvidenceDb() {
+        val observations = (0..5).map {
+            observation(Market.SRIDEVI, it).copy(rawText = "123-65-456", normalizedResult = "123-65-456")
+        }
+        val exploratory = (0..5).map { record(Market.SRIDEVI, it).copy(jodi = "65") }
+        val context = AiResearchContextBuilder.build(
+            observations, exploratory, LocalDate.of(2026, 2, 1)
+        )
+        assertTrue(context.contains("eligible multi-source consensus records: 0"))
+        assertTrue(context.contains("No eligible multi-source consensus exact-pattern evidence"))
+        assertTrue(context.contains("No eligible multi-source consensus family-movement evidence"))
+        assertTrue(context.contains("CHART RECORDS"))
     }
 
     @Test fun enforcesCharacterLimit() {

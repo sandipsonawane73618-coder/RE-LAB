@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install vectorized backtest dependency
+        run: python -m pip install numpy==2.2.6
       - name: Run source HTML extractor tests
         run: python -m unittest discover -s scripts -p 'test_*.py' -v
       - uses: actions/setup-java@v4
@@ -36,6 +38,104 @@ jobs:
             core/build/test-results/test/*.xml
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
+  capture-public-charts-once:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Run one-time nine-market public chart capture'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Capture all nine canonical panel pages
+        id: capture
+        continue-on-error: true
+        run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
+      - name: Extract dated observations and source-quality summary
+        id: extract
+        if: always()
+        continue-on-error: true
+        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+      - name: Upload immutable HTML captures and extracted observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: |
+            data/captures/**
+            data/derived/canonical_observations.csv
+            data/derived/canonical_extraction_summary.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Require all nine markets to have verified published rows
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          path = Path("data/derived/canonical_extraction_summary.json")
+          if not path.is_file():
+              print("FAIL: extraction summary was not created")
+              sys.exit(1)
+          summary = json.loads(path.read_text(encoding="utf-8"))
+          markets = summary.get("markets", {})
+          expected = {
+              "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
+              "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
+              "RAJDHANI_DAY", "RAJDHANI_NIGHT"
+          }
+          missing = sorted(expected - set(markets))
+          empty = sorted(
+              name for name in expected
+              if markets.get(name, {}).get("capture") != "OK"
+              or markets.get(name, {}).get("published", 0) < 1
+          )
+          print(json.dumps({
+              "markets_expected": 9,
+              "markets_with_rows": summary.get("markets_with_rows", 0),
+              "published_observations": summary.get("total_published", 0),
+              "missing_markets": missing,
+              "markets_without_published_rows": empty,
+              "failures": summary.get("failures", []),
+          }, indent=2))
+          if missing or empty or summary.get("failures") or summary.get("markets_with_rows") != 9:
+              sys.exit(1)
+          PY
+  # Keep the full device suite intact; run it manually during final APK verification.
+  android-instrumentation:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_I_WANT_MY_TCG: "yes"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Run Android instrumentation regression suite on API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle :app:connectedDebugAndroidTest --stacktrace
+      - name: Upload instrumentation test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-android-instrumentation-results
+          path: |
+            app/build/reports/androidTests/connected/**
+            app/build/outputs/androidTest-results/connected/**
+          if-no-files-found: warn
   android-debug-apk:
     runs-on: ubuntu-latest
     steps:
@@ -49,8 +149,14 @@ jobs:
           gradle-version: "8.9"
       - name: Assemble debug APK
         run: gradle :app:assembleDebug
-      - name: Upload APK
+      - name: Verify APK signature and record checksum
+        run: |
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
           name: relab-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256

@@ -12,7 +12,10 @@ data class PannaCandidate(
     val exactHistoricalCount: Int,
     val familyHistoricalCount: Int,
     val weekdayFamilyCount: Int,
-    val previousFamilyTransitionCount: Int
+    val previousFamilyTransitionCount: Int,
+    /** Count of earlier observations in this digit-family + reversal equivalence class. */
+    val familyMovementHistoricalCount: Int = 0,
+    val familyMovementClass: String = ""
 )
 
 data class JodiCandidate(
@@ -102,6 +105,8 @@ object CandidateRankingEngine {
         val previousState = families.last()
 
         val exactCounts = history.groupingBy { it }.eachCount()
+        val familyMovementClasses = history.map(FamilyMovementMath::key)
+        val familyMovementCounts = familyMovementClasses.groupingBy { it }.eachCount()
         val familyCounts = families.groupingBy { it }.eachCount()
         val weekdayCounts = weekdayFamilies.groupingBy { it }.eachCount()
         val transitionCounts = families.zipWithNext()
@@ -118,6 +123,8 @@ object CandidateRankingEngine {
             val familyCount = familyCounts[family] ?: 0
             val weekday = weekdayCounts[family] ?: 0
             val transition = transitionCounts["$previousState>$family"] ?: 0
+            val movementClass = FamilyMovementMath.key(panna)
+            val movementCount = familyMovementCounts[movementClass] ?: 0
             // The latest chronological validation selected exact_only. Keep family,
             // weekday and transition counts visible as diagnostics, but do not let
             // unproven secondary signals override exact historical frequency.
@@ -125,7 +132,7 @@ object CandidateRankingEngine {
             val score = exact.toDouble() / maxExact * 100.0
             PannaCandidate(
                 panna, family, ChartMath.pannaType(panna), score,
-                exact, familyCount, weekday, transition
+                exact, familyCount, weekday, transition, movementCount, movementClass
             )
         }.sortedWith(
             compareByDescending<PannaCandidate> { it.exactHistoricalCount }
@@ -135,7 +142,7 @@ object CandidateRankingEngine {
         return CandidateRanking(
             market, sessionId, side, targetDate, reconciled.size, minimumHistory,
             false, ranked,
-            "Ranked by exact historical Panna frequency with deterministic lexical tie-break, matching the validation-selected exact_only baseline. Family, weekday and transition counts are descriptive diagnostics only. Score is a relative evidence index, not probability or a guarantee."
+            "Ranked by exact historical Panna frequency with deterministic lexical tie-break, matching the validation-selected exact_only baseline. Digit-family/reversal movement support, family, weekday and transition counts are descriptive diagnostics only. Score is a relative evidence index, not probability or a guarantee."
         )
     }
 

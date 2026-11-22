@@ -5,11 +5,14 @@ import com.google.gson.JsonParser
 import com.relab.core.AiEvidenceCitationAuditor
 import com.relab.core.AiCitationAudit
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
 data class AiResearchResult(val geminiAnalysis: String, val groqReview: String, val finalSynthesis: String)
 data class AiResearchCheckpoint(val geminiAnalysis: String = "", val groqReview: String = "", val finalSynthesis: String = "")
+
+internal class AiProviderHttpException(val statusCode: Int, message: String) : IOException(message)
 
 /** Gemini proposes; Groq independently challenges; Gemini reconciles. Each finished stage can be persisted. */
 class AiResearchEngine internal constructor(
@@ -37,13 +40,17 @@ class AiResearchEngine internal constructor(
         val firstPrompt = """
             Act as RE-LAB's quantitative logic researcher. Analyse only supplied evidence.
             Separate observed facts, hypotheses, alternatives, data-quality risks and tests needed.
+            Discover candidate sequences only when the complete sequence is visibly present in supplied rows for the exact market, session and channel.
+            Do not pool markets or sessions. Do not invent sequences, fill missing values, bridge invalid rows, or use target/future dates.
             Recommend chronological walk-forward validation and baselines. No certainty or guaranteed predictions.
             $evidenceRules
             QUESTION: $q
             EVIDENCE: $evidence
             PRIOR AI NOTES (UNVERIFIED; never treat as facts): $memory
         """.trimIndent()
-        val first = checkpoint.geminiAnalysis.ifBlank { callGemini(geminiKey, firstPrompt).also { onCheckpoint("GEMINI_ANALYSIS", it) } }
+        val first = checkpoint.geminiAnalysis.ifBlank {
+            callFirstStageWithFallback(geminiKey, firstPrompt).also { onCheckpoint("GEMINI_ANALYSIS", it) }
+        }
         val critiquePrompt = """
             Act as an independent reverse-engineering and statistical reviewer. Analyse original evidence independently,
             then challenge Gemini. Find unsupported claims, confounders, leakage, duplicated or derived signals,
@@ -63,14 +70,26 @@ class AiResearchEngine internal constructor(
             Include a claim-audit table: claim | Gemini view | Groq view | evidence citation | status.
             Preserve unresolved disagreements and uncertainty.
             Finish with the next 3 reproducible tests and the minimum data each test requires.
+            Also finish with one machine-readable proposal block using this exact wrapper:
+            RELAB_PROPOSALS_JSON
+            [
+              {"id":"p1","market":"SRIDEVI","session":"main","channel":"OPEN_PANNA","pattern":"123>456","outcomeMode":"EXACT","rationale":"short evidence-linked reason"}
+            ]
+            END_RELAB_PROPOSALS_JSON
+            The JSON must be an array, including [] when no reproducible pattern can be specified.
+            market must be one of the nine exact market enum names shown in evidence.
+            session must exactly match a supplied session. channel must be OPEN_PANNA, CLOSE_PANNA or JODI.
+            pattern is 1–20 prior observed values joined by >; Panna values are 3 digits and Jodi values are 2 digits.
+            outcomeMode must be EXACT or FAMILY_MOVEMENT. Only propose patterns supported by supplied rows;
+            never invent missing values, markets, sessions, sample sizes or results. These are UNVERIFIED hypotheses,
+            not backtest results. Never put verification status or a claimed hit rate in this JSON.
             $evidenceRules
             QUESTION: $q
             EVIDENCE: $evidence
             GEMINI:
         """.trimIndent() + first.take(12_000) + "\nGROQ REVIEW:\n" + critique.take(12_000)
-        val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
+        val synthesis = checkpoint.finalSynthesis.ifBlank { callGemini(geminiKey, synthesisPrompt, PRIMARY_GEMINI_MODEL).also { onCheckpoint("FINAL_SYNTHESIS", it) } }
 
-        // Audit every generated stage so the initial Gemini draft cannot bypass traceability checks.
         val firstAudit = AiEvidenceCitationAuditor.audit(evidence, first)
         val groqAudit = AiEvidenceCitationAuditor.audit(evidence, critique)
         val finalAudit = AiEvidenceCitationAuditor.audit(evidence, synthesis)
@@ -79,6 +98,29 @@ class AiResearchEngine internal constructor(
             critique + "\n\n" + formatCitationAudit("GROQ INDEPENDENT REVIEW", groqAudit),
             synthesis + "\n\n" + formatCitationAudit("FINAL GEMINI SYNTHESIS", finalAudit)
         )
+    }
+
+    private fun callFirstStageWithFallback(key: String, prompt: String): String {
+        try {
+            return callGemini(key, prompt, PRIMARY_GEMINI_MODEL)
+        } catch (primaryError: Exception) {
+            if (!isRetryableGeminiFailure(primaryError)) throw primaryError
+            try {
+                return callGemini(key, prompt, FALLBACK_GEMINI_MODEL)
+            } catch (fallbackError: Exception) {
+                throw IllegalStateException(
+                    "Gemini primary $PRIMARY_GEMINI_MODEL failed (${primaryError.message}); " +
+                        "fallback $FALLBACK_GEMINI_MODEL failed (${fallbackError.message})",
+                    fallbackError
+                )
+            }
+        }
+    }
+
+    private fun isRetryableGeminiFailure(error: Throwable): Boolean = when (error) {
+        is AiProviderHttpException -> error.statusCode in RETRYABLE_GEMINI_STATUS_CODES
+        is IOException -> true
+        else -> false
     }
 
     private fun formatCitationAudit(stage: String, audit: AiCitationAudit): String = buildString {
@@ -95,15 +137,15 @@ class AiResearchEngine internal constructor(
         if (audit.citedReferences == 0) append("\nWARNING: No machine-checkable chart/scanner citations were found.")
     }
 
-    private fun callGemini(key: String, prompt: String): String {
+    private fun callGemini(key: String, prompt: String, model: String): String {
         val part = JsonObject().apply { addProperty("text", prompt) }
         val parts = JsonArray().apply { add(part) }
         val content = JsonObject().apply { addProperty("role", "user"); add("parts", parts) }
         val contents = JsonArray().apply { add(content) }
-        val generationConfig = JsonObject().apply { addProperty("temperature", 0.2); addProperty("maxOutputTokens", 1400) }
+        val generationConfig = JsonObject().apply { addProperty("maxOutputTokens", 1400) }
         val body = JsonObject().apply { add("contents", contents); add("generationConfig", generationConfig) }
         val json = JsonParser.parseString(postRequest(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+            "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent",
             mapOf("x-goog-api-key" to key), body.toString()
         )).asJsonObject
         val partsResponse = json.getAsJsonArray("candidates")?.get(0)?.asJsonObject
@@ -125,13 +167,17 @@ class AiResearchEngine internal constructor(
             mapOf("Authorization" to "Bearer " + key), body.toString()
         )).asJsonObject
         return json.getAsJsonArray("choices")?.get(0)?.asJsonObject
-            ?.getAsJsonObject("message")?.get("content")?.takeUnless { it.isJsonNull }?.asString
+            ?.getAsJsonObject("message")?.get("content")?.takeIf { !it.isJsonNull }?.asString
             ?.takeIf { it.isNotBlank() } ?: error("Groq returned an empty response")
     }
 
-    companion object { const val GROQ_MODEL = "openai/gpt-oss-120b" }
+    companion object {
+        const val GROQ_MODEL = "openai/gpt-oss-120b"
+        const val PRIMARY_GEMINI_MODEL = "gemini-3.8-flash"
+        const val FALLBACK_GEMINI_MODEL = "gemini-3.5-flash-lite"
+        private val RETRYABLE_GEMINI_STATUS_CODES = setOf(408, 429, 500, 502, 503, 504)
+    }
 }
-
 
 private fun postHttp(endpoint: String, headers: Map<String, String>, body: String): String {
     val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
@@ -147,7 +193,7 @@ private fun postHttp(endpoint: String, headers: Map<String, String>, body: Strin
         if (status !in 200..299) {
             val detail = runCatching { JSONObject(response).optJSONObject("error")?.optString("message") }.getOrNull()
                 ?.takeIf { it.isNotBlank() } ?: response.take(500)
-            error("AI provider HTTP " + status + ": " + detail)
+            throw AiProviderHttpException(status, "AI provider HTTP " + status + ": " + detail)
         }
         return response
     } finally { conn.disconnect() }

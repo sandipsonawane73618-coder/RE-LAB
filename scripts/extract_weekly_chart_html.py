@@ -165,8 +165,12 @@ def extract_rows(
         # and retain any disagreement as a source-quality warning.
         cell_total = len(cells) - 1
         range_days = (end - start).days + 1
-        if start.weekday() != 0 or not 1 <= range_days <= 7:
-            issues.append(f"row {row_number}: invalid Monday-start weekly range for {market}: {cells[0]}")
+        # The publisher's historical week boundaries are not consistent:
+        # some archives start on Sunday or another weekday. The explicit range
+        # is the date axis; do not reject a valid 1–7 day range merely because
+        # its first date is not Monday.
+        if not 1 <= range_days <= 7:
+            issues.append(f"row {row_number}: invalid 1–7 day chart range for {market}: {cells[0]}")
             continue
         if cell_total % 3 != 0 or not 1 <= cell_total // 3 <= 7:
             issues.append(

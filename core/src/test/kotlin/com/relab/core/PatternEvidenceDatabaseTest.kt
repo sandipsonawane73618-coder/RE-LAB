@@ -73,6 +73,7 @@ class PatternEvidenceDatabaseTest {
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.CLOSE_PANNA })
         assertTrue(evidence.any { it.channel == PatternEvidenceChannel.JODI })
     }
+
     @Test fun recordsMatchedGlobalBaselineAndRecencyMetrics() {
         val rows = listOf(
             row(0, "111"), row(1, "222"), row(2, "333"),
@@ -107,4 +108,72 @@ class PatternEvidenceDatabaseTest {
         assertTrue(ranked.all { it.rankScore.isFinite() })
     }
 
+    @Test fun familyMovementModeGroupsDigitSwapAndReversalWithoutChangingExactMode() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333"),
+            row(3, "666"), row(4, "777"), row(5, "888")
+        )
+        val exact = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        val movement = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2,
+            outcomeMode = PatternOutcomeMode.FAMILY_MOVEMENT
+        )
+        assertTrue(exact.all { it.outcomeMode == PatternOutcomeMode.EXACT })
+        val repeated = movement.single {
+            it.channel == PatternEvidenceChannel.OPEN_PANNA &&
+                it.pattern == "${FamilyMovementMath.key("111")}>${FamilyMovementMath.key("222")}"
+        }
+        assertEquals(PatternOutcomeMode.FAMILY_MOVEMENT, repeated.outcomeMode)
+        assertEquals(2, repeated.occurrences)
+        assertEquals(1, repeated.evaluatedOccurrences)
+        assertEquals(1, repeated.hits)
+        assertEquals(0, repeated.misses)
+    }
+
+    @Test fun invalidRowsAreBarriersAndPatternsCannotBridgeThem() {
+        val rows = listOf(
+            row(0, "111"),
+            row(1, "222"),
+            row(2, "333").copy(jodi = "99"),
+            row(3, "111"),
+            row(4, "222"),
+            row(5, "333")
+        )
+        val evidence = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        val repeated = evidence.single {
+            it.channel == PatternEvidenceChannel.OPEN_PANNA && it.pattern == "111>222"
+        }
+        assertEquals(1, repeated.occurrences)
+        assertEquals(0, repeated.evaluatedOccurrences)
+        assertNull(repeated.hitRate)
+        assertEquals(0, repeated.ageInChartRows)
+    }
+
+    @Test fun invalidDuplicateDateStillRequiresReconciliation() {
+        val invalid = row(0, "111").copy(jodi = "99")
+        val valid = row(0, "222")
+        try {
+            PatternEvidenceDatabase.analyze(
+                listOf(invalid, valid), LocalDate.of(2026, 2, 1), windowLengths = 1..1
+            )
+            fail("Invalid duplicate row must not disappear before duplicate audit")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("Duplicate dates"))
+        }
+    }
+
+    @Test fun invalidRowsDoNotIncreaseEvidenceSourceCounts() {
+        val rows = listOf(
+            row(0, "111"), row(1, "222"), row(2, "333").copy(jodi = "99"),
+            row(3, "111"), row(4, "222"), row(5, "333")
+        )
+        val evidence = PatternEvidenceDatabase.analyze(
+            rows, LocalDate.of(2026, 2, 1), windowLengths = 2..2
+        )
+        assertTrue(evidence.all { it.distinctSourceCount <= 3 })
+    }
 }

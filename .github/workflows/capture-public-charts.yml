@@ -1,0 +1,137 @@
+name: Capture Public Panel Charts # Re-run hybrid cross-outcome evaluation after scope fix
+
+on:
+  push:
+    branches: ["feature/auto-research-loop"]
+    paths: [".github/workflows/capture-public-charts.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture-and-extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install vectorized backtest dependency
+        run: python -m pip install numpy==2.2.6
+      # Reuse the already captured, immutable nine-market source artifact on push.
+      # Manual workflow_dispatch performs a fresh public-source capture.
+      - name: Restore previously captured nine-market source data
+        if: github.event_name == 'push'
+        uses: actions/download-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          run-id: 45014027576
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: data
+      - name: Capture all nine canonical panel pages
+        id: capture
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
+      - name: Extract dated observations and source-quality summary
+        id: extract
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+      - name: Audit source rows and create unique published dataset
+        id: audit
+        if: always()
+        continue-on-error: true
+        run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/source_audit.json --eligible-output data/derived/eligible_published.csv
+      - name: Run chronological Panna walk-forward and held-out weight comparison
+        id: backtest
+        if: steps.audit.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/walk_forward_backtest.py data/derived/eligible_published.csv --minimum-history 30 --output data/derived/panna_walk_forward_report.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Run production Panna, both Half-Sangam directions, and Sangam walk-forward
+        id: panna_half_sangam
+        if: steps.audit.outcome == 'success'
+        continue-on-error: true
+        run: gradle :core:runPannaHalfSangamBacktest -PinputCsv=data/derived/eligible_published.csv -PoutputCsv=data/derived/panna_half_sangam_sangam_metrics.csv
+      - name: Upload immutable HTML captures and extracted observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: |
+            data/captures/**
+            data/derived/canonical_observations.csv
+            data/derived/canonical_extraction_summary.json
+            data/derived/source_audit.json
+            data/derived/eligible_published.csv
+            data/derived/panna_walk_forward_report.json
+            data/derived/panna_half_sangam_sangam_metrics.csv
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Require all nine markets to have verified published rows
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          summary_path = Path("data/derived/canonical_extraction_summary.json")
+          if not summary_path.is_file():
+              print("FAIL: extraction summary was not created")
+              sys.exit(1)
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          audit_path = Path("data/derived/source_audit.json")
+          eligible_path = Path("data/derived/eligible_published.csv")
+          backtest_path = Path("data/derived/panna_walk_forward_report.json")
+          panna_half_path = Path("data/derived/panna_half_sangam_sangam_metrics.csv")
+          if not audit_path.is_file() or not eligible_path.is_file() or not backtest_path.is_file() or not panna_half_path.is_file():
+              print("FAIL: audit, eligible dataset, or walk-forward report missing")
+              sys.exit(1)
+          audit = json.loads(audit_path.read_text(encoding="utf-8"))
+          backtest = json.loads(backtest_path.read_text(encoding="utf-8"))
+          metric_lines = panna_half_path.read_text(encoding="utf-8").splitlines()
+          if len(metric_lines) < 181:
+              print("FAIL: production walk-forward output does not contain all nine markets and twenty metrics")
+              sys.exit(1)
+          if audit.get("unknown_market_ids") or audit.get("eligible_published_unique_rows", 0) < 1:
+              print("FAIL: source audit contains unknown markets or no eligible rows")
+              sys.exit(1)
+          if set(backtest.get("markets", {})) != {
+              "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
+              "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
+              "RAJDHANI_DAY", "RAJDHANI_NIGHT"
+          }:
+              print("FAIL: walk-forward report does not cover all nine markets")
+              sys.exit(1)
+          markets = summary.get("markets", {})
+          failures = list(summary.get("failures", []))
+          missing = sorted(set((
+              "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
+              "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
+              "RAJDHANI_DAY", "RAJDHANI_NIGHT"
+          )) - set(markets))
+          empty = sorted(
+              name for name, report in markets.items()
+              if report.get("capture") != "OK" or report.get("published", 0) < 1
+          )
+          print(json.dumps({
+              "markets_expected": 9,
+              "markets_with_rows": summary.get("markets_with_rows", 0),
+              "published_observations": summary.get("total_published", 0),
+              "missing_markets": missing,
+              "markets_without_published_rows": empty,
+              "failures": failures,
+          }, indent=2))
+          if missing or empty or failures or summary.get("markets_with_rows") != 9:
+              sys.exit(1)
+          PY

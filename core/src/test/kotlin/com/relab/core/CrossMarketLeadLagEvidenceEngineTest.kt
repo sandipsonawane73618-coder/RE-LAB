@@ -46,6 +46,28 @@ class CrossMarketLeadLagEvidenceEngineTest {
         assertTrue(signal.latestSourceDate.isBefore(signal.latestTargetDate))
     }
 
+    @Test fun repeatedPublisherIsNotCountedAsMultipleIndependentSources() {
+        val records = buildList {
+            repeat(3) { index ->
+                add(row(Market.SRIDEVI, index * 2, "111").copy(sourceId = "same-publisher"))
+                add(row(Market.KALYAN, index * 2 + 1, "222"))
+            }
+        }
+        val signal = CrossMarketLeadLagEvidenceEngine.analyze(
+            records, LocalDate.of(2026, 2, 1), maxSourceAgeDays = 3
+        ).single {
+            it.sourceMarket == Market.SRIDEVI &&
+                it.targetMarket == Market.KALYAN &&
+                it.channel == CrossMarketEvidenceChannel.OPEN_PANNA_FAMILY
+        }
+
+        assertEquals(3, signal.occurrences)
+        assertEquals(2, signal.evaluatedOccurrences)
+        assertEquals(1, signal.distinctSourceCount)
+        assertEquals(3, signal.distinctSourceObservationCount)
+        assertEquals(CrossMarketEvidenceLevel.LOW_SAMPLE, signal.evidenceLevel)
+    }
+
     @Test fun sameDaySourceAndFutureRowsAreNeverUsed() {
         val records = listOf(
             row(Market.SRIDEVI, 1, "111"),

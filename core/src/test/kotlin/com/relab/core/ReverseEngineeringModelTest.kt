@@ -110,17 +110,60 @@ class ReverseEngineeringModelTest {
         assertEquals("277", result.candidates.first().panna)
     }
 
+    @Test fun closeModelUsesKnownOpenAnkConditionalEvidence() {
+        val result = ReverseEngineeringModel.rank(
+            history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.CLOSE, minimumHistory = 30, knownOpenAnk = 3
+        )
+        assertTrue(result.activeEvidenceLayers.contains("Known open-Ank-to-close conditional"))
+        assertEquals("277", result.candidates.first().panna)
+    }
+
     @Test fun crossMarketLayerUsesOnlyPriorSameDateRows() {
         val sridevi = history(Market.SRIDEVI)
         val kalyan = (0 until 40).map { row(Market.KALYAN, it, open = "277", close = "368") }
         val result = ReverseEngineeringModel.rank(
             sridevi + kalyan, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
-            ReverseEngineeringSide.OPEN, minimumHistory = 30
+            ReverseEngineeringSide.OPEN, minimumHistory = 30,
+            includeCrossMarketEvidence = true
         )
-        assertTrue(result.activeEvidenceLayers.contains("Lagged cross-market conditional"))
+        assertTrue(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
         assertEquals("166", result.candidates.first().panna)
     }
 
+    @Test fun crossMarketConditionalDoesNotTreatDifferentDatesAsAligned() {
+        val targetHistory = history(Market.SRIDEVI)
+        val sourceHistory = (40..58).map {
+            row(Market.KALYAN, it, open = "277", close = "368")
+        }
+        val result = ReverseEngineeringModel.rank(
+            targetHistory + sourceHistory, Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.OPEN, minimumHistory = 30,
+            includeCrossMarketEvidence = true
+        )
+
+        assertFalse(result.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+        assertTrue(result.candidates.all { it.crossMarketConditionalEvidence == null })
+    }
+
+    @Test fun crossMarketEvidenceIsOptInAndCannotAlterDefaultPerMarketPrediction() {
+        val sridevi = history(Market.SRIDEVI)
+        val kalyan = (0 until 40).map { row(Market.KALYAN, it, open = "277", close = "368") }
+        val target = LocalDate.of(2026, 3, 1)
+        val baseline = ReverseEngineeringModel.rank(
+            sridevi, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+        val withOtherMarket = ReverseEngineeringModel.rank(
+            sridevi + kalyan, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+
+        assertEquals(baseline.candidates.map { it.panna }, withOtherMarket.candidates.map { it.panna })
+        assertEquals(baseline.candidates.map { it.score }, withOtherMarket.candidates.map { it.score })
+        assertTrue(withOtherMarket.candidates.none { it.crossMarketConditionalEvidence != null })
+        assertFalse(withOtherMarket.activeEvidenceLayers.contains("Same-date cross-market conditional"))
+    }
     @Test fun backtestReportsTopKAndBaselineWithoutFutureLeakage() {
         val result = ReverseEngineeringModel.backtest(
             history(), Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
@@ -133,6 +176,13 @@ class ReverseEngineeringModelTest {
         assertEquals(5, result.top10ExactHits)
         assertEquals(5, result.top1AnkHits)
         assertEquals(5, result.top10AnkHits)
+        assertEquals(5, result.top3UniqueAnkHits)
+        assertEquals(5, result.top5UniqueAnkHits)
+        assertEquals(5, result.baselineTop1AnkHits)
+        assertEquals(5, result.baselineTop3AnkHits)
+        assertEquals(5, result.baselineTop5AnkHits)
+        assertEquals(1.0, result.top5UniqueAnkRate, 0.0)
+        assertEquals(1.0, result.baselineTop5AnkRate, 0.0)
         assertEquals(5, result.top1FamilyHits)
         assertEquals(5, result.priorModeFamilyHits)
         assertEquals(5, result.globalExactTop1Hits)
@@ -160,6 +210,22 @@ class ReverseEngineeringModelTest {
         // inflate its own baseline count.
         assertEquals(1, result.globalExactTop1Hits)
         assertEquals(1, result.globalExactTop10Hits)
+    }
+
+    @Test fun fixedCutoffMakesWalkForwardReportInvariantToLaterRows() {
+        val rows = history()
+        val cutoff = LocalDate.of(2026, 2, 15)
+        val before = ReverseEngineeringModel.backtest(
+            rows, Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 5, minimumHistory = 30, targetDateExclusive = cutoff
+        )
+        val after = ReverseEngineeringModel.backtest(
+            rows + row(Market.SRIDEVI, 100, open = "999", close = "000"),
+            Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 5, minimumHistory = 30, targetDateExclusive = cutoff
+        )
+        assertEquals(before, after)
+        assertEquals(5, before.requestedTargets)
     }
 
     @Test fun duplicateDatesAreRejectedBeforeTraining() {
@@ -240,5 +306,49 @@ class ReverseEngineeringModelTest {
             it.sourceIds.contains("future-jodi")
         })
     }
+
+
+    @Test fun rankingIsIsolatedByMarketAndSession() {
+        val mainHistory = history(Market.SRIDEVI)
+        val otherSession = (0 until 40).map {
+            row(Market.SRIDEVI, it, open = "999", close = "000", session = "late")
+        }
+        val otherMarket = (0 until 40).map {
+            row(Market.KALYAN, it, open = "888", close = "111", session = "late")
+        }
+        val target = LocalDate.of(2026, 3, 1)
+        val baseline = ReverseEngineeringModel.rank(
+            mainHistory, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+        val combined = ReverseEngineeringModel.rank(
+            mainHistory + otherSession + otherMarket, Market.SRIDEVI, "main", target,
+            ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
+        )
+
+        assertEquals(40, combined.trainingRecords)
+        assertEquals(
+            baseline.candidates.map { it.panna to it.score },
+            combined.candidates.map { it.panna to it.score }
+        )
+        assertEquals(baseline.familyCandidates, combined.familyCandidates)
+    }
+
+    @Test
+    fun exposesFullThousandPannaCandidateUniverseForBeyondTop100Diagnostics() {
+        val rows = (1..35).map { day ->
+            row(Market.SRIDEVI, day, open = "123", close = "456")
+        }
+        val ranking = ReverseEngineeringModel.rank(
+            rows.dropLast(1), Market.SRIDEVI, "main",
+            LocalDate.of(2026, 2, 10), ReverseEngineeringSide.OPEN,
+            minimumHistory = 1, limit = 1000
+        )
+        assertFalse(ranking.abstained)
+        assertEquals(1000, ranking.candidates.size)
+        assertEquals(1000, ranking.candidates.map { it.panna }.distinct().size)
+        assertTrue(ranking.candidates.all { it.panna.matches(Regex("\\d{3}")) })
+    }
+
 
 }

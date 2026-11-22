@@ -37,6 +37,13 @@ class ChartMathTest {
         assertTrue(result is ValidationResult.Invalid)
     }
 
+    @Test fun identifiesLikelyOpenCloseSwapFromReversedJodiAnks() {
+        val result = ChartMath.validate(record("368", "07", "578"))
+        assertTrue(result is ValidationResult.Invalid)
+        val reasons = (result as ValidationResult.Invalid).reasons.joinToString(" ")
+        assertTrue(reasons.contains("Possible Open/Close Panna swap"))
+    }
+
     @Test fun identifiesSpDpTp() {
         assertEquals(PannaType.SP, ChartMath.pannaType("278"))
         assertEquals(PannaType.DP, ChartMath.pannaType("277"))
