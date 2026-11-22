@@ -1112,6 +1112,14 @@ private fun RelabHome(
                                             "Half Sangam exact ranks: Open Panna + Close Ank ${pannaHalf.openPannaCloseAnkExactRank ?: "—"} · Open Ank + Close Panna ${pannaHalf.openAnkClosePannaExactRank ?: "—"} (Top 100 candidate window)",
                                             style = MaterialTheme.typography.bodySmall
                                         )
+                                        Text(
+                                            "Panna miss type: Open ${pannaHalf.openPannaMissType} · Close ${pannaHalf.closePannaMissType}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Half Sangam miss type: Open Panna + Close Ank ${pannaHalf.openPannaCloseAnkMissType} · Open Ank + Close Panna ${pannaHalf.openAnkClosePannaMissType}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
                                     }
                                 }
                             }

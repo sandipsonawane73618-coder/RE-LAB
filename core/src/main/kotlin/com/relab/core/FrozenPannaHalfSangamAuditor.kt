@@ -14,8 +14,20 @@ data class FrozenPannaHalfSangamAudit(
     val closePannaExactRank: Int?,
     val openPannaCloseAnkExactRank: Int?,
     val openAnkClosePannaExactRank: Int?,
-    val candidateLimit: Int
+    val candidateLimit: Int,
+    val openPannaCandidateInWindow: Boolean,
+    val closePannaCandidateInWindow: Boolean,
+    val closeAnkCandidateInWindow: Boolean,
+    val openAnkCandidateInWindow: Boolean
 ) {
+    val openPannaMissType: PredictionMissType
+        get() = PredictionMissClassifier.panna(openPannaExactRank)
+    val closePannaMissType: PredictionMissType
+        get() = PredictionMissClassifier.panna(closePannaExactRank)
+    val openPannaCloseAnkMissType: PredictionMissType
+        get() = PredictionMissClassifier.combination(openPannaCloseAnkExactRank, openPannaCandidateInWindow, closeAnkCandidateInWindow)
+    val openAnkClosePannaMissType: PredictionMissType
+        get() = PredictionMissClassifier.combination(openAnkClosePannaExactRank, closePannaCandidateInWindow, openAnkCandidateInWindow)
     val openPannaExactTop10: Boolean get() = openPannaExactRank?.let { it <= 10 } == true
     val openPannaExactTop100: Boolean get() = openPannaExactRank?.let { it <= 100 } == true
     val closePannaExactTop10: Boolean get() = closePannaExactRank?.let { it <= 10 } == true
@@ -71,7 +83,11 @@ object FrozenPannaHalfSangamAuditor {
                 .takeIf { it >= 0 }?.plus(1),
             openPannaCloseAnkExactRank = openPannaCloseAnkRank,
             openAnkClosePannaExactRank = openAnkClosePannaRank,
-            candidateLimit = candidateLimit
+            candidateLimit = candidateLimit,
+            openPannaCandidateInWindow = openRanked.take(candidateLimit).any { it.panna == actualOpen },
+            closePannaCandidateInWindow = closeRanked.take(candidateLimit).any { it.panna == actualClose },
+            closeAnkCandidateInWindow = closeRanked.take(candidateLimit).any { ank(it.panna) == actualCloseAnk },
+            openAnkCandidateInWindow = openRanked.take(candidateLimit).any { ank(it.panna) == actualOpenAnk }
         )
     }
 
