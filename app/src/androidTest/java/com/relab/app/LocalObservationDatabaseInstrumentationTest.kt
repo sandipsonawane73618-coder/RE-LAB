@@ -25,10 +25,40 @@ import java.time.LocalDate
 @RunWith(AndroidJUnit4::class)
 class LocalObservationDatabaseInstrumentationTest {
     private val testContext = InstrumentationRegistry.getInstrumentation().context
+    private val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Before
     fun resetIsolatedTestDatabase() {
         testContext.deleteDatabase("relab_local_history.db")
+        targetContext.deleteDatabase("relab_local_history.db")
+    }
+
+    @Test
+    fun packagedTwoPublisherHistoryInstallsIntoSqliteAndIsIdempotent() {
+        LocalObservationDatabase(targetContext).use { database ->
+            val first = PreloadedLearningBootstrap.installIfAvailable(targetContext, database)
+            assertTrue(
+                "The tested APK must contain the audited historical CSV and manifest; got $first",
+                first is PreloadedLearningBootstrap.Result.Installed
+            )
+            val installed = first as PreloadedLearningBootstrap.Result.Installed
+            assertEquals(9, installed.markets)
+            assertTrue("Expected the captured two-publisher history, got ${installed.observations} rows",
+                installed.observations >= 50_000)
+
+            val rows = database.loadObservations()
+            assertEquals(installed.observations, rows.size)
+            assertEquals(9, rows.map { it.market }.toSet().size)
+            assertEquals(setOf("sattamatkajodi", "sattamatkame"), rows.map { it.sourceId }.toSet())
+            assertEquals(installed.checksum, database.preloadedSeedChecksum())
+
+            // A second bootstrap must not append duplicates or overwrite the seed.
+            assertEquals(
+                PreloadedLearningBootstrap.Result.AlreadyInstalled,
+                PreloadedLearningBootstrap.installIfAvailable(targetContext, database)
+            )
+            assertEquals(installed.observations, database.loadObservations().size)
+        }
     }
 
     @Test
@@ -79,6 +109,42 @@ class LocalObservationDatabaseInstrumentationTest {
             assertEquals(snapshot.payloadSha256, reopened.loadPredictionSnapshots().single().payloadSha256)
             assertEquals(1, reopened.loadPredictionOutcomes().size)
             assertEquals("123-65-456", reopened.loadPredictionOutcomes().single().actualResult)
+        }
+    }
+
+    @Test
+    fun preloadedSeedMergesOnceAndSurvivesDatabaseReopen() {
+        val market = ReverseEngineeringModel.enabledMarkets.first()
+        val existing = observation(market, LocalDate.parse("2026-01-08"), "live-source", "123-65-456")
+        val preloaded = observation(market, LocalDate.parse("2026-01-09"), "preload-source", "456-12-789")
+        val csv = SourceCsvExporter.export(listOf(preloaded))
+        val checksum = "a".repeat(64)
+
+        LocalObservationDatabase(testContext).use { database ->
+            database.replaceDataset(SourceCsvExporter.export(listOf(existing)), listOf(existing))
+            database.seedPreloadedDataset(csv, listOf(preloaded), checksum)
+            assertEquals(2, database.loadObservations().size)
+            assertEquals(checksum, database.preloadedSeedChecksum())
+            // A repeat install of the same package is a no-op.
+            database.seedPreloadedDataset(csv, listOf(preloaded), checksum)
+            assertEquals(2, database.loadObservations().size)
+        }
+
+        LocalObservationDatabase(testContext).use { reopened ->
+            assertEquals(2, reopened.loadObservations().size)
+            assertEquals(checksum, reopened.preloadedSeedChecksum())
+        }
+    }
+
+    @Test
+    fun explicitDatasetClearPreventsAutomaticPreloadReseed() {
+        val market = ReverseEngineeringModel.enabledMarkets.first()
+        val row = observation(market, LocalDate.parse("2026-01-08"), "preload-source", "123-65-456")
+        LocalObservationDatabase(testContext).use { database ->
+            database.seedPreloadedDataset(SourceCsvExporter.export(listOf(row)), listOf(row), "b".repeat(64))
+            database.clearDataset()
+            assertTrue(database.isPreloadedSeedDisabled())
+            assertTrue(database.loadObservations().isEmpty())
         }
     }
 

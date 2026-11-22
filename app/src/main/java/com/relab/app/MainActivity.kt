@@ -119,6 +119,17 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(Unit) {
                 initialData = withContext(Dispatchers.IO) {
+                    // Install a build-time historical dataset once, before loading the
+                    // dashboard. The SQLite seed is checksum-idempotent and merges rows;
+                    // later live imports remain incremental and never reset this history.
+                    when (val preload = PreloadedLearningBootstrap.installIfAvailable(this@MainActivity, database)) {
+                        is PreloadedLearningBootstrap.Result.Installed ->
+                            android.util.Log.i("RE-LAB", "Preloaded ${preload.observations} observations across ${preload.markets} markets")
+                        is PreloadedLearningBootstrap.Result.Rejected ->
+                            android.util.Log.e("RE-LAB", "Historical preload rejected: ${preload.reason}")
+                        PreloadedLearningBootstrap.Result.AlreadyInstalled,
+                        PreloadedLearningBootstrap.Result.NotPackaged -> Unit
+                    }
                     // One-time migration from the first CSV-only build. Keep the old
                     // preference until the database transaction succeeds.
                     val legacyCsv = preferences.getString("source_csv", null)
@@ -1840,6 +1851,11 @@ private fun MarketPredictionSheet(
         value.map { com.relab.core.ChartMath.family(it.digitToInt()).toString() }.joinToString("")
     fun exactStatus(side: com.relab.core.PredictionOutcomeSideAudit): String =
         side.actualRank?.let { if (it <= 10) "exact #$it" else "outside #$it" } ?: "not in list"
+    val jodiFamilyAudit = actualParts?.get(1)?.let { actualJodi ->
+        runCatching {
+            com.relab.core.JodiFamilyOutcomeAuditor.analyze(actualJodi, set.jodi, topLimit = 10)
+        }.getOrNull()
+    }
     Card {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
@@ -1864,8 +1880,15 @@ private fun MarketPredictionSheet(
                     Text("RESULT vs PREDICTION", style = MaterialTheme.typography.labelLarge)
                     PredictionTableRow("Actual result", actualResult, true)
                     PredictionTableRow("Top prediction", predictedResult, false, true)
-                    // Detailed rank/family diagnostics remain in the backend audit.
-                    // Keep the home screen focused on actual result vs prediction.
+                    jodiFamilyAudit?.let { audit ->
+                        val exact = audit.exactRank?.let { "#$it" } ?: "not in list"
+                        val family = audit.familyRank?.let { "#$it" } ?: "not in list"
+                        PredictionTableRow(
+                            "Jodi exact/family",
+                            "Exact $exact · Family $family · ${audit.match.name.replace('_', ' ')}",
+                            false
+                        )
+                    }
                 } else {
                     publishedValues.forEach { PredictionTableRow("Published result", it, true) }
                     Text("Conflicting published values are not scored until reconciled.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)

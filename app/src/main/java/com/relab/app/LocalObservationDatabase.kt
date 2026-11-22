@@ -10,6 +10,7 @@ import com.relab.core.PredictionSnapshot
 import com.relab.core.PredictionSnapshotOutcome
 import com.relab.core.SourceObservation
 import com.relab.core.SourceObservationMerger
+import com.relab.core.SourceCsvExporter
 import java.time.Instant
 import java.time.LocalDate
 
@@ -282,12 +283,64 @@ class LocalObservationDatabase(context: Context) :
 
     fun loadOriginalCsv(): String? = readMetadata(KEY_SOURCE_CSV)
 
+    fun preloadedSeedChecksum(): String? = readMetadata(KEY_PRELOADED_SEED_SHA256)
+
+    fun isPreloadedSeedDisabled(): Boolean = readMetadata(KEY_PRELOADED_SEED_DISABLED) == "true"
+
+    /**
+     * Idempotently merges a verified build-time dataset and records its checksum
+     * in the same SQLite transaction. Existing user/live rows and conflicts remain.
+     */
+    fun seedPreloadedDataset(
+        csv: String,
+        incoming: List<SourceObservation>,
+        checksum: String
+    ) {
+        require(checksum.matches(Regex("[a-f0-9]{64}"))) { "Invalid preload checksum" }
+        val database = writableDatabase
+        database.beginTransaction()
+        try {
+            check(readMetadata(KEY_PRELOADED_SEED_DISABLED) != "true") {
+                "Preloaded history was explicitly disabled by the user"
+            }
+            if (readMetadata(KEY_PRELOADED_SEED_SHA256) == checksum) {
+                database.setTransactionSuccessful()
+                return
+            }
+            val existing = readObservations(database)
+            val merged = SourceObservationMerger.append(existing, incoming)
+            merged.observations.drop(existing.size).forEach { observation ->
+                val values = ContentValues().apply {
+                    put("market", observation.market.name)
+                    put("session_id", observation.sessionId)
+                    put("chart_date", observation.date.toString())
+                    put("source_id", observation.sourceId)
+                    put("source_record_id", observation.sourceRecordId)
+                    put("source_url", observation.sourceUrl)
+                    put("retrieved_at", observation.retrievedAt.toString())
+                    put("published_at", observation.publishedAt?.toString())
+                    put("raw_text", observation.rawText)
+                    put("normalized_result", observation.normalizedResult)
+                    put("status", observation.status.name)
+                }
+                database.insertOrThrow(TABLE_OBSERVATIONS, null, values)
+            }
+            putMetadata(database, KEY_SOURCE_CSV, SourceCsvExporter.export(merged.observations))
+            putMetadata(database, KEY_IMPORTED_AT, Instant.now().toString())
+            putMetadata(database, KEY_PRELOADED_SEED_SHA256, checksum)
+            database.setTransactionSuccessful()
+        } finally {
+            database.endTransaction()
+        }
+    }
+
     fun clearDataset() {
         val database = writableDatabase
         database.beginTransaction()
         try {
             database.delete(TABLE_OBSERVATIONS, null, null)
             database.delete(TABLE_METADATA, null, null)
+            putMetadata(database, KEY_PRELOADED_SEED_DISABLED, "true")
             database.setTransactionSuccessful()
         } finally {
             database.endTransaction()
@@ -323,5 +376,7 @@ class LocalObservationDatabase(context: Context) :
         private const val TABLE_PREDICTION_OUTCOMES = "prediction_outcomes"
         private const val KEY_SOURCE_CSV = "source_csv"
         private const val KEY_IMPORTED_AT = "imported_at"
+        private const val KEY_PRELOADED_SEED_SHA256 = "preloaded_seed_sha256"
+        private const val KEY_PRELOADED_SEED_DISABLED = "preloaded_seed_disabled"
     }
 }

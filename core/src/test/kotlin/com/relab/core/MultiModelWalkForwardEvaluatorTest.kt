@@ -32,6 +32,17 @@ class MultiModelWalkForwardEvaluatorTest {
         assertEquals(first, extended)
     }
 
+    @Test fun boundedEvaluationKeepsEarlierRowsForTrainingButScoresOnlyRequestedWindow() {
+        val rows = (0 until 20).map { row(it, if (it % 2 == 0) "111" else "222") }
+        val report = MultiModelWalkForwardEvaluator.evaluate(
+            rows, Market.SRIDEVI, "main", PredictionChannel.OPEN_PANNA,
+            LocalDate.of(2026, 1, 21), minimumHistory = 5, targetStartInclusive = LocalDate.of(2026, 1, 16)
+        )
+        assertEquals(5, report.consensus.requestedTargets)
+        assertEquals(5, report.consensus.evaluatedTargets)
+        assertTrue(report.note.contains("only after scoring"))
+    }
+
     @Test fun duplicateDatesAreRejected() {
         val first = row(0, "111")
         assertThrows(IllegalArgumentException::class.java) {

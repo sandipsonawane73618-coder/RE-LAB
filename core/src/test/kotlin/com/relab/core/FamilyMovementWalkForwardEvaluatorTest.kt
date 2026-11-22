@@ -74,6 +74,32 @@ class FamilyMovementWalkForwardEvaluatorTest {
         }
     }
 
+    @Test fun srideviDayAndNightHaveIndependentFamilyHistoriesAndScorecards() {
+        val day = listOf(
+            row(1, "17", "001", "025"),
+            row(2, "62", "006", "002"),
+            row(3, "71", "007", "001"),
+            row(4, "26", "002", "006")
+        )
+        val night = (1..4).map { dayIndex ->
+            row(dayIndex, "00", "000", "000").copy(market = Market.SRIDEVI_NIGHT)
+        }
+        val reports = FamilyMovementWalkForwardEvaluator.evaluate(
+            day + night, LocalDate.of(2026, 2, 1), minimumHistory = 3
+        )
+        val dayJodi = reports.single {
+            it.market == Market.SRIDEVI && it.sessionId == "main" && it.channel == FamilyMovementChannel.JODI
+        }
+        val nightJodi = reports.single {
+            it.market == Market.SRIDEVI_NIGHT && it.sessionId == "main" && it.channel == FamilyMovementChannel.JODI
+        }
+        assertEquals(1, dayJodi.evaluatedTargets)
+        assertEquals(1, nightJodi.evaluatedTargets)
+        assertEquals(1, dayJodi.top1Hits)
+        assertEquals(1, nightJodi.top1Hits)
+        assertEquals(6, reports.size)
+    }
+
     @Test fun reportsEveryMarketChannelAndAbstainsWithoutHistory() {
         val reports = FamilyMovementWalkForwardEvaluator.evaluate(
             listOf(row(1, "17", "001", "025")),

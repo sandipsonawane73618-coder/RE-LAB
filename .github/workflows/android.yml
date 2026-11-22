@@ -39,23 +39,32 @@ jobs:
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
   capture-public-charts-once:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Run one-time nine-market public chart capture'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.event.head_commit.message == 'Run one-time nine-market public chart capture' || github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')) || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Capture all nine canonical panel pages
-        id: capture
+      - name: Capture primary publisher panel pages
+        id: capture-primary
         continue-on-error: true
         run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
-      - name: Extract dated observations and source-quality summary
+      - name: Capture second publisher panel pages
+        id: capture-secondary
+        continue-on-error: true
+        run: python scripts/capture_secondary_canonical_charts.py --output-dir data/captures-secondary --timeout 45
+      - name: Extract dated observations from both publishers
         id: extract
         if: always()
         continue-on-error: true
-        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+        run: |
+          python scripts/extract_canonical_captures.py \
+            --capture-dir data/captures \
+            --secondary-capture-dir data/captures-secondary \
+            --output data/derived/canonical_observations.csv \
+            --summary data/derived/canonical_extraction_summary.json
       - name: Upload immutable HTML captures and extracted observations
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,50 +72,190 @@ jobs:
           name: relab-nine-market-public-panel-captures
           path: |
             data/captures/**
+            data/captures-secondary/**
             data/derived/canonical_observations.csv
             data/derived/canonical_extraction_summary.json
           if-no-files-found: warn
-          retention-days: 7
-      - name: Require all nine markets to have verified published rows
+          retention-days: 90
+      - name: Require two-publisher consensus coverage and source integrity
         if: always()
         run: |
           python - <<'PY'
+          import csv
           import json
+          import re
           import sys
+          from collections import defaultdict
+          from datetime import date, datetime
           from pathlib import Path
-          path = Path("data/derived/canonical_extraction_summary.json")
-          if not path.is_file():
-              print("FAIL: extraction summary was not created")
+          summary_path = Path("data/derived/canonical_extraction_summary.json")
+          csv_path = Path("data/derived/canonical_observations.csv")
+          if not summary_path.is_file() or not csv_path.is_file():
+              print("FAIL: extraction summary or observations CSV was not created")
               sys.exit(1)
-          summary = json.loads(path.read_text(encoding="utf-8"))
-          markets = summary.get("markets", {})
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
           expected = {
               "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
               "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
               "RAJDHANI_DAY", "RAJDHANI_NIGHT"
           }
-          missing = sorted(expected - set(markets))
-          empty = sorted(
-              name for name in expected
-              if markets.get(name, {}).get("capture") != "OK"
-              or markets.get(name, {}).get("published", 0) < 1
-          )
-          print(json.dumps({
+          expected_publishers = {"sattamatkajodi", "sattamatkame"}
+          missing = sorted(expected - set(summary.get("markets", {})))
+          required = {
+              "market", "session_id", "date", "source_id", "retrieved_at",
+              "raw_text", "status", "source_record_id", "source_url", "published_at", "result"
+          }
+          with csv_path.open(newline="", encoding="utf-8") as handle:
+              reader = csv.DictReader(handle)
+              missing_columns = sorted(required - set(reader.fieldnames or []))
+              rows = list(reader)
+          bad_rows = []
+          future_rows = []
+          published_by_source_market = defaultdict(int)
+          values_by_date_source = defaultdict(set)
+          published_total = 0
+          malformed_total = 0
+          for line, row in enumerate(rows, start=2):
+              if row["market"] not in expected or row["source_id"] not in expected_publishers or not row["session_id"] or not row["source_url"]:
+                  bad_rows.append(f"row {line}: missing or unknown market/source identity")
+                  continue
+              try:
+                  chart_date = date.fromisoformat(row["date"])
+                  retrieved = datetime.fromisoformat(row["retrieved_at"].replace("Z", "+00:00"))
+                  if retrieved.tzinfo is None or retrieved.utcoffset() is None:
+                      raise ValueError("retrieved_at has no timezone")
+                  if chart_date > retrieved.date():
+                      future_rows.append(line)
+              except ValueError as error:
+                  bad_rows.append(f"row {line}: {error}")
+                  continue
+              if row["status"] == "PUBLISHED":
+                  match = re.fullmatch(r"(\d{3})-(\d{2})-(\d{3})", row["result"])
+                  if not match:
+                      bad_rows.append(f"row {line}: invalid published result shape")
+                      continue
+                  opened, jodi, closed = match.groups()
+                  expected_jodi = f"{sum(map(int, opened)) % 10}{sum(map(int, closed)) % 10}"
+                  if jodi != expected_jodi:
+                      bad_rows.append(f"row {line}: Panna/Jodi checksum mismatch")
+                      continue
+                  published_total += 1
+                  published_by_source_market[(row["source_id"], row["market"], row["session_id"])] += 1
+                  values_by_date_source[(row["market"], row["session_id"], row["date"], row["source_id"])].add(row["result"])
+              elif row["status"] == "MALFORMED":
+                  malformed_total += 1
+              elif row["status"] not in {"PENDING", "HOLIDAY_CLOSED", "MISSING_FROM_SOURCE"}:
+                  bad_rows.append(f"row {line}: unknown observation status {row['status']}")
+          thin_sources = {
+              f"{source}/{market}/{session}": count
+              for (source, market, session), count in sorted(published_by_source_market.items())
+              if count < 30
+          }
+          consensus_by_market = defaultdict(int)
+          conflicts = 0
+          single_source_dates = 0
+          grouped = defaultdict(dict)
+          for (market, session, day, source), results in values_by_date_source.items():
+              grouped[(market, session, day)][source] = results
+          for (market, session, day), source_results in grouped.items():
+              if len(source_results) < 2:
+                  single_source_dates += 1
+                  continue
+              union = set().union(*source_results.values())
+              if any(len(results) != 1 for results in source_results.values()) or len(union) != 1:
+                  conflicts += 1
+              else:
+                  consensus_by_market[market] += 1
+          thin_consensus = {
+              market: consensus_by_market.get(market, 0)
+              for market in sorted(expected)
+              if consensus_by_market.get(market, 0) < 30
+          }
+          publisher_coverage = summary.get("publishers", {})
+          missing_publishers = sorted(expected_publishers - set(publisher_coverage))
+          quality = {
               "markets_expected": 9,
-              "markets_with_rows": summary.get("markets_with_rows", 0),
-              "published_observations": summary.get("total_published", 0),
+              "markets_with_both_publishers": summary.get("markets_with_both_publishers", 0),
+              "publishers_expected": sorted(expected_publishers),
+              "publishers": publisher_coverage,
+              "total_observations": len(rows),
+              "published_observations": published_total,
+              "malformed_observations": malformed_total,
+              "consensus_dates": sum(consensus_by_market.values()),
+              "conflicting_dates": conflicts,
+              "single_source_dates": single_source_dates,
+              "consensus_dates_by_market": dict(sorted(consensus_by_market.items())),
+              "minimum_published_per_publisher_market_session": 30,
+              "minimum_consensus_dates_per_market": 30,
               "missing_markets": missing,
-              "markets_without_published_rows": empty,
+              "missing_publishers": missing_publishers,
+              "sources_below_minimum": thin_sources,
+              "markets_below_consensus_minimum": thin_consensus,
+              "future_dated_rows": len(future_rows),
+              "invalid_rows": bad_rows[:20],
+              "missing_columns": missing_columns,
               "failures": summary.get("failures", []),
-          }, indent=2))
-          if missing or empty or summary.get("failures") or summary.get("markets_with_rows") != 9:
+          }
+          print(json.dumps(quality, indent=2))
+          if (missing or missing_publishers or thin_sources or thin_consensus or future_rows
+              or bad_rows or missing_columns or summary.get("failures")
+              or summary.get("markets_with_both_publishers") != 9):
               sys.exit(1)
           PY
-  # Keep the full device suite intact; run it manually during final APK verification.
-  android-instrumentation:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')
+  historical-learning-backtest:
+    needs: [core-tests, capture-public-charts-once]
+    if: needs.core-tests.result == 'success' && needs.capture-public-charts-once.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Download the exact nine-market capture artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: preload-input
+      - name: Run chronological Panna, Half-Sangam and Sangam learning audit
+        run: |
+          gradle :core:runPannaHalfSangamBacktest \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
+            -PoutputCsv=data/derived/panna-half-sangam-learning-metrics.csv
+      - name: Run chronological Open Panna, Close Panna and Jodi multi-model audit
+        run: |
+          gradle :core:runMultiModelHistoricalBacktest \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
+            -PoutputCsv=data/derived/multi-model-learning-metrics.csv
+      - name: Run per-market exact-versus-family walk-forward audit
+        run: |
+          gradle :core:runFamilyMovementHistoricalBacktest \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
+            -PoutputCsv=data/derived/family-movement-learning-metrics.csv
+      - name: Upload historical learning metrics and source audits
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-historical-learning-results
+          path: |
+            data/derived/panna-half-sangam-learning-metrics.csv
+            data/derived/panna-half-sangam-learning-metrics.audit.txt
+            data/derived/multi-model-learning-metrics.csv
+            data/derived/multi-model-learning-metrics.audit.txt
+            data/derived/family-movement-learning-metrics.csv
+            data/derived/family-movement-learning-metrics.audit.txt
+          if-no-files-found: error
+          retention-days: 90
+
+  # Package the exact audited two-publisher history and verify bootstrap on an API 35 emulator.
+  android-instrumentation:
+    needs: [historical-learning-backtest]
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification') || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       ANDROID_I_WANT_MY_TCG: "yes"
     steps:
@@ -118,7 +267,55 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run Android instrumentation regression suite on API 35 emulator
+      - name: Download the exact audited two-publisher capture
+        uses: actions/download-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: preload-input
+      - name: Assemble debug APK with required historical preload
+        run: |
+          gradle :app:assembleDebug \
+            -PrelabPreloadedCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
+            -PrequirePreloadedLearning=true
+      - name: Verify packaged CSV checksum and coverage
+        run: |
+          python - <<'PY'
+          import csv
+          import hashlib
+          import io
+          import zipfile
+          from collections import Counter
+          from pathlib import Path
+          apk = Path("app/build/outputs/apk/debug/app-debug.apk")
+          with zipfile.ZipFile(apk) as package:
+              csv_bytes = package.read("assets/preloaded/source-observations.csv")
+              manifest_bytes = package.read("assets/preloaded/manifest.properties")
+          manifest = dict(
+              line.split("=", 1) for line in manifest_bytes.decode("utf-8").splitlines()
+              if "=" in line
+          )
+          digest = hashlib.sha256(csv_bytes).hexdigest()
+          assert manifest.get("format_version") == "1", "Unexpected preload format version"
+          assert manifest.get("sha256") == digest, "Packaged preload checksum mismatch"
+          rows = list(csv.DictReader(io.StringIO(csv_bytes.decode("utf-8"))))
+          assert len(rows) >= 50_000, f"Expected full captured history, got {len(rows)} rows"
+          markets = {row["market"] for row in rows}
+          publishers = {row["source_id"] for row in rows}
+          assert len(markets) == 9, f"Expected all nine markets, got {sorted(markets)}"
+          assert publishers == {"sattamatkajodi", "sattamatkame"}, f"Unexpected publisher set: {publishers}"
+          coverage = Counter(
+              (row["source_id"], row["market"], row["session_id"])
+              for row in rows if row["status"] == "PUBLISHED"
+          )
+          thin = {key: count for key, count in coverage.items() if count < 30}
+          assert not thin, f"Published source/market/session coverage below 30: {thin}"
+          print(f"PACKAGED_PRELOAD_OK rows={len(rows)} markets={len(markets)} publishers={sorted(publishers)} sha256={digest}")
+          PY
+      - name: Verify APK signature and record checksum
+        run: |
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - name: Run SQLite and packaged-preload instrumentation suite on API 35
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -126,7 +323,8 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            gradle :app:connectedDebugAndroidTest -PrelabPreloadedCsv="$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv" -PrequirePreloadedLearning=true --stacktrace
       - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -136,6 +334,16 @@ jobs:
             app/build/reports/androidTests/connected/**
             app/build/outputs/androidTest-results/connected/**
           if-no-files-found: warn
+          retention-days: 90
+      - name: Upload preloaded debug APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-preloaded-debug-apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
   android-debug-apk:
     runs-on: ubuntu-latest
     steps:
