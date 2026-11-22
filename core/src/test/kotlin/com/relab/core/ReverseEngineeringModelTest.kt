@@ -110,6 +110,15 @@ class ReverseEngineeringModelTest {
         assertEquals("277", result.candidates.first().panna)
     }
 
+    @Test fun closeModelUsesKnownOpenAnkConditionalEvidence() {
+        val result = ReverseEngineeringModel.rank(
+            history(), Market.SRIDEVI, "main", LocalDate.of(2026, 3, 1),
+            ReverseEngineeringSide.CLOSE, minimumHistory = 30, knownOpenAnk = 3
+        )
+        assertTrue(result.activeEvidenceLayers.contains("Known open-Ank-to-close conditional"))
+        assertEquals("277", result.candidates.first().panna)
+    }
+
     @Test fun crossMarketLayerUsesOnlyPriorSameDateRows() {
         val sridevi = history(Market.SRIDEVI)
         val kalyan = (0 until 40).map { row(Market.KALYAN, it, open = "277", close = "368") }
