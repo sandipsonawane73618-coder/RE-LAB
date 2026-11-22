@@ -48,7 +48,7 @@ object PreloadedLearningBootstrap {
         val parsed = SourceCsvImporter.import(csv)
         val rows = parsed.observations
         if (rows.isEmpty()) return Result.Rejected("Preloaded chart history contains no valid observations")
-        if (manifest["observation_count"]?.toIntOrNull() != rows.size) {
+        if (manifest["observation_count"]?.toIntOrNull()?.let { it != rows.size } == true) {
             return Result.Rejected("Preloaded observation count does not match manifest")
         }
         val marketCounts = rows.filter { it.status == ObservationStatus.PUBLISHED }
