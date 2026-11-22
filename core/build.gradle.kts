@@ -10,6 +10,7 @@ tasks.register<JavaExec>("runPannaHalfSangamBacktest") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.relab.core.PannaHalfSangamBacktestCli")
     workingDir = rootProject.projectDir
+    workingDir = rootProject.projectDir
     doFirst {
         val input = providers.gradleProperty("inputCsv").orNull
             ?: error("Pass -PinputCsv=<eligible CSV path>")
