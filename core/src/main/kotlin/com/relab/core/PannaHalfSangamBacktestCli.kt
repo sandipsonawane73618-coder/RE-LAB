@@ -16,12 +16,34 @@ object PannaHalfSangamBacktestCli {
         val output = File(args[1])
         require(input.isFile) { "Eligible input CSV does not exist: $input" }
 
-        val records = readRecords(input)
-        require(records.isNotEmpty()) { "Eligible input CSV contains no chart records" }
+        val imported = SourceCsvImporter.import(input.readText(Charsets.UTF_8))
+        require(imported.issues.isEmpty()) {
+            "Source-observation CSV has ${imported.issues.size} import issues: " +
+                imported.issues.take(10).joinToString { "row ${it.rowNumber}: ${it.message}" }
+        }
+        val sourceAudit = ReconciledChartBuilder.build(imported.observations)
+        // Use only one unambiguous published value per market/session/date.
+        // Same-source duplicates with identical values collapse to one row;
+        // conflicting values remain in the audit and are excluded, never guessed.
+        val records = ReconciledChartBuilder.buildExploratoryRecords(imported.observations)
+        require(records.isNotEmpty()) { "No conflict-free published chart records are available" }
         val marketsPresent = records.map { it.market }.toSet()
         require(marketsPresent == Market.entries.toSet()) {
-            "Expected all nine markets; found: ${marketsPresent.map { it.name }.sorted()}"
+            "Expected conflict-free history for all nine markets; found: ${marketsPresent.map { it.name }.sorted()}"
         }
+        records.groupBy { Triple(it.market, it.sessionId, it.date) }.forEach { (key, rows) ->
+            require(rows.size == 1) {
+                "Unreconciled duplicate date for ${key.first}/${key.second} on ${key.third}"
+            }
+        }
+        val conflictGroups = sourceAudit.conflictGroups.size
+        val singleSourceGroups = sourceAudit.singleSourceUnverifiedGroups.size
+        val consensusGroups = sourceAudit.records.size
+        val malformedObservations = imported.observations.count { it.status == ObservationStatus.MALFORMED }
+        val missingObservations = imported.observations.count {
+            it.status == ObservationStatus.MISSING_FROM_SOURCE || it.status == ObservationStatus.HOLIDAY_CLOSED
+        }
+        val publishers = imported.observations.map { it.sourceId }.distinct().sorted()
 
         val reports = PannaHalfSangamWalkForwardEvaluator.evaluate(
             records = records,
@@ -149,7 +171,29 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; conditioned_open_to_close=enabled; conditioned_open_ank_to_close_panna=enabled; sangam_panna_window=1000; output=${output.absolutePath}")
+        val auditFile = output.resolveSibling(output.nameWithoutExtension + ".audit.txt")
+        auditFile.parentFile?.mkdirs()
+        auditFile.writeText(
+            buildString {
+                appendLine("HISTORICAL PRELOAD BACKTEST SOURCE AUDIT")
+                appendLine("input=${input.absolutePath}")
+                appendLine("source_observations=${imported.observations.size}")
+                appendLine("import_issues=${imported.issues.size}")
+                appendLine("published_observations=${imported.observations.count { it.status == ObservationStatus.PUBLISHED }}")
+                appendLine("malformed_observations=$malformedObservations")
+                appendLine("missing_or_closed_observations=$missingObservations")
+                appendLine("single_source_unverified_groups=$singleSourceGroups")
+                appendLine("independent_consensus_groups=$consensusGroups")
+                appendLine("conflict_groups_excluded=$conflictGroups")
+                appendLine("exploratory_records_used=${records.size}")
+                appendLine("publishers=${publishers.joinToString(",")}")
+                appendLine("source_quality=${if (publishers.size >= 2) "MULTI_SOURCE" else "SINGLE_SOURCE_UNVERIFIED"}")
+                appendLine("conflict_policy=EXCLUDE; no winner selected")
+                appendLine("ordering=CHRONOLOGICAL; each target uses earlier same-market/session rows only")
+            },
+            Charsets.UTF_8
+        )
+        println("source_observations=${imported.observations.size}; records_used=${records.size}; conflicts_excluded=$conflictGroups; source_quality=${if (publishers.size >= 2) "MULTI_SOURCE" else "SINGLE_SOURCE_UNVERIFIED"}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; output=${output.absolutePath}; audit=${auditFile.absolutePath}")
     }
 
     private fun appendMetric(
@@ -178,68 +222,5 @@ object PannaHalfSangamBacktestCli {
         )
     }
 
-    private fun readRecords(file: File): List<ChartRecord> {
-        file.bufferedReader(Charsets.UTF_8).use { reader ->
-            val headerLine = reader.readLine() ?: error("CSV is empty")
-            val header = parseCsvLine(headerLine)
-            val columns = header.withIndex().associate { it.value.trim() to it.index }
-            val required = listOf("market", "session_id", "date", "source_id", "status", "result")
-            require(required.all(columns::containsKey)) { "CSV is missing required columns: $required" }
 
-            fun field(values: List<String>, name: String): String =
-                values.getOrNull(columns.getValue(name)).orEmpty().trim()
-
-            val output = mutableListOf<ChartRecord>()
-            reader.lineSequence().filter { it.isNotBlank() }.forEachIndexed { index, line ->
-                val values = parseCsvLine(line)
-                if (!field(values, "status").equals("PUBLISHED", ignoreCase = true)) return@forEachIndexed
-                val parts = field(values, "result").split('-')
-                require(parts.size == 3) { "Invalid result at CSV data row ${index + 2}" }
-                val market = runCatching { Market.valueOf(field(values, "market").uppercase()) }
-                    .getOrElse { throw IllegalArgumentException("Unknown market at CSV data row ${index + 2}") }
-                val record = ChartRecord(
-                    market = market,
-                    date = LocalDate.parse(field(values, "date")),
-                    openPanna = parts[0],
-                    jodi = parts[1],
-                    closePanna = parts[2],
-                    sourceId = field(values, "source_id"),
-                    sourceRecordId = columns["source_record_id"]?.let { values.getOrNull(it) },
-                    sessionId = field(values, "session_id")
-                )
-                val validation = ChartMath.validate(record)
-                require(validation is ValidationResult.Valid) {
-                    "Invalid Panna/Jodi math at CSV data row ${index + 2}: ${(validation as ValidationResult.Invalid).reasons}"
-                }
-                output += record
-            }
-            return output
-        }
-    }
-
-    private fun parseCsvLine(line: String): List<String> {
-        val fields = mutableListOf<String>()
-        val current = StringBuilder()
-        var quoted = false
-        var index = 0
-        while (index < line.length) {
-            val char = line[index]
-            when {
-                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> {
-                    current.append('"')
-                    index++
-                }
-                char == '"' -> quoted = !quoted
-                char == ',' && !quoted -> {
-                    fields += current.toString()
-                    current.setLength(0)
-                }
-                else -> current.append(char)
-            }
-            index++
-        }
-        require(!quoted) { "Malformed CSV quoting" }
-        fields += current.toString()
-        return fields
-    }
 }
