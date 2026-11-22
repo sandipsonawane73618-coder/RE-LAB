@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -89,7 +91,7 @@ val preparePreloadedLearning by tasks.registering {
             csv.lineSequence().first().contains("date")) {
             "Preloaded CSV must be the RE-LAB source-observations export with market/session_id/date columns"
         }
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
         val preloadDir = outputDir.resolve("preloaded")
         preloadDir.mkdirs()
