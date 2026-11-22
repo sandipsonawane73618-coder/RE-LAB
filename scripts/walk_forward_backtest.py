@@ -15,6 +15,8 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+
 MARKETS = (
     "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR", "TIME_BAZAR",
     "MILAN_DAY", "MILAN_NIGHT", "RAJDHANI_DAY", "RAJDHANI_NIGHT",
@@ -70,6 +72,14 @@ def read_eligible(path: Path) -> dict[str, list[dict]]:
 
 CANDIDATES = tuple(f"{value:03d}" for value in range(1000))
 CANDIDATE_FAMILIES = {panna: family_sequence(panna) for panna in CANDIDATES}
+FAMILY_ORDER = tuple(sorted(set(CANDIDATE_FAMILIES.values())))
+FAMILY_INDEX = {family: index for index, family in enumerate(FAMILY_ORDER)}
+CANDIDATE_NUMBERS = np.arange(len(CANDIDATES), dtype=np.int16)
+CANDIDATE_FAMILY_INDEX = np.fromiter(
+    (FAMILY_INDEX[CANDIDATE_FAMILIES[panna]] for panna in CANDIDATES),
+    dtype=np.int16,
+    count=len(CANDIDATES),
+)
 
 
 def rank_pannas(
@@ -79,42 +89,54 @@ def rank_pannas(
     lexical_tiebreak: bool = False,
     exact_primary_tiebreak: bool = False
 ) -> tuple[list[str], int]:
-    max_exact = max(exact_counts.values(), default=1)
-    max_family = max(family_counts.values(), default=1)
-    max_weekday = max(weekday_counts.values(), default=1)
-    max_transition = max(transitions.values(), default=1)
-    scored = []
-    actual_item = None
-    for panna in CANDIDATES:
-        family = CANDIDATE_FAMILIES[panna]
-        exact = exact_counts[panna]
-        family_count = family_counts[family]
-        score = (
-            weights[0] * exact / max_exact
-            + weights[1] * family_count / max_family
-            + weights[2] * weekday_counts[family] / max_weekday
-            + weights[3] * transitions[(previous_state, family)] / max_transition
-        ) * 100.0
-        secondary_score = (
-            weights[1] * family_count / max_family
-            + weights[2] * weekday_counts[family] / max_weekday
-            + weights[3] * transitions[(previous_state, family)] / max_transition
-        ) * 100.0
-        item = (panna, score, family_count, exact, secondary_score)
-        scored.append(item)
-        if panna == actual:
-            actual_item = item
+    # Vectorize the 1,000-candidate scoring and ordering. The former
+    # pure-Python loop repeated this work for every target and every ablation.
+    exact_values = np.fromiter(
+        (exact_counts[panna] for panna in CANDIDATES),
+        dtype=np.float64, count=len(CANDIDATES),
+    )
+    family_values = np.fromiter(
+        (family_counts[family] for family in FAMILY_ORDER),
+        dtype=np.float64, count=len(FAMILY_ORDER),
+    )
+    weekday_values = np.fromiter(
+        (weekday_counts[family] for family in FAMILY_ORDER),
+        dtype=np.float64, count=len(FAMILY_ORDER),
+    )
+    transition_values = np.fromiter(
+        (transitions[(previous_state, family)] for family in FAMILY_ORDER),
+        dtype=np.float64, count=len(FAMILY_ORDER),
+    )
+    max_exact = max(float(exact_values.max()), 1.0)
+    max_family = max(float(family_values.max()), 1.0)
+    max_weekday = max(float(weekday_values.max()), 1.0)
+    max_transition = max(float(transition_values.max()), 1.0)
 
+    candidate_family = family_values[CANDIDATE_FAMILY_INDEX]
+    candidate_weekday = weekday_values[CANDIDATE_FAMILY_INDEX]
+    candidate_transition = transition_values[CANDIDATE_FAMILY_INDEX]
+    score = (
+        weights[0] * exact_values / max_exact
+        + weights[1] * candidate_family / max_family
+        + weights[2] * candidate_weekday / max_weekday
+        + weights[3] * candidate_transition / max_transition
+    ) * 100.0
+    secondary_score = (
+        weights[1] * candidate_family / max_family
+        + weights[2] * candidate_weekday / max_weekday
+        + weights[3] * candidate_transition / max_transition
+    ) * 100.0
+
+    actual_index = int(actual)
     if exact_primary_tiebreak:
-        sort_key = lambda item: (-item[3], -item[4], item[0])
+        order = np.lexsort((CANDIDATE_NUMBERS, -secondary_score, -exact_values))
     elif lexical_tiebreak:
-        sort_key = lambda item: (-item[1], item[0])
+        order = np.lexsort((CANDIDATE_NUMBERS, -score))
     else:
-        sort_key = lambda item: (-item[1], -item[2], -item[3], item[0])
-    top = heapq.nsmallest(limit, scored, key=sort_key)
-    actual_rank = 1 + sum(sort_key(item) < sort_key(actual_item) for item in scored)
-    return [item[0] for item in top], actual_rank
-
+        order = np.lexsort((CANDIDATE_NUMBERS, -exact_values, -candidate_family, -score))
+    actual_rank = int(np.flatnonzero(order == actual_index)[0]) + 1
+    top = [CANDIDATES[int(index)] for index in order[:limit]]
+    return top, actual_rank
 
 def rank_exact_frequency(exact_counts: Counter, actual: str) -> int:
     actual_count = exact_counts[actual]
