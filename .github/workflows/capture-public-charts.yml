@@ -12,7 +12,7 @@ permissions:
 jobs:
   capture-and-extract:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,6 +27,16 @@ jobs:
         if: always()
         continue-on-error: true
         run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+      - name: Audit source rows and create unique published dataset
+        id: audit
+        if: always()
+        continue-on-error: true
+        run: python scripts/audit_source_csv.py data/derived/canonical_observations.csv --output data/derived/source_audit.json --eligible-output data/derived/eligible_published.csv
+      - name: Run chronological Panna walk-forward and held-out weight comparison
+        id: backtest
+        if: steps.audit.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/walk_forward_backtest.py data/derived/eligible_published.csv --minimum-history 30 --output data/derived/panna_walk_forward_report.json
       - name: Upload immutable HTML captures and extracted observations
         if: always()
         uses: actions/upload-artifact@v4
@@ -36,6 +46,9 @@ jobs:
             data/captures/**
             data/derived/canonical_observations.csv
             data/derived/canonical_extraction_summary.json
+            data/derived/source_audit.json
+            data/derived/eligible_published.csv
+            data/derived/panna_walk_forward_report.json
           if-no-files-found: warn
           retention-days: 7
       - name: Require all nine markets to have verified published rows
@@ -51,6 +64,24 @@ jobs:
               print("FAIL: extraction summary was not created")
               sys.exit(1)
           summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          audit_path = Path("data/derived/source_audit.json")
+          eligible_path = Path("data/derived/eligible_published.csv")
+          backtest_path = Path("data/derived/panna_walk_forward_report.json")
+          if not audit_path.is_file() or not eligible_path.is_file() or not backtest_path.is_file():
+              print("FAIL: audit, eligible dataset, or walk-forward report missing")
+              sys.exit(1)
+          audit = json.loads(audit_path.read_text(encoding="utf-8"))
+          backtest = json.loads(backtest_path.read_text(encoding="utf-8"))
+          if audit.get("unknown_market_ids") or audit.get("eligible_published_unique_rows", 0) < 1:
+              print("FAIL: source audit contains unknown markets or no eligible rows")
+              sys.exit(1)
+          if set(backtest.get("markets", {})) != {
+              "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
+              "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
+              "RAJDHANI_DAY", "RAJDHANI_NIGHT"
+          }:
+              print("FAIL: walk-forward report does not cover all nine markets")
+              sys.exit(1)
           markets = summary.get("markets", {})
           failures = list(summary.get("failures", []))
           missing = sorted(set((
