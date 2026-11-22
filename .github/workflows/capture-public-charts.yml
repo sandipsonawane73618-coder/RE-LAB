@@ -1,0 +1,75 @@
+name: Capture Public Panel Charts
+
+on:
+  push:
+    branches: ["feature/auto-research-loop"]
+    paths: [".github/workflows/capture-public-charts.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture-and-extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Capture all nine canonical panel pages
+        id: capture
+        continue-on-error: true
+        run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
+      - name: Extract dated observations and source-quality summary
+        id: extract
+        if: always()
+        continue-on-error: true
+        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+      - name: Upload immutable HTML captures and extracted observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relab-nine-market-public-panel-captures
+          path: |
+            data/captures/**
+            data/derived/canonical_observations.csv
+            data/derived/canonical_extraction_summary.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Require all nine markets to have verified published rows
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          summary_path = Path("data/derived/canonical_extraction_summary.json")
+          if not summary_path.is_file():
+              print("FAIL: extraction summary was not created")
+              sys.exit(1)
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          markets = summary.get("markets", {})
+          failures = list(summary.get("failures", []))
+          missing = sorted(set((
+              "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
+              "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
+              "RAJDHANI_DAY", "RAJDHANI_NIGHT"
+          )) - set(markets))
+          empty = sorted(
+              name for name, report in markets.items()
+              if report.get("capture") != "OK" or report.get("published", 0) < 1
+          )
+          print(json.dumps({
+              "markets_expected": 9,
+              "markets_with_rows": summary.get("markets_with_rows", 0),
+              "published_observations": summary.get("total_published", 0),
+              "missing_markets": missing,
+              "markets_without_published_rows": empty,
+              "failures": failures,
+          }, indent=2))
+          if missing or empty or failures or summary.get("markets_with_rows") != 9:
+              sys.exit(1)
+          PY
