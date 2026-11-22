@@ -87,7 +87,7 @@ val preparePreloadedLearning by tasks.registering {
         check(csv.isNotBlank() && csv.lineSequence().first().contains("market") &&
             csv.lineSequence().first().contains("session_id") &&
             csv.lineSequence().first().contains("date")) {
-            "Preloaded CSV must be the RE-LAB source-observations export with market/session_id/chart_date columns"
+            "Preloaded CSV must be the RE-LAB source-observations export with market/session_id/date columns"
         }
         val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
