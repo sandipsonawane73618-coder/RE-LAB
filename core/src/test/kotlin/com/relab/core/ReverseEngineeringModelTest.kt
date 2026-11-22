@@ -150,14 +150,11 @@ class ReverseEngineeringModelTest {
             ReverseEngineeringSide.OPEN, minimumHistory = 30, limit = 20
         )
 
-        assertEquals(
-            baseline.candidates.map { it.panna to it.score },
-            withOtherMarket.candidates.map { it.panna to it.score }
-        )
-        assertTrue(withOtherMarket.candidates.all { it.crossMarketConditionalEvidence == null })
+        assertEquals(baseline.candidates.map { it.panna }, withOtherMarket.candidates.map { it.panna })
+        assertEquals(baseline.candidates.map { it.score }, withOtherMarket.candidates.map { it.score })
+        assertTrue(withOtherMarket.candidates.none { it.crossMarketConditionalEvidence != null })
         assertFalse(withOtherMarket.activeEvidenceLayers.contains("Same-date cross-market conditional"))
     }
-
     @Test fun backtestReportsTopKAndBaselineWithoutFutureLeakage() {
         val result = ReverseEngineeringModel.backtest(
             history(), Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
