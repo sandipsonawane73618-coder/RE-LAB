@@ -65,6 +65,7 @@ object PublicPanelChartImporter {
         val document = Jsoup.parse(html, sourceUrl)
         val records = linkedMapOf<LocalDate, ChartRecord>()
         val issues = mutableListOf<PanelChartImportIssue>()
+        val conflictedDates = mutableSetOf<LocalDate>()
         var rowNumber = 0
 
         document.select("tr").forEach { row ->
@@ -119,12 +120,17 @@ object PublicPanelChartImporter {
                         issues += PanelChartImportIssue(rowNumber, dayOffset, validation.reasons.joinToString("; "))
                     }
                     is ValidationResult.Valid -> {
-                        val previous = records.putIfAbsent(date, record)
-                        if (previous != null && previous != record) {
-                            records.remove(date)
-                            issues += PanelChartImportIssue(rowNumber, dayOffset, "Conflicting duplicate date; excluded from import")
-                        } else if (previous != null) {
-                            issues += PanelChartImportIssue(rowNumber, dayOffset, "Duplicate identical date; retained once")
+                        if (date in conflictedDates) {
+                            issues += PanelChartImportIssue(rowNumber, dayOffset, "Date already conflicted; excluded from import")
+                        } else {
+                            val previous = records.putIfAbsent(date, record)
+                            if (previous != null && previous != record) {
+                                records.remove(date)
+                                conflictedDates += date
+                                issues += PanelChartImportIssue(rowNumber, dayOffset, "Conflicting duplicate date; excluded from import")
+                            } else if (previous != null) {
+                                issues += PanelChartImportIssue(rowNumber, dayOffset, "Duplicate identical date; retained once")
+                            }
                         }
                     }
                 }
