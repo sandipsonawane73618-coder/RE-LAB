@@ -97,6 +97,55 @@ object SangamOutcomeAuditor {
         )
     }
 
+    /**
+     * Computes the exact pair rank without materializing and sorting the full
+     * Cartesian product. This allows a 1,000 x 1,000 candidate universe while
+     * retaining the same score and deterministic tie-break semantics as analyze().
+     */
+    fun exactPairRank(
+        actualOpenPanna: String,
+        actualClosePanna: String,
+        openCandidates: List<ReverseEngineeringCandidate>,
+        closeCandidates: List<ReverseEngineeringCandidate>
+    ): Int? {
+        require(actualOpenPanna.matches(Regex("\\d{3}"))) { "Actual open panna must contain exactly three digits" }
+        require(actualClosePanna.matches(Regex("\\d{3}"))) { "Actual close panna must contain exactly three digits" }
+        validateCandidates(openCandidates, "open")
+        validateCandidates(closeCandidates, "close")
+        val actualOpenIndex = openCandidates.indexOfFirst { it.panna == actualOpenPanna }
+        val actualCloseIndex = closeCandidates.indexOfFirst { it.panna == actualClosePanna }
+        if (actualOpenIndex < 0 || actualCloseIndex < 0) return null
+
+        val actualScore = openCandidates[actualOpenIndex].score *
+            closeCandidates[actualCloseIndex].score / 100.0
+        val closeByScore = closeCandidates.withIndex().sortedWith(
+            compareByDescending<IndexedValue<ReverseEngineeringCandidate>> { it.value.score }
+                .thenBy { it.index }
+        )
+        var rank = 1L
+        openCandidates.forEachIndexed { openIndex, open ->
+            var low = 0
+            var high = closeByScore.size
+            while (low < high) {
+                val middle = (low + high) ushr 1
+                val score = open.score * closeByScore[middle].value.score / 100.0
+                if (score > actualScore) low = middle + 1 else high = middle
+            }
+            rank += low.toLong()
+            var index = low
+            while (index < closeByScore.size) {
+                val closeIndex = closeByScore[index].index
+                val score = open.score * closeByScore[index].value.score / 100.0
+                if (score != actualScore) break
+                if (openIndex < actualOpenIndex ||
+                    (openIndex == actualOpenIndex && closeIndex < actualCloseIndex)
+                ) rank++
+                index++
+            }
+        }
+        return rank.toInt()
+    }
+
     private fun validateCandidates(candidates: List<ReverseEngineeringCandidate>, side: String) {
         require(candidates.map { it.panna }.distinct().size == candidates.size) {
             "Duplicate $side candidate panna values are not allowed"
