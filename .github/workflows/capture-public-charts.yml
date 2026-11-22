@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Correct exact-frequency baseline scores before pair ranking
+name: Capture Public Panel Charts # Add held-out Panna Top-100 profile comparison
 
 on:
   push:
