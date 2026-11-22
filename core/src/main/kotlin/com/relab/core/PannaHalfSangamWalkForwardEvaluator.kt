@@ -269,14 +269,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (close.candidates.take(10).any { positionalMatch(it.panna, target.closePanna) }) closeNear10++
                             if (close.candidates.take(100).any { positionalMatch(it.panna, target.closePanna) }) closeNear100++
 
-                            val openExactFrequency = open.candidates.sortedWith(
-                                compareByDescending<ReverseEngineeringCandidate> { it.exactPannaEvidence }
-                                    .thenBy { it.panna }
-                            )
-                            val closeExactFrequency = close.candidates.sortedWith(
-                                compareByDescending<ReverseEngineeringCandidate> { it.exactPannaEvidence }
-                                    .thenBy { it.panna }
-                            )
+                            val openExactFrequency = exactFrequencyCandidates(open.candidates)
+                            val closeExactFrequency = exactFrequencyCandidates(close.candidates)
                             val halfOpenPannaWindow = open.candidates.take(halfSangamPannaLimit)
                             val halfClosePannaWindow = close.candidates.take(halfSangamPannaLimit)
                             val halfOpenAnkEvidence = open.candidates.take(halfSangamOppositeLimit)
@@ -409,6 +403,18 @@ object PannaHalfSangamWalkForwardEvaluator {
                 )
             }
     }
+
+    /**
+     * Build a true exact-frequency baseline: both ordering and the score consumed
+     * by pair ranking come from exact recurrence evidence, not the model score.
+     */
+    internal fun exactFrequencyCandidates(
+        candidates: List<ReverseEngineeringCandidate>
+    ): List<ReverseEngineeringCandidate> = candidates.map {
+        it.copy(score = it.exactPannaEvidence * 100.0)
+    }.sortedWith(
+        compareByDescending<ReverseEngineeringCandidate> { it.score }.thenBy { it.panna }
+    )
 
     /**
      * Exact rank for (Panna, opposite-side Ank) using the same score and tie
