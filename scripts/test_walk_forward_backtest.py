@@ -167,6 +167,44 @@ class WalkForwardBacktestTests(unittest.TestCase):
         self.assertIn("balanced_default", result["feature_ablation_top10"])
         self.assertIn("exact_primary_combined", result["feature_ablation_top10"])
 
+    def test_weight_selection_is_isolated_per_market_session_and_side(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "eligible.csv"
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("market", "status", "date", "session_id", "result"),
+                )
+                writer.writeheader()
+                for market in ("SRIDEVI", "KALYAN"):
+                    for index in range(200):
+                        opened = f"{index % 1000:03d}"
+                        closed = f"{(index * 7 + 3) % 1000:03d}"
+                        jodi = f"{sum(map(int, opened)) % 10}{sum(map(int, closed)) % 10}"
+                        writer.writerow({
+                            "market": market,
+                            "status": "PUBLISHED",
+                            "date": date.fromordinal(date(2020, 1, 1).toordinal() + index).isoformat(),
+                            "session_id": "main",
+                            "result": f"{opened}-{jodi}-{closed}",
+                        })
+            report = backtest.evaluate(path, minimum_history=5)
+
+        tuning = report["chronological_weight_tuning"]
+        self.assertEqual("independent_per_market_session_side", tuning["selection_scope"])
+        cohorts = tuning["selected_variant_by_market_session"]
+        self.assertEqual(
+            {"SRIDEVI:main:open", "SRIDEVI:main:close", "KALYAN:main:open", "KALYAN:main:close"},
+            set(cohorts),
+        )
+        self.assertTrue(all(
+            item["selection_status"] == "SELECTED_ON_THIS_COHORT_VALIDATION_ONLY"
+            and item["validation_targets"] == 30
+            and item["untouched_test"]["tested_targets"] == 30
+            for item in cohorts.values()
+        ))
+        self.assertEqual(120, tuning["aggregate_untouched_test"]["tested_targets"])
+
     def test_exact_primary_tiebreak_preserves_frequency_priority_and_uses_secondary_evidence(self):
         exact = backtest.Counter()
         families = backtest.Counter({"111": 5})
