@@ -91,6 +91,12 @@ data class PannaHalfSangamWalkForwardReport(
     val closePanna: PannaSideWalkForwardMetrics,
     val openPannaHybridTop10PlusExactFrequencyTop90: HalfSangamWalkForwardMetrics,
     val closePannaHybridTop10PlusExactFrequencyTop90: HalfSangamWalkForwardMetrics,
+    val openPannaCloseAnkTop100PannaBaseline: HalfSangamWalkForwardMetrics,
+    val openPannaCloseAnkTop100PannaHybrid: HalfSangamWalkForwardMetrics,
+    val openAnkClosePannaTop100PannaBaseline: HalfSangamWalkForwardMetrics,
+    val openAnkClosePannaTop100PannaHybrid: HalfSangamWalkForwardMetrics,
+    val sangamTop100x100Baseline: HalfSangamWalkForwardMetrics,
+    val sangamTop100x100Hybrid: HalfSangamWalkForwardMetrics,
     val openPannaCloseAnk: HalfSangamWalkForwardMetrics,
     val openPannaCloseAnkConditioned: HalfSangamWalkForwardMetrics,
     val openAnkClosePanna: HalfSangamWalkForwardMetrics,
@@ -169,6 +175,14 @@ object PannaHalfSangamWalkForwardEvaluator {
                 val closeExactRanks = mutableListOf<Int?>()
                 val openHybridExactRanks = mutableListOf<Int?>()
                 val closeHybridExactRanks = mutableListOf<Int?>()
+                val halfTop100PannaBaselineRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
+                val halfTop100PannaHybridRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
+                val sangamTop100x100BaselineRanks = mutableListOf<Int?>()
+                val sangamTop100x100HybridRanks = mutableListOf<Int?>()
+                var halfTop100PannaBaselineAbstained = 0
+                var halfTop100PannaHybridAbstained = 0
+                var sangamTop100x100BaselineAbstained = 0
+                var sangamTop100x100HybridAbstained = 0
                 var openHybridEvaluated = 0
                 var closeHybridEvaluated = 0
                 var openHybridAbstained = 0
@@ -230,6 +244,10 @@ object PannaHalfSangamWalkForwardEvaluator {
                             closeAbstained++
                             openHybridAbstained++
                             closeHybridAbstained++
+                            halfTop100PannaBaselineAbstained++
+                            halfTop100PannaHybridAbstained++
+                            sangamTop100x100BaselineAbstained++
+                            sangamTop100x100HybridAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
                             conditionedHalfAbstained++
                             conditionedReverseHalfAbstained++
@@ -268,6 +286,10 @@ object PannaHalfSangamWalkForwardEvaluator {
                             closeAbstained++
                             openHybridAbstained++
                             closeHybridAbstained++
+                            halfTop100PannaBaselineAbstained++
+                            halfTop100PannaHybridAbstained++
+                            sangamTop100x100BaselineAbstained++
+                            sangamTop100x100HybridAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
                             conditionedHalfAbstained++
                             conditionedReverseHalfAbstained++
@@ -315,6 +337,38 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (closeHybridRank != null && closeHybridRank <= 10) closeHybridTop10++
                             if (openHybridRank != null && openHybridRank <= 100) openHybridTop100++
                             if (closeHybridRank != null && closeHybridRank <= 100) closeHybridTop100++
+                            val openTop100PannaBaseline = open.candidates.take(100)
+                            val closeTop100PannaBaseline = close.candidates.take(100)
+                            val openTop100PannaHalfBaselineRank = exactHalfSangamRank(
+                                openTop100PannaBaseline, halfCloseAnkEvidence,
+                                target.openPanna, actualCloseAnk
+                            )
+                            val openTop100PannaHalfHybridRank = exactHalfSangamRank(
+                                openHybridCandidates, halfCloseAnkEvidence,
+                                target.openPanna, actualCloseAnk
+                            )
+                            val closeTop100PannaHalfBaselineRank = exactHalfSangamRank(
+                                closeTop100PannaBaseline, halfOpenAnkEvidence,
+                                target.closePanna, actualOpenAnk
+                            )
+                            val closeTop100PannaHalfHybridRank = exactHalfSangamRank(
+                                closeHybridCandidates, halfOpenAnkEvidence,
+                                target.closePanna, actualOpenAnk
+                            )
+                            halfTop100PannaBaselineRanks[0] += openTop100PannaHalfBaselineRank
+                            halfTop100PannaBaselineRanks[1] += closeTop100PannaHalfBaselineRank
+                            halfTop100PannaHybridRanks[0] += openTop100PannaHalfHybridRank
+                            halfTop100PannaHybridRanks[1] += closeTop100PannaHalfHybridRank
+                            val sangamTop100x100BaselineRank = SangamOutcomeAuditor.exactPairRank(
+                                target.openPanna, target.closePanna,
+                                openTop100PannaBaseline, closeTop100PannaBaseline
+                            )
+                            val sangamTop100x100HybridRank = SangamOutcomeAuditor.exactPairRank(
+                                target.openPanna, target.closePanna,
+                                openHybridCandidates, closeHybridCandidates
+                            )
+                            sangamTop100x100BaselineRanks += sangamTop100x100BaselineRank
+                            sangamTop100x100HybridRanks += sangamTop100x100HybridRank
                             val conditionedCloseExactRank = closeGivenOpen.candidates
                                 .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
                             sangamConditionalCloseExactRanks += conditionedCloseExactRank
@@ -434,6 +488,24 @@ object PannaHalfSangamWalkForwardEvaluator {
                         requestedTargets, closeHybridEvaluated, closeHybridAbstained,
                         closeHybridTop10, closeHybridTop100, exactRankDiagnostics(closeHybridExactRanks)
                     ),
+                    openPannaCloseAnkTop100PannaBaseline = metricsFromRanks(
+                        requestedTargets, halfTop100PannaBaselineAbstained, halfTop100PannaBaselineRanks[0]
+                    ),
+                    openPannaCloseAnkTop100PannaHybrid = metricsFromRanks(
+                        requestedTargets, halfTop100PannaHybridAbstained, halfTop100PannaHybridRanks[0]
+                    ),
+                    openAnkClosePannaTop100PannaBaseline = metricsFromRanks(
+                        requestedTargets, halfTop100PannaBaselineAbstained, halfTop100PannaBaselineRanks[1]
+                    ),
+                    openAnkClosePannaTop100PannaHybrid = metricsFromRanks(
+                        requestedTargets, halfTop100PannaHybridAbstained, halfTop100PannaHybridRanks[1]
+                    ),
+                    sangamTop100x100Baseline = metricsFromRanks(
+                        requestedTargets, sangamTop100x100BaselineAbstained, sangamTop100x100BaselineRanks
+                    ),
+                    sangamTop100x100Hybrid = metricsFromRanks(
+                        requestedTargets, sangamTop100x100HybridAbstained, sangamTop100x100HybridRanks
+                    ),
                     openPannaCloseAnk = halfMetrics(0),
                     openPannaCloseAnkConditioned = HalfSangamWalkForwardMetrics(
                         requestedTargets, conditionedHalfEvaluated, conditionedHalfAbstained,
@@ -477,6 +549,19 @@ object PannaHalfSangamWalkForwardEvaluator {
                 )
             }
     }
+
+    private fun metricsFromRanks(
+        requestedTargets: Int,
+        abstainedTargets: Int,
+        ranks: List<Int?>
+    ) = HalfSangamWalkForwardMetrics(
+        requestedTargets = requestedTargets,
+        evaluatedTargets = ranks.size,
+        abstainedTargets = abstainedTargets,
+        exactTop10Hits = ranks.count { it != null && it <= 10 },
+        exactTop100Hits = ranks.count { it != null && it <= 100 },
+        exactRankDiagnostics = exactRankDiagnostics(ranks)
+    )
 
     /**
      * Research-only hybrid: retain the model's top ten, then fill the remaining
