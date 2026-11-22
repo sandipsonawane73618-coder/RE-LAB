@@ -186,7 +186,7 @@ object ReverseEngineeringModel {
                     .map { it.second }.groupingBy { it }.eachCount()
             }
             knownOpenAnk != null -> history
-                .filter { it.openPanna.sumOf(Char::digitToInt) % 10 == knownOpenAnk }
+                .filter { it.openPanna.sumOf { digit -> digit.digitToInt() } % 10 == knownOpenAnk }
                 .map { familyOf(it.closePanna) }.groupingBy { it }.eachCount()
             else -> emptyMap()
         }
