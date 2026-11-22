@@ -46,6 +46,23 @@ class SangamOutcomeAuditorTest {
     }
 
     @Test
+    fun fastExactPairRankMatchesMaterializedCartesianOrderingIncludingTies() {
+        val open = listOf(
+            candidate("111", 80.0), candidate("123", 80.0),
+            candidate("222", 50.0), candidate("456", 0.0)
+        )
+        val close = listOf(
+            candidate("333", 70.0), candidate("456", 70.0),
+            candidate("555", 50.0), candidate("789", 0.0)
+        )
+        val expected = SangamOutcomeAuditor.analyze(
+            "123", "456", open, close, pairLimit = 100
+        ).exactPairRank
+        assertEquals(expected, SangamOutcomeAuditor.exactPairRank("123", "456", open, close))
+        assertNull(SangamOutcomeAuditor.exactPairRank("999", "456", open, close))
+    }
+
+    @Test
     fun rejectsMalformedPannaDuplicateCandidatesAndInvalidScores() {
         try {
             SangamOutcomeAuditor.analyze("12", "456", emptyList(), emptyList())
