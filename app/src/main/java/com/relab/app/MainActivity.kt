@@ -782,6 +782,27 @@ private fun RelabHome(
         }.sortedByDescending { it.targetDate }
     }
 
+    val frozenPannaHalfSangamAudits = remember(frozenPredictionSnapshots, frozenPredictionOutcomes) {
+        val outcomesByKey = frozenPredictionOutcomes.associateBy { it.snapshotKey }
+        frozenPredictionSnapshots.mapNotNull { frozen ->
+            val outcome = outcomesByKey[frozen.snapshotKey] ?: return@mapNotNull null
+            runCatching {
+                val json = JsonParser.parseString(frozen.payloadJson).asJsonObject
+                val parser = GsonBuilder()
+                    .registerTypeAdapter(
+                        LocalDate::class.java,
+                        JsonDeserializer<LocalDate> { value, _, _ -> LocalDate.parse(value.asString) }
+                    )
+                    .create()
+                val open = parser.fromJson(json.getAsJsonObject("open"), com.relab.core.ReverseEngineeringRanking::class.java)
+                val close = parser.fromJson(json.getAsJsonObject("close"), com.relab.core.ReverseEngineeringRanking::class.java)
+                com.relab.core.FrozenPannaHalfSangamAuditor.analyze(
+                    frozen, outcome, open.candidates, close.candidates, candidateLimit = 100
+                )
+            }.getOrNull()
+        }.sortedByDescending { it.targetDate }
+    }
+
     val frozenPredictionScorecards = remember(frozenPredictionSnapshots, frozenSangamAudits) {
         com.relab.core.FrozenPredictionScorecardBuilder.build(
             frozenPredictionSnapshots,
@@ -1081,6 +1102,16 @@ private fun RelabHome(
                                             item.closePannaAudit.nearestCandidates.take(3).joinToString { "${it.panna} (#${it.rank}, family ${it.matchingFamilyPositions}/3, digits ${it.matchingDigitPositions}/3)" },
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                    frozenPannaHalfSangamAudits.firstOrNull { it.snapshotKey == item.snapshotKey }?.let { pannaHalf ->
+                                        Text(
+                                            "Frozen exact Panna ranks: Open ${pannaHalf.openPannaExactRank ?: "—"} · Close ${pannaHalf.closePannaExactRank ?: "—"}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Half Sangam exact ranks: Open Panna + Close Ank ${pannaHalf.openPannaCloseAnkExactRank ?: "—"} · Open Ank + Close Panna ${pannaHalf.openAnkClosePannaExactRank ?: "—"} (Top 100 candidate window)",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
                                 }
                             }
                             Text("Only immutable saved predictions are scored. Family and Jodi matches are diagnostics, never exact Sangam hits.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
