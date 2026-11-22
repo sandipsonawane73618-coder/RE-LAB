@@ -317,9 +317,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle :app:connectedDebugAndroidTest \
-              -PrelabPreloadedCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
-              -PrequirePreloadedLearning=true --stacktrace
+            gradle :app:connectedDebugAndroidTest -PrelabPreloadedCsv="$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv" -PrequirePreloadedLearning=true --stacktrace
       - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
