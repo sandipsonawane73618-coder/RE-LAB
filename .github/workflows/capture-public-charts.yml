@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Compare hybrid Panna windows across Half-Sangam and Sangam
+name: Capture Public Panel Charts # Re-run hybrid cross-outcome evaluation after scope fix
 
 on:
   push:
