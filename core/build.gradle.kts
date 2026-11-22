@@ -34,3 +34,19 @@ tasks.register<JavaExec>("runMultiModelHistoricalBacktest") {
         args(input, output)
     }
 }
+
+
+tasks.register<JavaExec>("runFamilyMovementHistoricalBacktest") {
+    group = "verification"
+    description = "Run per-market/session exact-baseline versus family-equivalence walk-forward metrics."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.relab.core.FamilyMovementHistoricalBacktestCli")
+    workingDir = rootProject.projectDir
+    doFirst {
+        val input = providers.gradleProperty("inputCsv").orNull
+            ?: error("Pass -PinputCsv=<source-observations CSV path>")
+        val output = providers.gradleProperty("outputCsv").orNull
+            ?: error("Pass -PoutputCsv=<family metrics CSV path>")
+        args(input, output)
+    }
+}
