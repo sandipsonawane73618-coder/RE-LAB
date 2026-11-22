@@ -1126,7 +1126,7 @@ private fun RelabHome(
                             Text("Only snapshots saved before publication are included. Rates use audited outcomes as denominator; pending outcomes are excluded.", style = MaterialTheme.typography.bodySmall)
                             frozenPredictionScorecards.forEach { score ->
                                 Text(
-                                    "${score.market.name.replace("_", " ")} · ${score.sessionId} · Audited ${score.auditedOutcomes}/${score.savedSnapshots} · Pending ${score.pendingOutcomes}",
+                                    "${score.market.name.replace("_", " ")} · ${score.sessionId} · Model ${score.modelVersion} · Audited ${score.auditedOutcomes}/${score.savedSnapshots} · Pending ${score.pendingOutcomes}",
                                     style = MaterialTheme.typography.labelLarge
                                 )
                                 Text(

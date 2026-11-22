@@ -7,6 +7,7 @@ package com.relab.core
 data class FrozenPredictionScorecard(
     val market: Market,
     val sessionId: String,
+    val modelVersion: String,
     val savedSnapshots: Int,
     val auditedOutcomes: Int,
     val pendingOutcomes: Int,
@@ -73,8 +74,8 @@ object FrozenPredictionScorecardBuilder {
             ) { "Panna/Half-Sangam audit metadata does not match its frozen snapshot" }
         }
 
-        return snapshots.groupBy { it.market to it.sessionId }
-            .toSortedMap(compareBy<Pair<Market, String>> { it.first.name }.thenBy { it.second })
+        return snapshots.groupBy { Triple(it.market, it.sessionId, it.modelVersion) }
+            .toSortedMap(compareBy<Triple<Market, String, String>> { it.first.name }.thenBy { it.second }.thenBy { it.third })
             .map { (identity, groupSnapshots) ->
                 val keys = groupSnapshots.map { it.snapshotKey }.toSet()
                 val groupAudits = audits.filter { it.snapshotKey in keys }
@@ -82,6 +83,7 @@ object FrozenPredictionScorecardBuilder {
                 FrozenPredictionScorecard(
                     market = identity.first,
                     sessionId = identity.second,
+                    modelVersion = identity.third,
                     savedSnapshots = groupSnapshots.size,
                     auditedOutcomes = groupAudits.size,
                     pendingOutcomes = groupSnapshots.size - groupAudits.size,

@@ -8,13 +8,13 @@ import org.junit.Test
 class FrozenPredictionScorecardTest {
     private val created = Instant.parse("2026-01-01T10:00:00Z")
 
-    private fun snapshot(date: Int) = PredictionSnapshot(
+    private fun snapshot(date: Int, version: String = "scorecard-v1") = PredictionSnapshot(
         market = Market.SRIDEVI,
         sessionId = "main",
         targetDate = LocalDate.of(2026, 1, date),
         createdAt = created,
         historyThroughDate = LocalDate.of(2026, 1, 1),
-        modelVersion = "scorecard-v1",
+        modelVersion = version,
         payloadJson = """{"frozen":"$date"}"""
     )
 
