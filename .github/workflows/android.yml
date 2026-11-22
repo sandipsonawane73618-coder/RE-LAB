@@ -170,7 +170,7 @@ jobs:
     needs: [core-tests, capture-public-charts-once]
     if: needs.core-tests.result == 'success' && needs.capture-public-charts-once.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -189,14 +189,21 @@ jobs:
         run: |
           gradle :core:runPannaHalfSangamBacktest \
             -PinputCsv=preload-input/derived/canonical_observations.csv \
-            -PoutputCsv=data/derived/historical-learning-metrics.csv
-      - name: Upload historical learning metrics and source audit
+            -PoutputCsv=data/derived/panna-half-sangam-learning-metrics.csv
+      - name: Run chronological Open Panna, Close Panna and Jodi multi-model audit
+        run: |
+          gradle :core:runMultiModelHistoricalBacktest \
+            -PinputCsv=preload-input/derived/canonical_observations.csv \
+            -PoutputCsv=data/derived/multi-model-learning-metrics.csv
+      - name: Upload historical learning metrics and source audits
         uses: actions/upload-artifact@v4
         with:
           name: relab-historical-learning-results
           path: |
-            data/derived/historical-learning-metrics.csv
-            data/derived/historical-learning-metrics.audit.txt
+            data/derived/panna-half-sangam-learning-metrics.csv
+            data/derived/panna-half-sangam-learning-metrics.audit.txt
+            data/derived/multi-model-learning-metrics.csv
+            data/derived/multi-model-learning-metrics.audit.txt
           if-no-files-found: error
           retention-days: 90
 
