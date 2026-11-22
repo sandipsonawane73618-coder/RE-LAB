@@ -186,6 +186,7 @@ object PannaHalfSangamWalkForwardEvaluator {
                             openAbstained++
                             closeAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
+                            conditionedHalfAbstained++
                             sangamAbstained++
                         } else {
                         val open = ReverseEngineeringModel.rank(
