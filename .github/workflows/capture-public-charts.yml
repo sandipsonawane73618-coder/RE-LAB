@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts
+name: Capture Public Panel Charts # Refresh after historical date-axis parser update
 
 on:
   push:
