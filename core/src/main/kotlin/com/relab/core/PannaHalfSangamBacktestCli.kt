@@ -30,7 +30,7 @@ object PannaHalfSangamBacktestCli {
             candidateLimit = 100,
             targetLimit = 365,
             halfSangamPannaLimit = 1000,
-            halfSangamOppositeLimit = 100,
+            halfSangamOppositeLimit = 1000,
             sangamPannaLimit = 1000
         )
         require(reports.map { it.market }.toSet() == Market.entries.toSet()) {
@@ -56,12 +56,12 @@ object PannaHalfSangamBacktestCli {
                         report.closePanna.abstainedTargets, report.closePanna.exactTop10Hits,
                         report.closePanna.exactTop10Rate(), report.closePanna.exactTop100Hits,
                         report.closePanna.exactTop100Rate(), report.closePanna.exactRankDiagnostics)
-                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_PANNA1000_ANK100",
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_PANNA1000_ANK1000",
                         report.openPannaCloseAnk.requestedTargets, report.openPannaCloseAnk.evaluatedTargets,
                         report.openPannaCloseAnk.abstainedTargets, report.openPannaCloseAnk.exactTop10Hits,
                         report.openPannaCloseAnk.exactTop10Rate(), report.openPannaCloseAnk.exactTop100Hits,
                         report.openPannaCloseAnk.exactTop100Rate(), report.openPannaCloseAnk.exactRankDiagnostics)
-                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_PANNA1000_ANK100",
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_PANNA1000_ANK1000",
                         report.openAnkClosePanna.requestedTargets, report.openAnkClosePanna.evaluatedTargets,
                         report.openAnkClosePanna.abstainedTargets, report.openAnkClosePanna.exactTop10Hits,
                         report.openAnkClosePanna.exactTop10Rate(), report.openAnkClosePanna.exactTop100Hits,
@@ -74,7 +74,7 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=100; sangam_panna_window=1000; output=${output.absolutePath}")
+        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=1000; sangam_panna_window=1000; output=${output.absolutePath}")
     }
 
     private fun appendMetric(
