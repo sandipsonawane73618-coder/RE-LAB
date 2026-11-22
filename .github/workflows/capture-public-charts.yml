@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Reuse successful run-7 nine-market capture; dispatch for fresh capture
+name: Capture Public Panel Charts # Full 1000x1000 Half-Sangam and 1000x1000 Sangam candidate audit
 
 on:
   push:
