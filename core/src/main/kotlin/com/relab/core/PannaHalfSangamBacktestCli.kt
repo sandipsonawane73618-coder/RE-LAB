@@ -27,7 +27,8 @@ object PannaHalfSangamBacktestCli {
             records = records,
             targetDateExclusive = LocalDate.MAX,
             minimumHistory = 30,
-            candidateLimit = 100
+            candidateLimit = 100,
+            targetLimit = 365
         )
         require(reports.map { it.market }.toSet() == Market.entries.toSet()) {
             "Walk-forward evaluation did not return all nine markets"
@@ -70,7 +71,7 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; output=${output.absolutePath}")
+        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; output=${output.absolutePath}")
     }
 
     private fun appendMetric(
