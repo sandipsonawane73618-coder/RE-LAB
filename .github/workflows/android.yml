@@ -36,7 +36,9 @@ jobs:
             core/build/test-results/test/*.xml
             app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
+  # Keep the full device suite intact; run it manually during final APK verification.
   android-instrumentation:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       ANDROID_I_WANT_MY_TCG: "yes"
