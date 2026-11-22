@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Reuse frozen nine-market capture; dispatch for fresh capture
+name: Capture Public Panel Charts # Reuse successful run-7 nine-market capture; dispatch for fresh capture
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: relab-nine-market-public-panel-captures
-          run-id: 45013378152
+          run-id: 45014027576
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: data
       - name: Capture all nine canonical panel pages
