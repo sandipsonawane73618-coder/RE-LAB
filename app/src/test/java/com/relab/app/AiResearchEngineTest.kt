@@ -51,7 +51,7 @@ class AiResearchEngineTest {
         val engine = AiResearchEngine { endpoint, _, _ ->
             requests += endpoint
             when {
-                endpoint.contains(AiResearchEngine.PRIMARY_GEMINI_MODEL) ->
+                endpoint.contains(AiResearchEngine.PRIMARY_GEMINI_MODEL) && requests.size == 1 ->
                     throw AiProviderHttpException(503, "AI provider HTTP 503: high demand")
                 endpoint.contains(AiResearchEngine.FALLBACK_GEMINI_MODEL) ->
                     """{"candidates":[{"content":{"parts":[{"text":"Fallback draft [SRIDEVI/main/2026-01-02/publisher-a]."}]}}]}"""
