@@ -56,6 +56,16 @@ object PannaHalfSangamBacktestCli {
                         report.closePanna.abstainedTargets, report.closePanna.exactTop10Hits,
                         report.closePanna.exactTop10Rate(), report.closePanna.exactTop100Hits,
                         report.closePanna.exactTop100Rate(), report.closePanna.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_HYBRID_MODEL_TOP10_EXACT_FREQUENCY_TOP90",
+                        report.openPannaHybridTop10PlusExactFrequencyTop90.requestedTargets, report.openPannaHybridTop10PlusExactFrequencyTop90.evaluatedTargets,
+                        report.openPannaHybridTop10PlusExactFrequencyTop90.abstainedTargets, report.openPannaHybridTop10PlusExactFrequencyTop90.exactTop10Hits,
+                        report.openPannaHybridTop10PlusExactFrequencyTop90.exactTop10Rate(), report.openPannaHybridTop10PlusExactFrequencyTop90.exactTop100Hits,
+                        report.openPannaHybridTop10PlusExactFrequencyTop90.exactTop100Rate(), report.openPannaHybridTop10PlusExactFrequencyTop90.exactRankDiagnostics)
+                    appendMetric(writer, report.market, report.sessionId, "CLOSE_PANNA_HYBRID_MODEL_TOP10_EXACT_FREQUENCY_TOP90",
+                        report.closePannaHybridTop10PlusExactFrequencyTop90.requestedTargets, report.closePannaHybridTop10PlusExactFrequencyTop90.evaluatedTargets,
+                        report.closePannaHybridTop10PlusExactFrequencyTop90.abstainedTargets, report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop10Hits,
+                        report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop10Rate(), report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop100Hits,
+                        report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop100Rate(), report.closePannaHybridTop10PlusExactFrequencyTop90.exactRankDiagnostics)
                     appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_PANNA1000_ANK1000",
                         report.openPannaCloseAnk.requestedTargets, report.openPannaCloseAnk.evaluatedTargets,
                         report.openPannaCloseAnk.abstainedTargets, report.openPannaCloseAnk.exactTop10Hits,
