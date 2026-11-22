@@ -28,7 +28,10 @@ object PannaHalfSangamBacktestCli {
             targetDateExclusive = LocalDate.MAX,
             minimumHistory = 30,
             candidateLimit = 100,
-            targetLimit = 365
+            targetLimit = 365,
+            halfSangamPannaLimit = 1000,
+            halfSangamOppositeLimit = 100,
+            sangamPannaLimit = 1000
         )
         require(reports.map { it.market }.toSet() == Market.entries.toSet()) {
             "Walk-forward evaluation did not return all nine markets"
@@ -53,17 +56,17 @@ object PannaHalfSangamBacktestCli {
                         report.closePanna.abstainedTargets, report.closePanna.exactTop10Hits,
                         report.closePanna.exactTop10Rate(), report.closePanna.exactTop100Hits,
                         report.closePanna.exactTop100Rate(), report.closePanna.exactRankDiagnostics)
-                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK",
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_PANNA_CLOSE_ANK_PANNA1000_ANK100",
                         report.openPannaCloseAnk.requestedTargets, report.openPannaCloseAnk.evaluatedTargets,
                         report.openPannaCloseAnk.abstainedTargets, report.openPannaCloseAnk.exactTop10Hits,
                         report.openPannaCloseAnk.exactTop10Rate(), report.openPannaCloseAnk.exactTop100Hits,
                         report.openPannaCloseAnk.exactTop100Rate(), report.openPannaCloseAnk.exactRankDiagnostics)
-                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA",
+                    appendMetric(writer, report.market, report.sessionId, "OPEN_ANK_CLOSE_PANNA_PANNA1000_ANK100",
                         report.openAnkClosePanna.requestedTargets, report.openAnkClosePanna.evaluatedTargets,
                         report.openAnkClosePanna.abstainedTargets, report.openAnkClosePanna.exactTop10Hits,
                         report.openAnkClosePanna.exactTop10Rate(), report.openAnkClosePanna.exactTop100Hits,
                         report.openAnkClosePanna.exactTop100Rate(), report.openAnkClosePanna.exactRankDiagnostics)
-                    appendMetric(writer, report.market, report.sessionId, "SANGAM",
+                    appendMetric(writer, report.market, report.sessionId, "SANGAM_PANNA1000",
                         report.sangam.requestedTargets, report.sangam.evaluatedTargets,
                         report.sangam.abstainedTargets, report.sangam.exactTop10Hits,
                         report.sangam.exactTop10Rate(), report.sangam.exactTop100Hits,
@@ -71,7 +74,7 @@ object PannaHalfSangamBacktestCli {
                 }
         }
 
-        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; output=${output.absolutePath}")
+        println("records=${records.size}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; half_panna_window=1000; opposite_ank_window=100; sangam_panna_window=1000; output=${output.absolutePath}")
     }
 
     private fun appendMetric(
