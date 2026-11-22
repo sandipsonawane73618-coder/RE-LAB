@@ -241,6 +241,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
                             conditionedHalfAbstained++
                             conditionedReverseHalfAbstained++
+                            baselineHalfAbstained++
+                            baselineSangamAbstained++
                             sangamAbstained++
                         } else {
                             openEvaluated++
