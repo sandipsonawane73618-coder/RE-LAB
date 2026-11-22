@@ -21,8 +21,8 @@ android {
         unitTests.isIncludeAndroidResources = true
         // Robolectric downloads its Android SDK jars directly; avoid repo1.maven.org
         // because it intermittently rate-limits GitHub-hosted CI runners (HTTP 429).
-        unitTests.all {
-            systemProperty(
+        unitTests.all { testTask ->
+            testTask.systemProperty(
                 "robolectric.dependency.repo.url",
                 "https://maven-central.storage-download.googleapis.com/maven2"
             )
