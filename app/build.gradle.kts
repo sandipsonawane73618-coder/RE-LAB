@@ -50,3 +50,57 @@ dependencies {
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
+
+
+// A release APK can carry a checksum-verified historical chart dataset.
+// Supply it with -PrelabPreloadedCsv=/absolute/path/to/source-observations.csv
+// (or RELAB_PRELOADED_CSV). Debug/CI builds remain possible without private data.
+val relabPreloadedCsv = providers.gradleProperty("relabPreloadedCsv")
+    .orElse(providers.environmentVariable("RELAB_PRELOADED_CSV"))
+val requirePreloadedLearning = providers.gradleProperty("requirePreloadedLearning")
+    .map { it.toBoolean() }.orElse(false)
+val generatedPreloadedAssets = layout.buildDirectory.dir("generated/preloadedLearningAssets")
+
+android.sourceSets.getByName("main").assets.srcDir(generatedPreloadedAssets)
+
+val preparePreloadedLearning by tasks.registering {
+    inputs.file(relabPreloadedCsv).optional()
+    outputs.dir(generatedPreloadedAssets)
+    doLast {
+        val inputPath = relabPreloadedCsv.orNull
+        val releaseRequested = gradle.startParameter.taskNames.any {
+            it.contains("Release", ignoreCase = true)
+        }
+        val outputDir = generatedPreloadedAssets.get().asFile
+        outputDir.deleteRecursively()
+        if (inputPath.isNullOrBlank()) {
+            check(!requirePreloadedLearning.get() && !releaseRequested) {
+                "A release APK requires historical learning data. Pass -PrelabPreloadedCsv=/path/to/source-observations.csv"
+            }
+            return@doLast
+        }
+        val input = file(inputPath)
+        check(input.isFile) { "Preloaded learning CSV does not exist: $inputPath" }
+        val bytes = input.readBytes()
+        val csv = bytes.toString(Charsets.UTF_8)
+        check(csv.isNotBlank() && csv.lineSequence().first().contains("market") &&
+            csv.lineSequence().first().contains("session_id") &&
+            csv.lineSequence().first().contains("chart_date")) {
+            "Preloaded CSV must be the RE-LAB source-observations export with market/session_id/chart_date columns"
+        }
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        val preloadDir = outputDir.resolve("preloaded")
+        preloadDir.mkdirs()
+        preloadDir.resolve("source-observations.csv").writeBytes(bytes)
+        preloadDir.resolve("manifest.properties").writeText(
+            "format_version=1\\nsha256=$digest\\n",
+            Charsets.UTF_8
+        )
+        logger.lifecycle("Prepared RE-LAB historical preload: sha256=$digest, bytes=${bytes.size}")
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(preparePreloadedLearning)
+}
