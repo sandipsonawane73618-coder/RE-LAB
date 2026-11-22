@@ -171,12 +171,12 @@ object PannaHalfSangamWalkForwardEvaluator {
                     } else {
                         val open = ReverseEngineeringModel.rank(
                             prior, identity.first, identity.second, target.date,
-                            ReverseEngineeringSide.OPEN, limit = candidateLimit,
+                            ReverseEngineeringSide.OPEN, limit = 1000,
                             minimumHistory = minimumHistory
                         )
                         val close = ReverseEngineeringModel.rank(
                             prior, identity.first, identity.second, target.date,
-                            ReverseEngineeringSide.CLOSE, limit = candidateLimit,
+                            ReverseEngineeringSide.CLOSE, limit = 1000,
                             minimumHistory = minimumHistory
                         )
                         if (open.abstained || close.abstained) {
@@ -209,8 +209,10 @@ object PannaHalfSangamWalkForwardEvaluator {
                             if (close.candidates.take(10).any { positionalMatch(it.panna, target.closePanna) }) closeNear10++
                             if (close.candidates.take(100).any { positionalMatch(it.panna, target.closePanna) }) closeNear100++
 
-                            val openToClose = rankHalfSangam(open.candidates, close.candidates)
-                            val closeToOpen = rankHalfSangam(close.candidates, open.candidates)
+                            val openWindow = open.candidates.take(candidateLimit)
+                            val closeWindow = close.candidates.take(candidateLimit)
+                            val openToClose = rankHalfSangam(openWindow, closeWindow)
+                            val closeToOpen = rankHalfSangam(closeWindow, openWindow)
                             val actualOpenAnk = ank(target.openPanna)
                             val actualCloseAnk = ank(target.closePanna)
                             val halfTargets = listOf(
@@ -230,7 +232,7 @@ object PannaHalfSangamWalkForwardEvaluator {
 
                             val sangam = SangamOutcomeAuditor.analyze(
                                 target.openPanna, target.closePanna,
-                                open.candidates, close.candidates, pairLimit = 100
+                                openWindow, closeWindow, pairLimit = 100
                             )
                             sangamEvaluated++
                             sangamExactRanks += sangam.exactPairRank

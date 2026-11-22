@@ -84,4 +84,20 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
         assertNull(report.openPanna.exactRankDiagnostics.candidatePoolCoverage())
         assertNull(report.openPanna.exactRankDiagnostics.meanReciprocalRank())
     }
+    @Test
+    fun recordsExactPannaRanksBeyondTop100InsteadOfCallingThemCandidateMisses() {
+        val history = (1..30).map { row(it, open = "123", close = "456") }
+        val heldOut = row(31, open = "000", close = "999")
+        val report = PannaHalfSangamWalkForwardEvaluator.evaluate(
+            history + heldOut,
+            heldOut.date.plusDays(1),
+            minimumHistory = 30
+        ).single()
+        assertEquals(1, report.openPanna.evaluatedTargets)
+        assertEquals(0, report.openPanna.exactRankDiagnostics.absentFromCandidatePool)
+        assertEquals(1, report.openPanna.exactRankDiagnostics.rankAbove100)
+        assertEquals(0, report.openPanna.exactTop100Hits)
+    }
+
+
 }

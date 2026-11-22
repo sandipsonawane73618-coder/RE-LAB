@@ -121,7 +121,7 @@ object ReverseEngineeringModel {
     ): ReverseEngineeringRanking {
         require(market in enabledMarkets) { "Market is not enabled for reverse-engineering" }
         require(sessionId.isNotBlank()) { "Session ID is required" }
-        require(limit in 1..100) { "Candidate limit must be between 1 and 100" }
+        require(limit in 1..1000) { "Candidate limit must be between 1 and 1000" }
         require(minimumHistory >= 1) { "Minimum history must be at least 1" }
         require(smoothingAlpha > 0.0 && smoothingAlpha.isFinite()) { "Smoothing alpha must be positive and finite" }
         if (knownOpenPanna != null) require(

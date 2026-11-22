@@ -325,4 +325,21 @@ class ReverseEngineeringModelTest {
         assertEquals(baseline.familyCandidates, combined.familyCandidates)
     }
 
+    @Test
+    fun exposesFullThousandPannaCandidateUniverseForBeyondTop100Diagnostics() {
+        val rows = (1..35).map { day ->
+            row(Market.SRIDEVI, day, open = "123", close = "456")
+        }
+        val ranking = ReverseEngineeringModel.rank(
+            rows.dropLast(1), Market.SRIDEVI, "main",
+            LocalDate.of(2026, 2, 10), ReverseEngineeringSide.OPEN,
+            minimumHistory = 1, limit = 1000
+        )
+        assertFalse(ranking.abstained)
+        assertEquals(1000, ranking.candidates.size)
+        assertEquals(1000, ranking.candidates.map { it.panna }.distinct().size)
+        assertTrue(ranking.candidates.all { it.panna.matches(Regex("\\d{3}")) })
+    }
+
+
 }
