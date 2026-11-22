@@ -9,6 +9,7 @@ tasks.register<JavaExec>("runPannaHalfSangamBacktest") {
     description = "Run production Panna, both Half-Sangam directions, and Sangam walk-forward metrics from an eligible chart CSV."
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.relab.core.PannaHalfSangamBacktestCli")
+    workingDir = rootProject.projectDir
     doFirst {
         val input = providers.gradleProperty("inputCsv").orNull
             ?: error("Pass -PinputCsv=<eligible CSV path>")
