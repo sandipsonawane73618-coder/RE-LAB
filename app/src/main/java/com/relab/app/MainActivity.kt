@@ -1742,13 +1742,14 @@ private fun MarketPredictionSheet(
     resultGroup: com.relab.core.ReconciliationGroup?,
     selectedDate: LocalDate
 ) {
-    val open = set.open.candidates.take(10)
+    // Keep the full ranked Open Panna pool for a separate, support-based Ank ranking.
+    // The visible Open Ank list is capped at five unique digits.
+    val open = set.open.candidates.take(100)
     val close = set.close.candidates.take(10)
     val openPannas = open.map { it.panna }
     val closePannas = close.map { it.panna }
-    val openAnks = open.groupBy { it.ank }.map { (ank, rows) -> ank to rows.maxOf { it.score } }
-        .sortedWith(compareByDescending<Pair<Int, Double>> { it.second }.thenBy { it.first })
-        .take(10).map { it.first.toString() }
+    val openAnks = com.relab.core.OpenAnkRanking.rank(open, limit = 5)
+        .map { it.ank.toString() }
     val jodiCandidates = set.jodi.take(10)
     val jodis = jodiCandidates.map { it.jodi }
     val sangams = open.flatMap { o -> close.map { c -> (o.panna + "-" + c.panna) to (o.score * c.score / 100.0) } }
