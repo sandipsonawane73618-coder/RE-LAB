@@ -89,6 +89,8 @@ data class PannaHalfSangamWalkForwardReport(
     val lastTargetDate: LocalDate?,
     val openPanna: PannaSideWalkForwardMetrics,
     val closePanna: PannaSideWalkForwardMetrics,
+    val openPannaHybridTop10PlusExactFrequencyTop90: HalfSangamWalkForwardMetrics,
+    val closePannaHybridTop10PlusExactFrequencyTop90: HalfSangamWalkForwardMetrics,
     val openPannaCloseAnk: HalfSangamWalkForwardMetrics,
     val openPannaCloseAnkConditioned: HalfSangamWalkForwardMetrics,
     val openAnkClosePanna: HalfSangamWalkForwardMetrics,
@@ -165,6 +167,16 @@ object PannaHalfSangamWalkForwardEvaluator {
                 var closeNear100 = 0
                 val openExactRanks = mutableListOf<Int?>()
                 val closeExactRanks = mutableListOf<Int?>()
+                val openHybridExactRanks = mutableListOf<Int?>()
+                val closeHybridExactRanks = mutableListOf<Int?>()
+                var openHybridEvaluated = 0
+                var closeHybridEvaluated = 0
+                var openHybridAbstained = 0
+                var closeHybridAbstained = 0
+                var openHybridTop10 = 0
+                var closeHybridTop10 = 0
+                var openHybridTop100 = 0
+                var closeHybridTop100 = 0
                 val halfExactRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
                 val conditionedHalfExactRanks = mutableListOf<Int?>()
                 val sangamExactRanks = mutableListOf<Int?>()
@@ -216,6 +228,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                         if (prior.size < minimumHistory) {
                             openAbstained++
                             closeAbstained++
+                            openHybridAbstained++
+                            closeHybridAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
                             conditionedHalfAbstained++
                             conditionedReverseHalfAbstained++
@@ -252,6 +266,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                         if (open.abstained || close.abstained || closeGivenOpen.abstained || closeGivenOpenAnk.abstained) {
                             openAbstained++
                             closeAbstained++
+                            openHybridAbstained++
+                            closeHybridAbstained++
                             halfAbstained.indices.forEach { halfAbstained[it]++ }
                             conditionedHalfAbstained++
                             conditionedReverseHalfAbstained++
@@ -285,6 +301,20 @@ object PannaHalfSangamWalkForwardEvaluator {
 
                             val openExactFrequency = exactFrequencyCandidates(open.candidates)
                             val closeExactFrequency = exactFrequencyCandidates(close.candidates)
+                            val openHybridTop100 = top10PlusExactFrequencyTop90(open.candidates, openExactFrequency)
+                            val closeHybridTop100 = top10PlusExactFrequencyTop90(close.candidates, closeExactFrequency)
+                            val openHybridRank = openHybridTop100.indexOfFirst { it.panna == target.openPanna }
+                                .takeIf { it >= 0 }?.plus(1)
+                            val closeHybridRank = closeHybridTop100.indexOfFirst { it.panna == target.closePanna }
+                                .takeIf { it >= 0 }?.plus(1)
+                            openHybridExactRanks += openHybridRank
+                            closeHybridExactRanks += closeHybridRank
+                            openHybridEvaluated++
+                            closeHybridEvaluated++
+                            if (openHybridRank != null && openHybridRank <= 10) openHybridTop10++
+                            if (closeHybridRank != null && closeHybridRank <= 10) closeHybridTop10++
+                            if (openHybridRank != null && openHybridRank <= 100) openHybridTop100++
+                            if (closeHybridRank != null && closeHybridRank <= 100) closeHybridTop100++
                             val conditionedCloseExactRank = closeGivenOpen.candidates
                                 .indexOfFirst { it.panna == target.closePanna }.takeIf { it >= 0 }?.plus(1)
                             sangamConditionalCloseExactRanks += conditionedCloseExactRank
@@ -396,6 +426,14 @@ object PannaHalfSangamWalkForwardEvaluator {
                     lastTargetDate = rows.lastOrNull()?.date,
                     openPanna = pannaMetrics(openEvaluated, openAbstained, openTop10, openTop100, openFamily10, openFamily100, openNear10, openNear100, openExactRanks),
                     closePanna = pannaMetrics(closeEvaluated, closeAbstained, closeTop10, closeTop100, closeFamily10, closeFamily100, closeNear10, closeNear100, closeExactRanks),
+                    openPannaHybridTop10PlusExactFrequencyTop90 = HalfSangamWalkForwardMetrics(
+                        requestedTargets, openHybridEvaluated, openHybridAbstained,
+                        openHybridTop10, openHybridTop100, exactRankDiagnostics(openHybridExactRanks)
+                    ),
+                    closePannaHybridTop10PlusExactFrequencyTop90 = HalfSangamWalkForwardMetrics(
+                        requestedTargets, closeHybridEvaluated, closeHybridAbstained,
+                        closeHybridTop10, closeHybridTop100, exactRankDiagnostics(closeHybridExactRanks)
+                    ),
                     openPannaCloseAnk = halfMetrics(0),
                     openPannaCloseAnkConditioned = HalfSangamWalkForwardMetrics(
                         requestedTargets, conditionedHalfEvaluated, conditionedHalfAbstained,
@@ -438,6 +476,22 @@ object PannaHalfSangamWalkForwardEvaluator {
                     candidateLimit = candidateLimit
                 )
             }
+    }
+
+    /**
+     * Research-only hybrid: retain the model's top ten, then fill the remaining
+     * ninety slots by exact historical frequency. No live ranking is changed here.
+     */
+    internal fun top10PlusExactFrequencyTop90(
+        modelCandidates: List<ReverseEngineeringCandidate>,
+        exactFrequencyCandidates: List<ReverseEngineeringCandidate>
+    ): List<ReverseEngineeringCandidate> {
+        val top10 = modelCandidates.take(10)
+        val selected = top10.mapTo(mutableSetOf()) { it.panna }
+        return top10 + exactFrequencyCandidates.asSequence()
+            .filterNot { it.panna in selected }
+            .take(90)
+            .toList()
     }
 
     /**
