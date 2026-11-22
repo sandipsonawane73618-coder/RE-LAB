@@ -66,19 +66,24 @@ jobs:
             data/derived/canonical_observations.csv
             data/derived/canonical_extraction_summary.json
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 90
       - name: Require all nine markets to have verified published rows
         if: always()
         run: |
           python - <<'PY'
+          import csv
           import json
+          import re
           import sys
+          from collections import defaultdict
+          from datetime import date, datetime
           from pathlib import Path
-          path = Path("data/derived/canonical_extraction_summary.json")
-          if not path.is_file():
-              print("FAIL: extraction summary was not created")
+          summary_path = Path("data/derived/canonical_extraction_summary.json")
+          csv_path = Path("data/derived/canonical_observations.csv")
+          if not summary_path.is_file() or not csv_path.is_file():
+              print("FAIL: extraction summary or observations CSV was not created")
               sys.exit(1)
-          summary = json.loads(path.read_text(encoding="utf-8"))
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
           markets = summary.get("markets", {})
           expected = {
               "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
@@ -92,16 +97,73 @@ jobs:
               if markets.get(name, {}).get("capture") != "OK"
               or markets.get(name, {}).get("published", 0) < 30
           }
-          print(json.dumps({
+          required = {
+              "market", "session_id", "date", "source_id", "retrieved_at",
+              "raw_text", "status", "source_record_id", "source_url", "published_at", "result"
+          }
+          with csv_path.open(newline="", encoding="utf-8") as handle:
+              reader = csv.DictReader(handle)
+              missing_columns = sorted(required - set(reader.fieldnames or []))
+              rows = list(reader)
+          bad_rows = []
+          future_rows = []
+          date_results = defaultdict(set)
+          published_by_market_session = defaultdict(int)
+          for line, row in enumerate(rows, start=2):
+              if row["market"] not in expected or not row["session_id"] or not row["source_id"] or not row["source_url"]:
+                  bad_rows.append(f"row {line}: missing or unknown source identity")
+                  continue
+              try:
+                  chart_date = date.fromisoformat(row["date"])
+                  retrieved = datetime.fromisoformat(row["retrieved_at"].replace("Z", "+00:00"))
+                  if retrieved.tzinfo is None or retrieved.utcoffset() is None:
+                      raise ValueError("retrieved_at has no timezone")
+                  if chart_date > retrieved.date():
+                      future_rows.append(line)
+              except ValueError as error:
+                  bad_rows.append(f"row {line}: {error}")
+                  continue
+              if row["status"] == "PUBLISHED":
+                  match = re.fullmatch(r"(\d{3})-(\d{2})-(\d{3})", row["result"])
+                  if not match:
+                      bad_rows.append(f"row {line}: invalid published result shape")
+                      continue
+                  opened, jodi, closed = match.groups()
+                  expected_jodi = f"{sum(map(int, opened)) % 10}{sum(map(int, closed)) % 10}"
+                  if jodi != expected_jodi:
+                      bad_rows.append(f"row {line}: Panna/Jodi checksum mismatch")
+                      continue
+                  published_by_market_session[(row["market"], row["session_id"])] += 1
+                  date_results[(row["market"], row["session_id"], row["date"])].add(row["result"])
+              elif row["status"] not in {"PENDING", "HOLIDAY_CLOSED", "MISSING_FROM_SOURCE", "MALFORMED"}:
+                  bad_rows.append(f"row {line}: unknown observation status {row['status']}")
+          thin_sessions = {
+              f"{market}/{session}": count
+              for (market, session), count in sorted(published_by_market_session.items())
+              if count < 30
+          }
+          conflicts = sum(len(values) > 1 for values in date_results.values())
+          publishers = sorted({row["source_id"] for row in rows})
+          quality = {
               "markets_expected": 9,
               "markets_with_rows": summary.get("markets_with_rows", 0),
-              "published_observations": summary.get("total_published", 0),
-              "minimum_published_per_market": 30,
+              "total_observations": len(rows),
+              "published_observations": sum(published_by_market_session.values()),
+              "malformed_observations": sum(row["status"] == "MALFORMED" for row in rows),
+              "conflicting_market_dates": conflicts,
+              "publishers": publishers,
+              "minimum_published_per_market_session": 30,
               "missing_markets": missing,
               "markets_below_minimum": insufficient,
+              "sessions_below_minimum": thin_sessions,
+              "future_dated_rows": len(future_rows),
+              "invalid_rows": bad_rows[:20],
+              "missing_columns": missing_columns,
               "failures": summary.get("failures", []),
-          }, indent=2))
-          if missing or insufficient or summary.get("failures") or summary.get("markets_with_rows") != 9:
+          }
+          print(json.dumps(quality, indent=2))
+          if (missing or insufficient or thin_sessions or future_rows or bad_rows or missing_columns
+              or summary.get("failures") or summary.get("markets_with_rows") != 9):
               sys.exit(1)
           PY
   # Keep the full device suite intact; run it manually during final APK verification.
