@@ -40,6 +40,24 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
     }
 
     @Test
+    fun recentTargetWindowUsesAllEarlierRowsAsTrainingHistory() {
+        val records = (1..40).map(::row)
+        val report = PannaHalfSangamWalkForwardEvaluator.evaluate(
+            records,
+            LocalDate.of(2026, 4, 1),
+            minimumHistory = 30,
+            targetLimit = 5
+        ).single()
+
+        assertEquals(5, report.requestedTargets)
+        assertEquals(records[35].date, report.firstTargetDate)
+        assertEquals(records.last().date, report.lastTargetDate)
+        assertEquals(5, report.openPanna.evaluatedTargets)
+        assertEquals(0, report.openPanna.abstainedTargets)
+        assertEquals(5, report.sangam.evaluatedTargets)
+    }
+
+    @Test
     fun keepsMarketAndSessionResultsSeparate() {
         val records = (1..35).flatMap { day ->
             listOf(row(day, market = Market.SRIDEVI, session = "day"), row(day, market = Market.KALYAN, session = "night"))
