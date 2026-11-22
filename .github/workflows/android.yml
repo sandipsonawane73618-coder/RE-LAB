@@ -41,21 +41,30 @@ jobs:
   capture-public-charts-once:
     if: (github.event_name == 'push' && github.event.head_commit.message == 'Run one-time nine-market public chart capture') || (github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.pull_request.head.ref == 'feature/preloaded-learning-pipeline')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Capture all nine canonical panel pages
-        id: capture
+      - name: Capture primary publisher panel pages
+        id: capture-primary
         continue-on-error: true
         run: python scripts/capture_canonical_charts.py --output-dir data/captures --timeout 45
-      - name: Extract dated observations and source-quality summary
+      - name: Capture second publisher panel pages
+        id: capture-secondary
+        continue-on-error: true
+        run: python scripts/capture_secondary_canonical_charts.py --output-dir data/captures-secondary --timeout 45
+      - name: Extract dated observations from both publishers
         id: extract
         if: always()
         continue-on-error: true
-        run: python scripts/extract_canonical_captures.py --capture-dir data/captures --output data/derived/canonical_observations.csv --summary data/derived/canonical_extraction_summary.json
+        run: |
+          python scripts/extract_canonical_captures.py \
+            --capture-dir data/captures \
+            --secondary-capture-dir data/captures-secondary \
+            --output data/derived/canonical_observations.csv \
+            --summary data/derived/canonical_extraction_summary.json
       - name: Upload immutable HTML captures and extracted observations
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,11 +72,12 @@ jobs:
           name: relab-nine-market-public-panel-captures
           path: |
             data/captures/**
+            data/captures-secondary/**
             data/derived/canonical_observations.csv
             data/derived/canonical_extraction_summary.json
           if-no-files-found: warn
           retention-days: 90
-      - name: Require all nine markets to have verified published rows
+      - name: Require two-publisher consensus coverage and source integrity
         if: always()
         run: |
           python - <<'PY'
@@ -84,19 +94,13 @@ jobs:
               print("FAIL: extraction summary or observations CSV was not created")
               sys.exit(1)
           summary = json.loads(summary_path.read_text(encoding="utf-8"))
-          markets = summary.get("markets", {})
           expected = {
               "SRIDEVI", "SRIDEVI_NIGHT", "KALYAN", "MAIN_BAZAR",
               "TIME_BAZAR", "MILAN_DAY", "MILAN_NIGHT",
               "RAJDHANI_DAY", "RAJDHANI_NIGHT"
           }
-          missing = sorted(expected - set(markets))
-          insufficient = {
-              name: markets.get(name, {}).get("published", 0)
-              for name in sorted(expected)
-              if markets.get(name, {}).get("capture") != "OK"
-              or markets.get(name, {}).get("published", 0) < 30
-          }
+          expected_publishers = {"sattamatkajodi", "sattamatkame"}
+          missing = sorted(expected - set(summary.get("markets", {})))
           required = {
               "market", "session_id", "date", "source_id", "retrieved_at",
               "raw_text", "status", "source_record_id", "source_url", "published_at", "result"
@@ -107,11 +111,13 @@ jobs:
               rows = list(reader)
           bad_rows = []
           future_rows = []
-          date_results = defaultdict(set)
-          published_by_market_session = defaultdict(int)
+          published_by_source_market = defaultdict(int)
+          values_by_date_source = defaultdict(set)
+          published_total = 0
+          malformed_total = 0
           for line, row in enumerate(rows, start=2):
-              if row["market"] not in expected or not row["session_id"] or not row["source_id"] or not row["source_url"]:
-                  bad_rows.append(f"row {line}: missing or unknown source identity")
+              if row["market"] not in expected or row["source_id"] not in expected_publishers or not row["session_id"] or not row["source_url"]:
+                  bad_rows.append(f"row {line}: missing or unknown market/source identity")
                   continue
               try:
                   chart_date = date.fromisoformat(row["date"])
@@ -133,37 +139,67 @@ jobs:
                   if jodi != expected_jodi:
                       bad_rows.append(f"row {line}: Panna/Jodi checksum mismatch")
                       continue
-                  published_by_market_session[(row["market"], row["session_id"])] += 1
-                  date_results[(row["market"], row["session_id"], row["date"])].add(row["result"])
-              elif row["status"] not in {"PENDING", "HOLIDAY_CLOSED", "MISSING_FROM_SOURCE", "MALFORMED"}:
+                  published_total += 1
+                  published_by_source_market[(row["source_id"], row["market"], row["session_id"])] += 1
+                  values_by_date_source[(row["market"], row["session_id"], row["date"], row["source_id"])].add(row["result"])
+              elif row["status"] == "MALFORMED":
+                  malformed_total += 1
+              elif row["status"] not in {"PENDING", "HOLIDAY_CLOSED", "MISSING_FROM_SOURCE"}:
                   bad_rows.append(f"row {line}: unknown observation status {row['status']}")
-          thin_sessions = {
-              f"{market}/{session}": count
-              for (market, session), count in sorted(published_by_market_session.items())
+          thin_sources = {
+              f"{source}/{market}/{session}": count
+              for (source, market, session), count in sorted(published_by_source_market.items())
               if count < 30
           }
-          conflicts = sum(len(values) > 1 for values in date_results.values())
-          publishers = sorted({row["source_id"] for row in rows})
+          consensus_by_market = defaultdict(int)
+          conflicts = 0
+          single_source_dates = 0
+          grouped = defaultdict(dict)
+          for (market, session, day, source), results in values_by_date_source.items():
+              grouped[(market, session, day)][source] = results
+          for (market, session, day), source_results in grouped.items():
+              if len(source_results) < 2:
+                  single_source_dates += 1
+                  continue
+              union = set().union(*source_results.values())
+              if any(len(results) != 1 for results in source_results.values()) or len(union) != 1:
+                  conflicts += 1
+              else:
+                  consensus_by_market[market] += 1
+          thin_consensus = {
+              market: consensus_by_market.get(market, 0)
+              for market in sorted(expected)
+              if consensus_by_market.get(market, 0) < 30
+          }
+          publisher_coverage = summary.get("publishers", {})
+          missing_publishers = sorted(expected_publishers - set(publisher_coverage))
           quality = {
               "markets_expected": 9,
-              "markets_with_rows": summary.get("markets_with_rows", 0),
+              "markets_with_both_publishers": summary.get("markets_with_both_publishers", 0),
+              "publishers_expected": sorted(expected_publishers),
+              "publishers": publisher_coverage,
               "total_observations": len(rows),
-              "published_observations": sum(published_by_market_session.values()),
-              "malformed_observations": sum(row["status"] == "MALFORMED" for row in rows),
-              "conflicting_market_dates": conflicts,
-              "publishers": publishers,
-              "minimum_published_per_market_session": 30,
+              "published_observations": published_total,
+              "malformed_observations": malformed_total,
+              "consensus_dates": sum(consensus_by_market.values()),
+              "conflicting_dates": conflicts,
+              "single_source_dates": single_source_dates,
+              "consensus_dates_by_market": dict(sorted(consensus_by_market.items())),
+              "minimum_published_per_publisher_market_session": 30,
+              "minimum_consensus_dates_per_market": 30,
               "missing_markets": missing,
-              "markets_below_minimum": insufficient,
-              "sessions_below_minimum": thin_sessions,
+              "missing_publishers": missing_publishers,
+              "sources_below_minimum": thin_sources,
+              "markets_below_consensus_minimum": thin_consensus,
               "future_dated_rows": len(future_rows),
               "invalid_rows": bad_rows[:20],
               "missing_columns": missing_columns,
               "failures": summary.get("failures", []),
           }
           print(json.dumps(quality, indent=2))
-          if (missing or insufficient or thin_sessions or future_rows or bad_rows or missing_columns
-              or summary.get("failures") or summary.get("markets_with_rows") != 9):
+          if (missing or missing_publishers or thin_sources or thin_consensus or future_rows
+              or bad_rows or missing_columns or summary.get("failures")
+              or summary.get("markets_with_both_publishers") != 9):
               sys.exit(1)
           PY
   historical-learning-backtest:
