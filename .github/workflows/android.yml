@@ -104,8 +104,9 @@ jobs:
           PY
   # Keep the full device suite intact; run it manually during final APK verification.
   android-instrumentation:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.head_commit.message == 'Run Task 16 integrated APK and instrumentation verification')
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       ANDROID_I_WANT_MY_TCG: "yes"
     steps:
@@ -125,7 +126,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest
+          script: gradle :app:connectedDebugAndroidTest --stacktrace
       - name: Upload instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -148,8 +149,14 @@ jobs:
           gradle-version: "8.9"
       - name: Assemble debug APK
         run: gradle :app:assembleDebug
-      - name: Upload APK
+      - name: Verify APK signature and record checksum
+        run: |
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - name: Upload APK and checksum
         uses: actions/upload-artifact@v4
         with:
           name: relab-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
