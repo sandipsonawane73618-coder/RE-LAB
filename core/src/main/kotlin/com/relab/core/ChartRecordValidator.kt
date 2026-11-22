@@ -12,7 +12,11 @@ object ChartRecordValidator {
      * Strict chart-format validation. Digits are ASCII 0-9 so imported Unicode numerals
      * cannot silently normalize differently across publishers or runtimes.
      */
-    fun validate(record: ChartRecord): ValidationResult = ChartMath.validate(record)
+    fun validate(record: ChartRecord): ValidationResult {
+        val issues = digitIssues(record)
+        if (issues.isNotEmpty()) return ValidationResult.Invalid(issues.map { it.message })
+        return ChartMath.validate(record)
+    }
 
     fun digitIssues(record: ChartRecord): List<ChartDigitIssue> = buildList {
         if (!isThreeAsciiDigits(record.openPanna)) {
