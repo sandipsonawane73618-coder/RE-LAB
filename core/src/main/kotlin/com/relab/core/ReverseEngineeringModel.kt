@@ -59,6 +59,11 @@ data class ReverseEngineeringBacktestReport(
     val top10ExactHits: Int,
     val top1AnkHits: Int,
     val top10AnkHits: Int,
+    val top3UniqueAnkHits: Int,
+    val top5UniqueAnkHits: Int,
+    val baselineTop1AnkHits: Int,
+    val baselineTop3AnkHits: Int,
+    val baselineTop5AnkHits: Int,
     val top1FamilyHits: Int,
     val top10FamilyHits: Int,
     val priorModeFamilyHits: Int,
@@ -72,6 +77,11 @@ data class ReverseEngineeringBacktestReport(
     val top10ExactRate: Double get() = rate(top10ExactHits)
     val top1AnkRate: Double get() = rate(top1AnkHits)
     val top10AnkRate: Double get() = rate(top10AnkHits)
+    val top3UniqueAnkRate: Double get() = rate(top3UniqueAnkHits)
+    val top5UniqueAnkRate: Double get() = rate(top5UniqueAnkHits)
+    val baselineTop1AnkRate: Double get() = rate(baselineTop1AnkHits)
+    val baselineTop3AnkRate: Double get() = rate(baselineTop3AnkHits)
+    val baselineTop5AnkRate: Double get() = rate(baselineTop5AnkHits)
     val top1FamilyRate: Double get() = rate(top1FamilyHits)
     val top10FamilyRate: Double get() = rate(top10FamilyHits)
     val priorModeFamilyRate: Double get() = rate(priorModeFamilyHits)
@@ -346,13 +356,15 @@ object ReverseEngineeringModel {
         side: ReverseEngineeringSide,
         targetLimit: Int = 120,
         minimumHistory: Int = 30,
-        candidateLimit: Int = 10
+        candidateLimit: Int = 10,
+        targetDateExclusive: LocalDate? = null
     ): ReverseEngineeringBacktestReport {
         require(targetLimit in 1..1000) { "Target limit must be between 1 and 1000" }
         require(market in enabledMarkets) { "Market is not enabled for walk-forward backtesting" }
         val actualRows = records.asSequence()
             .filter { it.market == market && it.sessionId == sessionId }
             .filter { ChartMath.validate(it) is ValidationResult.Valid }
+            .filter { targetDateExclusive == null || it.date.isBefore(targetDateExclusive) }
             .sortedBy { it.date }.toList()
         require(actualRows.map { it.date }.distinct().size == actualRows.size) {
             "Duplicate dates must be reconciled before walk-forward backtesting"
@@ -364,6 +376,11 @@ object ReverseEngineeringModel {
         var top10Exact = 0
         var top1Ank = 0
         var top10Ank = 0
+        var top3UniqueAnk = 0
+        var top5UniqueAnk = 0
+        var baselineTop1Ank = 0
+        var baselineTop3Ank = 0
+        var baselineTop5Ank = 0
         var top1Family = 0
         var top10Family = 0
         var baselineFamily = 0
@@ -389,10 +406,24 @@ object ReverseEngineeringModel {
             val actualAnk = actualPanna.sumOf { it.digitToInt() } % 10
             if (first.ank == actualAnk) top1Ank++
             if (ranking.candidates.any { it.ank == actualAnk }) top10Ank++
+
+            // Evaluate the same unique-Ank shortlist used by the Open Ank UI.
+            val rankedUniqueAnks = OpenAnkRanking.rank(ranking.candidates, limit = 5)
+                .map { it.ank }
+            if (rankedUniqueAnks.take(3).contains(actualAnk)) top3UniqueAnk++
+            if (rankedUniqueAnks.contains(actualAnk)) top5UniqueAnk++
+
             if (ranking.familyCandidates.firstOrNull()?.familySequence == actualFamily) top1Family++
             if (ranking.familyCandidates.any { it.familySequence == actualFamily }) top10Family++
 
             val priorRows = actualRows.filter { it.date.isBefore(actual.date) }
+            val priorAnks = priorRows.groupingBy { pannaOf(it, side).sumOf(Char::digitToInt) % 10 }
+                .eachCount().entries
+                .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key })
+                .map { it.key }
+            if (priorAnks.take(1).contains(actualAnk)) baselineTop1Ank++
+            if (priorAnks.take(3).contains(actualAnk)) baselineTop3Ank++
+            if (priorAnks.take(5).contains(actualAnk)) baselineTop5Ank++
             val priorFamilies = priorRows.map { familyOf(pannaOf(it, side)) }
             val modeFamily = priorFamilies.groupingBy { it }.eachCount().entries
                 .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
@@ -425,7 +456,9 @@ object ReverseEngineeringModel {
         }
         return ReverseEngineeringBacktestReport(
             market, sessionId, side, targets.size, evaluated, abstained,
-            top1Exact, top10Exact, top1Ank, top10Ank, top1Family, top10Family, baselineFamily,
+            top1Exact, top10Exact, top1Ank, top10Ank,
+            top3UniqueAnk, top5UniqueAnk, baselineTop1Ank, baselineTop3Ank, baselineTop5Ank,
+            top1Family, top10Family, baselineFamily,
             globalExactTop1, globalExactTop10, weekdayExactTop1, weekdayExactTop10,
             previousTransitionFamily
         )

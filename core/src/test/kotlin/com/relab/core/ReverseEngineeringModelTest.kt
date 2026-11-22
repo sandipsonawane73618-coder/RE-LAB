@@ -167,6 +167,13 @@ class ReverseEngineeringModelTest {
         assertEquals(5, result.top10ExactHits)
         assertEquals(5, result.top1AnkHits)
         assertEquals(5, result.top10AnkHits)
+        assertEquals(5, result.top3UniqueAnkHits)
+        assertEquals(5, result.top5UniqueAnkHits)
+        assertEquals(5, result.baselineTop1AnkHits)
+        assertEquals(5, result.baselineTop3AnkHits)
+        assertEquals(5, result.baselineTop5AnkHits)
+        assertEquals(1.0, result.top5UniqueAnkRate, 0.0)
+        assertEquals(1.0, result.baselineTop5AnkRate, 0.0)
         assertEquals(5, result.top1FamilyHits)
         assertEquals(5, result.priorModeFamilyHits)
         assertEquals(5, result.globalExactTop1Hits)
@@ -194,6 +201,22 @@ class ReverseEngineeringModelTest {
         // inflate its own baseline count.
         assertEquals(1, result.globalExactTop1Hits)
         assertEquals(1, result.globalExactTop10Hits)
+    }
+
+    @Test fun fixedCutoffMakesWalkForwardReportInvariantToLaterRows() {
+        val rows = history()
+        val cutoff = LocalDate.of(2026, 2, 15)
+        val before = ReverseEngineeringModel.backtest(
+            rows, Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 5, minimumHistory = 30, targetDateExclusive = cutoff
+        )
+        val after = ReverseEngineeringModel.backtest(
+            rows + row(Market.SRIDEVI, 100, open = "999", close = "000"),
+            Market.SRIDEVI, "main", ReverseEngineeringSide.OPEN,
+            targetLimit = 5, minimumHistory = 30, targetDateExclusive = cutoff
+        )
+        assertEquals(before, after)
+        assertEquals(5, before.requestedTargets)
     }
 
     @Test fun duplicateDatesAreRejectedBeforeTraining() {
