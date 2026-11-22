@@ -86,20 +86,22 @@ jobs:
               "RAJDHANI_DAY", "RAJDHANI_NIGHT"
           }
           missing = sorted(expected - set(markets))
-          empty = sorted(
-              name for name in expected
+          insufficient = {
+              name: markets.get(name, {}).get("published", 0)
+              for name in sorted(expected)
               if markets.get(name, {}).get("capture") != "OK"
-              or markets.get(name, {}).get("published", 0) < 1
-          )
+              or markets.get(name, {}).get("published", 0) < 30
+          }
           print(json.dumps({
               "markets_expected": 9,
               "markets_with_rows": summary.get("markets_with_rows", 0),
               "published_observations": summary.get("total_published", 0),
+              "minimum_published_per_market": 30,
               "missing_markets": missing,
-              "markets_without_published_rows": empty,
+              "markets_below_minimum": insufficient,
               "failures": summary.get("failures", []),
           }, indent=2))
-          if missing or empty or summary.get("failures") or summary.get("markets_with_rows") != 9:
+          if missing or insufficient or summary.get("failures") or summary.get("markets_with_rows") != 9:
               sys.exit(1)
           PY
   # Keep the full device suite intact; run it manually during final APK verification.
