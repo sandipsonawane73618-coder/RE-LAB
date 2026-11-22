@@ -1,4 +1,4 @@
-name: Capture Public Panel Charts # Verify bounded 365-target production walk-forward # Refresh after historical date-axis parser update
+name: Capture Public Panel Charts # Per-market isolated validation and OOS backtest # Refresh after historical date-axis parser update
 
 on:
   push:
