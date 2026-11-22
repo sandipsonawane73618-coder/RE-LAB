@@ -22,11 +22,16 @@ object PannaHalfSangamBacktestCli {
                 imported.issues.take(10).joinToString { "row ${it.rowNumber}: ${it.message}" }
         }
         val sourceAudit = ReconciledChartBuilder.build(imported.observations)
-        // Use only one unambiguous published value per market/session/date.
-        // Same-source duplicates with identical values collapse to one row;
-        // conflicting values remain in the audit and are excluded, never guessed.
-        val records = ReconciledChartBuilder.buildExploratoryRecords(imported.observations)
-        require(records.isNotEmpty()) { "No conflict-free published chart records are available" }
+        // Historical training uses only dates where both publishers agree.
+        // Single-source dates and conflicts remain in the audit, never promoted.
+        val records = sourceAudit.records
+        require(records.isNotEmpty()) { "No two-publisher consensus chart records are available" }
+        val thinMarkets = Market.entries.filter { market ->
+            records.count { it.market == market } < 30
+        }
+        require(thinMarkets.isEmpty()) {
+            "At least 30 consensus dates are required per market; insufficient: ${thinMarkets.map { it.name }}"
+        }
         val marketsPresent = records.map { it.market }.toSet()
         require(marketsPresent == Market.entries.toSet()) {
             "Expected conflict-free history for all nine markets; found: ${marketsPresent.map { it.name }.sorted()}"
@@ -182,18 +187,18 @@ object PannaHalfSangamBacktestCli {
                 appendLine("published_observations=${imported.observations.count { it.status == ObservationStatus.PUBLISHED }}")
                 appendLine("malformed_observations=$malformedObservations")
                 appendLine("missing_or_closed_observations=$missingObservations")
-                appendLine("single_source_unverified_groups=$singleSourceGroups")
+                appendLine("single_source_unverified_groups_excluded=$singleSourceGroups")
                 appendLine("independent_consensus_groups=$consensusGroups")
                 appendLine("conflict_groups_excluded=$conflictGroups")
-                appendLine("exploratory_records_used=${records.size}")
+                appendLine("consensus_records_used=${records.size}")
                 appendLine("publishers=${publishers.joinToString(",")}")
-                appendLine("source_quality=${if (publishers.size >= 2) "MULTI_SOURCE" else "SINGLE_SOURCE_UNVERIFIED"}")
+                appendLine("source_quality=TWO_PUBLISHER_CONSENSUS")
                 appendLine("conflict_policy=EXCLUDE; no winner selected")
                 appendLine("ordering=CHRONOLOGICAL; each target uses earlier same-market/session rows only")
             },
             Charsets.UTF_8
         )
-        println("source_observations=${imported.observations.size}; records_used=${records.size}; conflicts_excluded=$conflictGroups; source_quality=${if (publishers.size >= 2) "MULTI_SOURCE" else "SINGLE_SOURCE_UNVERIFIED"}; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; output=${output.absolutePath}; audit=${auditFile.absolutePath}")
+        println("source_observations=${imported.observations.size}; records_used=${records.size}; conflicts_excluded=$conflictGroups; source_quality=TWO_PUBLISHER_CONSENSUS; markets=${marketsPresent.size}; reports=${reports.size}; target_window=365_per_market_session; output=${output.absolutePath}; audit=${auditFile.absolutePath}")
     }
 
     private fun appendMetric(
