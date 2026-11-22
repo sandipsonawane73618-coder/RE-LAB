@@ -224,12 +224,12 @@ jobs:
       - name: Run chronological Panna, Half-Sangam and Sangam learning audit
         run: |
           gradle :core:runPannaHalfSangamBacktest \
-            -PinputCsv=preload-input/derived/canonical_observations.csv \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
             -PoutputCsv=data/derived/panna-half-sangam-learning-metrics.csv
       - name: Run chronological Open Panna, Close Panna and Jodi multi-model audit
         run: |
           gradle :core:runMultiModelHistoricalBacktest \
-            -PinputCsv=preload-input/derived/canonical_observations.csv \
+            -PinputCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
             -PoutputCsv=data/derived/multi-model-learning-metrics.csv
       - name: Upload historical learning metrics and source audits
         uses: actions/upload-artifact@v4
@@ -268,7 +268,7 @@ jobs:
       - name: Assemble debug APK with required historical preload
         run: |
           gradle :app:assembleDebug \
-            -PrelabPreloadedCsv=preload-input/derived/canonical_observations.csv \
+            -PrelabPreloadedCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
             -PrequirePreloadedLearning=true
       - name: Verify packaged CSV checksum and coverage
         run: |
@@ -318,7 +318,7 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest \
-              -PrelabPreloadedCsv=preload-input/derived/canonical_observations.csv \
+              -PrelabPreloadedCsv=$GITHUB_WORKSPACE/preload-input/derived/canonical_observations.csv \
               -PrequirePreloadedLearning=true --stacktrace
       - name: Upload instrumentation test reports
         if: always()
