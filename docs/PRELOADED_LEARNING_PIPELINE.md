@@ -44,3 +44,27 @@ The preload package seeds historical chart knowledge and makes historical evalua
 available immediately; it does not turn unverified hit rates into calibrated probabilities
 or automatically approve new model weights. Any challenger rollout still requires
 out-of-sample evidence and explicit review.
+
+## Latest public capture audit (2026-11-22)
+
+The one-time nine-market capture completed successfully and produced 26,199 raw
+source observations: 24,532 PUBLISHED, 1,357 MISSING_FROM_SOURCE, and 310
+MALFORMED. All nine markets have substantially more than the 30-row minimum.
+The dataset spans 2012–2026, contains no future-dated observations relative to
+capture time, and passes the Panna/Jodi checksum validation.
+
+This capture currently has one publisher (`sattamatkajodi`), so published rows
+are **single-source unverified**, not independent consensus. The audit found 81
+market/session/date conflict groups caused by multiple distinct published
+values for the same date. These conflicts are preserved as raw evidence and
+must be excluded from historical training/backtests; they must never be
+resolved by choosing the newest row or by majority vote from the same source.
+The conflict-free dates may be used only as exploratory single-source history
+until an independent source confirms them. Missing and malformed rows are
+retained for audit but are not training outcomes.
+
+The capture artifact includes immutable HTML snapshots, per-page URL/retrieval
+metadata and SHA-256 hashes, the extracted CSV, and a quality summary. CI keeps
+this artifact for 90 days. A release APK must package the exact audited CSV
+using the documented Gradle property; a debug APK without that property is
+not evidence that the historical dataset was included.
