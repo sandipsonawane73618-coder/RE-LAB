@@ -119,6 +119,17 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(Unit) {
                 initialData = withContext(Dispatchers.IO) {
+                    // Install a build-time historical dataset once, before loading the
+                    // dashboard. The SQLite seed is checksum-idempotent and merges rows;
+                    // later live imports remain incremental and never reset this history.
+                    when (val preload = PreloadedLearningBootstrap.installIfAvailable(this@MainActivity, database)) {
+                        is PreloadedLearningBootstrap.Result.Installed ->
+                            android.util.Log.i("RE-LAB", "Preloaded ${preload.observations} observations across ${preload.markets} markets")
+                        is PreloadedLearningBootstrap.Result.Rejected ->
+                            android.util.Log.e("RE-LAB", "Historical preload rejected: ${preload.reason}")
+                        PreloadedLearningBootstrap.Result.AlreadyInstalled,
+                        PreloadedLearningBootstrap.Result.NotPackaged -> Unit
+                    }
                     // One-time migration from the first CSV-only build. Keep the old
                     // preference until the database transaction succeeds.
                     val legacyCsv = preferences.getString("source_csv", null)
