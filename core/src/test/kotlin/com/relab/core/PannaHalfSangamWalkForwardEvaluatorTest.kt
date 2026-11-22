@@ -25,6 +25,12 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
         assertEquals(5, report.openPanna.evaluatedTargets)
         assertEquals(30, report.openPanna.abstainedTargets)
         assertEquals(5, report.closePanna.evaluatedTargets)
+        assertEquals(5, report.openPannaHybridTop10PlusExactFrequencyTop90.evaluatedTargets)
+        assertEquals(5, report.closePannaHybridTop10PlusExactFrequencyTop90.evaluatedTargets)
+        assertEquals(30, report.openPannaHybridTop10PlusExactFrequencyTop90.abstainedTargets)
+        assertEquals(30, report.closePannaHybridTop10PlusExactFrequencyTop90.abstainedTargets)
+        assertEquals(5, report.openPannaHybridTop10PlusExactFrequencyTop90.exactTop10Hits)
+        assertEquals(5, report.closePannaHybridTop10PlusExactFrequencyTop90.exactTop10Hits)
         assertEquals(5, report.openPannaCloseAnk.evaluatedTargets)
         assertEquals(5, report.openPannaCloseAnkConditioned.evaluatedTargets)
         assertEquals(5, report.openAnkClosePanna.evaluatedTargets)
@@ -51,6 +57,23 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
         assertEquals(1.0, report.openPanna.exactRankDiagnostics.meanReciprocalRank()!!, 0.0)
         assertEquals(5, report.openPanna.exactRankDiagnostics.rank1)
         assertEquals(0, report.openPanna.exactRankDiagnostics.absentFromCandidatePool)
+    }
+
+    @Test
+    fun hybridKeepsModelTopTenAndFillsRemainingSlotsByExactFrequency() {
+        fun candidate(panna: String, score: Double) = ReverseEngineeringCandidate(
+            panna, panna.map { ChartMath.family(it.digitToInt()).toString() }.joinToString(""),
+            ChartMath.pannaType(panna), panna.sumOf { it.digitToInt() } % 10, score,
+            score, score, score, score, score, score, null, null, null, null
+        )
+        val model = (100..199).map { candidate("%03d".format(it), 1_000.0 - it) }
+        val exact = (0..999).map { candidate("%03d".format(it), 1_000.0 - it) }
+        val hybrid = PannaHalfSangamWalkForwardEvaluator.top10PlusExactFrequencyTop90(model, exact)
+
+        assertEquals(100, hybrid.size)
+        assertEquals(model.take(10).map { it.panna }, hybrid.take(10).map { it.panna })
+        assertEquals(100, hybrid.map { it.panna }.distinct().size)
+        assertEquals(exact.take(90).map { it.panna }, hybrid.drop(10).map { it.panna })
     }
 
     @Test
