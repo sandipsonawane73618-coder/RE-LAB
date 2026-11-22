@@ -141,7 +141,6 @@ class ChartPatternGridScannerTest {
         })
     }
 
-
     @Test fun verticalPatternsFollowObservedRowsAcrossCalendarGaps() {
         val report = ChartPatternGridScanner.scan(
             listOf(row(1, "123"), row(4, "456"), row(6, "789")),
@@ -153,4 +152,36 @@ class ChartPatternGridScannerTest {
         })
     }
 
+    @Test fun invalidObservationBlocksVerticalAndDiagonalPatternsInsteadOfBeingSkipped() {
+        val rows = listOf(
+            row(1, "123"),
+            row(2, "456").copy(jodi = "99"),
+            row(3, "789")
+        )
+        val report = ChartPatternGridScanner.scan(
+            rows, ChartPatternSide.OPEN_PANNA, maximumStep = 1
+        ).single()
+
+        assertEquals(2, report.acceptedRecords)
+        assertEquals(1, report.rejectedRecords)
+        assertFalse(report.occurrences.any {
+            it.direction == PatternDirection.VERTICAL && it.pattern == "147"
+        })
+        assertFalse(report.occurrences.any {
+            it.direction == PatternDirection.DIAGONAL_DOWN_RIGHT && it.pattern == "159"
+        })
+    }
+
+    @Test fun duplicateInvalidDateIsAlsoRejectedForReconciliation() {
+        val invalid = row(1, "123").copy(jodi = "99")
+        val valid = row(1, "456")
+        try {
+            ChartPatternGridScanner.scan(
+                listOf(invalid, valid), ChartPatternSide.OPEN_PANNA
+            )
+            fail("Expected duplicate-date rejection")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("reconcile"))
+        }
+    }
 }
