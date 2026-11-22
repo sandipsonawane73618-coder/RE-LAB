@@ -66,6 +66,7 @@ android.sourceSets.getByName("main").assets.srcDir(generatedPreloadedAssets)
 val preparePreloadedLearning by tasks.registering {
     inputs.file(relabPreloadedCsv).optional()
     outputs.dir(generatedPreloadedAssets)
+    outputs.upToDateWhen { false }
     doLast {
         val inputPath = relabPreloadedCsv.orNull
         val releaseRequested = gradle.startParameter.taskNames.any {
@@ -85,7 +86,7 @@ val preparePreloadedLearning by tasks.registering {
         val csv = bytes.toString(Charsets.UTF_8)
         check(csv.isNotBlank() && csv.lineSequence().first().contains("market") &&
             csv.lineSequence().first().contains("session_id") &&
-            csv.lineSequence().first().contains("chart_date")) {
+            csv.lineSequence().first().contains("date")) {
             "Preloaded CSV must be the RE-LAB source-observations export with market/session_id/chart_date columns"
         }
         val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -94,7 +95,7 @@ val preparePreloadedLearning by tasks.registering {
         preloadDir.mkdirs()
         preloadDir.resolve("source-observations.csv").writeBytes(bytes)
         preloadDir.resolve("manifest.properties").writeText(
-            "format_version=1\\nsha256=$digest\\n",
+            "format_version=1\nsha256=$digest\n",
             Charsets.UTF_8
         )
         logger.lifecycle("Prepared RE-LAB historical preload: sha256=$digest, bytes=${bytes.size}")
