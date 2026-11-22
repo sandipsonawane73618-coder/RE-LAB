@@ -33,6 +33,10 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
         assertEquals(5, report.openPannaCloseAnk.exactTop10Hits)
         assertEquals(5, report.openAnkClosePanna.exactTop10Hits)
         assertEquals(5, report.sangam.exactTop10Hits)
+        assertEquals(1.0, report.openPanna.exactRankDiagnostics.candidatePoolCoverage()!!, 0.0)
+        assertEquals(1.0, report.openPanna.exactRankDiagnostics.meanReciprocalRank()!!, 0.0)
+        assertEquals(5, report.openPanna.exactRankDiagnostics.rank1)
+        assertEquals(0, report.openPanna.exactRankDiagnostics.absentFromCandidatePool)
     }
 
     @Test
@@ -77,5 +81,7 @@ class PannaHalfSangamWalkForwardEvaluatorTest {
         assertEquals(2, report.openPanna.abstainedTargets)
         assertNull(report.openPanna.exactTop10Rate())
         assertNull(report.openPannaCloseAnk.exactTop100Rate())
+        assertNull(report.openPanna.exactRankDiagnostics.candidatePoolCoverage())
+        assertNull(report.openPanna.exactRankDiagnostics.meanReciprocalRank())
     }
 }

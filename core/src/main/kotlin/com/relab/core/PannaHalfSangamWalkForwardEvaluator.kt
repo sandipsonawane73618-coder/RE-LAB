@@ -17,6 +17,43 @@ enum class HalfSangamDirection {
     OPEN_ANK_CLOSE_PANNA
 }
 
+data class ExactRankDiagnostics(
+    val evaluatedTargets: Int,
+    val presentInCandidatePool: Int,
+    val absentFromCandidatePool: Int,
+    val rank1: Int,
+    val rank2To5: Int,
+    val rank6To10: Int,
+    val rank11To25: Int,
+    val rank26To50: Int,
+    val rank51To100: Int,
+    val rankAbove100: Int,
+    val reciprocalRankSum: Double
+) {
+    fun candidatePoolCoverage(): Double? =
+        if (evaluatedTargets == 0) null else presentInCandidatePool.toDouble() / evaluatedTargets
+
+    fun meanReciprocalRank(): Double? =
+        if (evaluatedTargets == 0) null else reciprocalRankSum / evaluatedTargets
+}
+
+private fun exactRankDiagnostics(ranks: List<Int?>): ExactRankDiagnostics {
+    val present = ranks.filterNotNull()
+    return ExactRankDiagnostics(
+        evaluatedTargets = ranks.size,
+        presentInCandidatePool = present.size,
+        absentFromCandidatePool = ranks.size - present.size,
+        rank1 = present.count { it == 1 },
+        rank2To5 = present.count { it in 2..5 },
+        rank6To10 = present.count { it in 6..10 },
+        rank11To25 = present.count { it in 11..25 },
+        rank26To50 = present.count { it in 26..50 },
+        rank51To100 = present.count { it in 51..100 },
+        rankAbove100 = present.count { it > 100 },
+        reciprocalRankSum = present.sumOf { 1.0 / it }
+    )
+}
+
 data class PannaSideWalkForwardMetrics(
     val requestedTargets: Int,
     val evaluatedTargets: Int,
@@ -26,7 +63,8 @@ data class PannaSideWalkForwardMetrics(
     val familyTop10Hits: Int,
     val familyTop100Hits: Int,
     val positionalNearTop10Hits: Int,
-    val positionalNearTop100Hits: Int
+    val positionalNearTop100Hits: Int,
+    val exactRankDiagnostics: ExactRankDiagnostics
 ) {
     fun exactTop10Rate(): Double? = if (evaluatedTargets == 0) null else exactTop10Hits.toDouble() / evaluatedTargets
     fun exactTop100Rate(): Double? = if (evaluatedTargets == 0) null else exactTop100Hits.toDouble() / evaluatedTargets
@@ -37,7 +75,8 @@ data class HalfSangamWalkForwardMetrics(
     val evaluatedTargets: Int,
     val abstainedTargets: Int,
     val exactTop10Hits: Int,
-    val exactTop100Hits: Int
+    val exactTop100Hits: Int,
+    val exactRankDiagnostics: ExactRankDiagnostics
 ) {
     fun exactTop10Rate(): Double? = if (evaluatedTargets == 0) null else exactTop10Hits.toDouble() / evaluatedTargets
     fun exactTop100Rate(): Double? = if (evaluatedTargets == 0) null else exactTop100Hits.toDouble() / evaluatedTargets
@@ -109,6 +148,10 @@ object PannaHalfSangamWalkForwardEvaluator {
                 var openNear100 = 0
                 var closeNear10 = 0
                 var closeNear100 = 0
+                val openExactRanks = mutableListOf<Int?>()
+                val closeExactRanks = mutableListOf<Int?>()
+                val halfExactRanks = listOf(mutableListOf<Int?>(), mutableListOf<Int?>())
+                val sangamExactRanks = mutableListOf<Int?>()
                 val halfEvaluated = IntArray(2)
                 val halfAbstained = IntArray(2)
                 val halfTop10 = IntArray(2)
@@ -148,6 +191,8 @@ object PannaHalfSangamWalkForwardEvaluator {
                                 .takeIf { it >= 0 }?.plus(1)
                             val closeRank = close.candidates.indexOfFirst { it.panna == target.closePanna }
                                 .takeIf { it >= 0 }?.plus(1)
+                            openExactRanks += openRank
+                            closeExactRanks += closeRank
                             if (openRank != null && openRank <= 10) openTop10++
                             if (openRank != null && openRank <= 100) openTop100++
                             if (closeRank != null && closeRank <= 10) closeTop10++
@@ -178,6 +223,7 @@ object PannaHalfSangamWalkForwardEvaluator {
                                 val rank = candidates.indexOfFirst {
                                     it.panna == actual.first && it.ank == actual.second
                                 }.takeIf { it >= 0 }?.plus(1)
+                                halfExactRanks[direction] += rank
                                 if (rank != null && rank <= 10) halfTop10[direction]++
                                 if (rank != null && rank <= 100) halfTop100[direction]++
                             }
@@ -187,6 +233,7 @@ object PannaHalfSangamWalkForwardEvaluator {
                                 open.candidates, close.candidates, pairLimit = 100
                             )
                             sangamEvaluated++
+                            sangamExactRanks += sangam.exactPairRank
                             if (sangam.exactPairRank != null && sangam.exactPairRank <= 10) sangamTop10++
                             if (sangam.exactPairRank != null && sangam.exactPairRank <= 100) sangamTop100++
                         }
@@ -195,25 +242,25 @@ object PannaHalfSangamWalkForwardEvaluator {
 
                 fun pannaMetrics(
                     evaluated: Int, abstained: Int, top10: Int, top100: Int,
-                    family10: Int, family100: Int, near10: Int, near100: Int
+                    family10: Int, family100: Int, near10: Int, near100: Int, ranks: List<Int?>
                 ) = PannaSideWalkForwardMetrics(
                     rows.size, evaluated, abstained, top10, top100,
-                    family10, family100, near10, near100
+                    family10, family100, near10, near100, exactRankDiagnostics(ranks)
                 )
                 fun halfMetrics(direction: Int) = HalfSangamWalkForwardMetrics(
                     rows.size, halfEvaluated[direction], halfAbstained[direction],
-                    halfTop10[direction], halfTop100[direction]
+                    halfTop10[direction], halfTop100[direction], exactRankDiagnostics(halfExactRanks[direction])
                 )
                 PannaHalfSangamWalkForwardReport(
                     market = identity.first,
                     sessionId = identity.second,
                     firstTargetDate = rows.firstOrNull()?.date,
                     lastTargetDate = rows.lastOrNull()?.date,
-                    openPanna = pannaMetrics(openEvaluated, openAbstained, openTop10, openTop100, openFamily10, openFamily100, openNear10, openNear100),
-                    closePanna = pannaMetrics(closeEvaluated, closeAbstained, closeTop10, closeTop100, closeFamily10, closeFamily100, closeNear10, closeNear100),
+                    openPanna = pannaMetrics(openEvaluated, openAbstained, openTop10, openTop100, openFamily10, openFamily100, openNear10, openNear100, openExactRanks),
+                    closePanna = pannaMetrics(closeEvaluated, closeAbstained, closeTop10, closeTop100, closeFamily10, closeFamily100, closeNear10, closeNear100, closeExactRanks),
                     openPannaCloseAnk = halfMetrics(0),
                     openAnkClosePanna = halfMetrics(1),
-                    sangam = HalfSangamWalkForwardMetrics(rows.size, sangamEvaluated, sangamAbstained, sangamTop10, sangamTop100),
+                    sangam = HalfSangamWalkForwardMetrics(rows.size, sangamEvaluated, sangamAbstained, sangamTop10, sangamTop100, exactRankDiagnostics(sangamExactRanks)),
                     minimumHistory = minimumHistory,
                     candidateLimit = candidateLimit
                 )
